@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get Quote - DigiScribe Transcription Corp.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="images/favicon.png">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0ea5e9',
+                        'primary-dark': '#0284c7',
+                        'blue-card': '#0ea5e9',
+                        'dark-text': '#1e293b',
+                        'gray-text': '#64748b',
+                        'light-gray': '#f1f5f9',
+                    },
+                    fontFamily: {
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        .wave-pattern {
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23ffffff' fill-opacity='0.1' d='M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,208C1248,224,1344,192,1392,176L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E") no-repeat bottom;
+            background-size: cover;
+        }
+        .sound-wave {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .sound-wave span {
+            display: inline-block;
+            width: 3px;
+            background: linear-gradient(to top, #0ea5e9, #38bdf8);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="font-poppins">
+    <!-- Decorative Background Blobs -->
+    <div class="bg-blob-1"></div>
+    <div class="bg-blob-2"></div>
+    <div class="bg-blob-3"></div>
+    
+    <!-- Hero Background Wrapper (includes navbar) -->
+    <div class="hero-gradient">
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-50 border-b">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <!-- Logo -->
+                <a href="index.html" class="flex items-center">
+                    <img src="images/DigiscribeLogoRB.png" alt="DigiScribe Transcription Corp." class="h-14 w-auto">
+                </a>
+
+                <!-- Navigation Links -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="index.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors">Home</a>
+                    <a href="about.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors">About</a>
+                    <div class="relative group">
+                        <a href="projects.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors flex items-center gap-1">
+                            Projects
+                            <svg class="w-4 h-4 transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <!-- Projects Dropdown -->
+                        <div class="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out transform translate-y-2 group-hover:translate-y-0 z-50">
+                            <div class="py-2">
+                                <a href="projects.html#app-marketplace" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-store text-primary/60 w-4"></i>
+                                    App Marketplace
+                                </a>
+                                <a href="projects.html#patient-fusion" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-user-injured text-primary/60 w-4"></i>
+                                    Patient Fusion
+                                </a>
+                                <a href="projects.html#practice-fusion" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-clinic-medical text-primary/60 w-4"></i>
+                                    Practice Fusion
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative group">
+                        <a href="services.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors flex items-center gap-1">
+                            Services
+                            <svg class="w-4 h-4 transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <!-- Services Dropdown -->
+                        <div class="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out transform translate-y-2 group-hover:translate-y-0 z-50">
+                            <div class="py-2">
+                                <!-- Transcription Support with Nested Dropdown -->
+                                <div class="relative group/transcription">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-headset text-primary/60 w-4"></i>
+                                            Transcription Support
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested Transcription Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/transcription:opacity-100 group-hover/transcription:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/transcription:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-transcription.html?type=medical" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-stethoscope text-primary/60 w-4"></i>
+                                                Medical
+                                            </a>
+                                            <a href="service-transcription.html?type=legal" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-balance-scale text-primary/60 w-4"></i>
+                                                Legal
+                                            </a>
+                                            <a href="service-transcription.html?type=general" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-alt text-primary/60 w-4"></i>
+                                                General
+                                            </a>
+                                            <a href="service-transcription.html?type=academic" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-graduation-cap text-primary/60 w-4"></i>
+                                                Academic
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Data Entry with Nested Dropdown -->
+                                <div class="relative group/dataentry">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-keyboard text-primary/60 w-4"></i>
+                                            Data Entry
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested Data Entry Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/dataentry:opacity-100 group-hover/dataentry:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/dataentry:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-data-entry.html?type=waybill" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-invoice text-primary/60 w-4"></i>
+                                                Waybill/Invoice/Charge
+                                            </a>
+                                            <a href="service-data-entry.html?type=batch-proof" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-clipboard-check text-primary/60 w-4"></i>
+                                                Batch Proof Report
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- EMR with Nested Dropdown -->
+                                <div class="relative group/emr">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-laptop-medical text-primary/60 w-4"></i>
+                                            EMR
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested EMR Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-60 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/emr:opacity-100 group-hover/emr:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/emr:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-emr.html?type=data-entry" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-keyboard text-primary/60 w-4"></i>
+                                                Data Entry & Digitalization
+                                            </a>
+                                            <a href="service-emr.html?type=data-migration" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-exchange-alt text-primary/60 w-4"></i>
+                                                Data Migration
+                                            </a>
+                                            <a href="service-emr.html?type=emr-management" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-cogs text-primary/60 w-4"></i>
+                                                EMR Management
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Document Conversion with Nested Dropdown -->
+                                <div class="relative group/docconversion">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-file-export text-primary/60 w-4"></i>
+                                            Document Conversion
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested Document Conversion Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-60 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/docconversion:opacity-100 group-hover/docconversion:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/docconversion:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-document-conversion.html?type=ocr" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-eye text-primary/60 w-4"></i>
+                                                OCR & Data Extraction
+                                            </a>
+                                            <a href="service-document-conversion.html?type=format" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-contract text-primary/60 w-4"></i>
+                                                File Format Conversion
+                                            </a>
+                                            <a href="service-document-conversion.html?type=book" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-book text-primary/60 w-4"></i>
+                                                Book and Ebook Conversion
+                                            </a>
+                                            <a href="service-document-conversion.html?type=indexing" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-search text-primary/60 w-4"></i>
+                                                Indexing & Redaction
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- CAD with Nested Dropdown -->
+                                <div class="relative group/cad">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-drafting-compass text-primary/60 w-4"></i>
+                                            CAD
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested CAD Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/cad:opacity-100 group-hover/cad:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/cad:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-cad.html?type=architectural" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-building text-primary/60 w-4"></i>
+                                                Architectural Drafting
+                                            </a>
+                                            <a href="service-cad.html?type=structural" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-hammer text-primary/60 w-4"></i>
+                                                Structural Drafting
+                                            </a>
+                                            <a href="service-cad.html?type=mep-hvac" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-tools text-primary/60 w-4"></i>
+                                                MEP & HVAC
+                                            </a>
+                                            <a href="service-cad.html?type=3d-visualization" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-cube text-primary/60 w-4"></i>
+                                                3D Visualization
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- E-commerce Product Listing with Nested Dropdown -->
+                                <div class="relative group/ecommerce">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-tags text-primary/60 w-4"></i>
+                                            E-commerce Product Listing
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested E-commerce Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/ecommerce:opacity-100 group-hover/ecommerce:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/ecommerce:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-product-listing.html?type=data-cleaning" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-broom text-primary/60 w-4"></i>
+                                                Data Cleaning & Validation
+                                            </a>
+                                            <a href="service-product-listing.html?type=data-extraction" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-magnet text-primary/60 w-4"></i>
+                                                Data Extraction
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Get Quote Button -->
+                <a href="quote.html" class="btn-gradient text-white px-5 py-2 rounded-full text-sm font-medium">
+                    Get Quote
+                </a>
+
+                <!-- Mobile Menu Button -->
+                <button class="md:hidden text-dark-text">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="py-12">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- Page Title -->
+            <h1 class="text-2xl md:text-3xl font-semibold gradient-text text-center mb-10">Get Quote</h1>
+
+            <!-- Contact Section -->
+            <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+                <div class="flex flex-col lg:flex-row">
+                    <!-- Left Side - Contact Information Card -->
+                    <div class="lg:w-2/5 relative overflow-hidden min-h-[520px]" style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%);">
+                        <!-- Decorative wave pattern overlay -->
+                        <div class="absolute inset-0 opacity-10">
+                            <svg class="w-full h-full" viewBox="0 0 400 600" preserveAspectRatio="none">
+                                <path d="M0,100 Q100,150 200,100 T400,100 L400,600 L0,600 Z" fill="white"/>
+                                <path d="M0,200 Q100,250 200,200 T400,200 L400,600 L0,600 Z" fill="white" opacity="0.5"/>
+                                <path d="M0,300 Q100,350 200,300 T400,300 L400,600 L0,600 Z" fill="white" opacity="0.3"/>
+                            </svg>
+                        </div>
+                        
+                        <div class="relative z-10 p-8 lg:p-10 text-white">
+                            <h2 class="text-2xl font-bold mb-2">Contact Information</h2>
+                            <p class="text-cyan-100 text-sm mb-10">Contact us now!</p>
+
+                            <div class="space-y-8">
+                                <!-- Phone -->
+                                <div class="flex items-center gap-4 group">
+                                    <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center group-hover:bg-white/30 transition-all duration-300 shadow-lg">
+                                        <i class="fas fa-phone text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-cyan-100 text-xs mb-1">Call Us</p>
+                                        <span class="text-white font-medium" data-config="phone">(043) 233-2050</span>
+                                    </div>
+                                </div>
+
+                                <!-- Email -->
+                                <div class="flex items-center gap-4 group">
+                                    <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center group-hover:bg-white/30 transition-all duration-300 shadow-lg">
+                                        <i class="fas fa-envelope text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-cyan-100 text-xs mb-1">Email Us</p>
+                                        <span class="text-white font-medium text-sm" data-config="email">info@digiscribeasiapacific.com</span>
+                                    </div>
+                                </div>
+
+                                <!-- Address -->
+                                <div class="flex items-start gap-4 group">
+                                    <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-white/30 transition-all duration-300 shadow-lg">
+                                        <i class="fas fa-map-marker-alt text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-cyan-100 text-xs mb-1">Visit Us</p>
+                                        <span class="text-white font-medium text-sm leading-relaxed" data-config="address">
+                                            3rd Flr VICMAR Bldg, P Burgos St,<br>
+                                            Barangay 10 Batangas City,<br>
+                                            Philippines 4200
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Social Links -->
+                            <div class="mt-12 pt-8 border-t border-white/20">
+                                <p class="text-cyan-100 text-xs mb-4">Follow Us</p>
+                                <div class="flex gap-3">
+                                    <a href="#" class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-300" data-config="social-linkedin">
+                                        <i class="fab fa-linkedin-in text-white"></i>
+                                    </a>
+                                    <a href="#" class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-300" data-config="social-facebook">
+                                        <i class="fab fa-facebook-f text-white"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Decorative circles -->
+                        <div class="absolute -bottom-16 -right-16 w-48 h-48 bg-white/10 rounded-full"></div>
+                        <div class="absolute bottom-24 right-8 w-24 h-24 bg-cyan-300/20 rounded-full blur-xl"></div>
+                        <div class="absolute top-20 -left-10 w-32 h-32 bg-cyan-400/10 rounded-full blur-2xl"></div>
+                    </div>
+
+                    <!-- Right Side - Form -->
+                    <div class="lg:w-3/5 p-8 lg:p-12 bg-gradient-to-br from-white to-sky-50/30">
+                        <div class="mb-8">
+                            <h3 class="text-xl font-semibold text-dark-text mb-2">Send us a Message</h3>
+                            <p class="text-sm text-gray-text">Fill out the form below and we'll get back to you shortly.</p>
+                        </div>
+                        
+                        <form class="space-y-6">
+                            <!-- Name Row -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-xs font-medium text-dark-text mb-2">First Name</label>
+                                    <input type="text" placeholder="Enter your first name" class="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-dark-text mb-2">Last Name</label>
+                                    <input type="text" placeholder="Enter your last name" class="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white">
+                                </div>
+                            </div>
+
+                            <!-- Email & Contact Row -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-xs font-medium text-dark-text mb-2">Email Address</label>
+                                    <input type="email" placeholder="your@email.com" class="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-dark-text mb-2">Contact Number</label>
+                                    <input type="tel" placeholder="+63 XXX XXX XXXX" class="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white">
+                                </div>
+                            </div>
+
+                            <!-- Subject Selection -->
+                            <div>
+                                <label class="block text-xs font-medium text-dark-text mb-4">Select Subject</label>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    <label class="relative cursor-pointer">
+                                        <input type="radio" name="subject" value="service-details" class="peer sr-only" checked>
+                                        <div class="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
+                                            Service Details
+                                        </div>
+                                    </label>
+                                    <label class="relative cursor-pointer">
+                                        <input type="radio" name="subject" value="service-status" class="peer sr-only">
+                                        <div class="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
+                                            Service Status
+                                        </div>
+                                    </label>
+                                    <label class="relative cursor-pointer">
+                                        <input type="radio" name="subject" value="general-inquiry" class="peer sr-only">
+                                        <div class="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
+                                            General Inquiry
+                                        </div>
+                                    </label>
+                                    <label class="relative cursor-pointer">
+                                        <input type="radio" name="subject" value="transcription" class="peer sr-only">
+                                        <div class="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
+                                            Transcription
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Message -->
+                            <div>
+                                <label class="block text-xs font-medium text-dark-text mb-2">Message</label>
+                                <textarea rows="4" placeholder="Write your message here..." class="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none bg-white"></textarea>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <div class="flex justify-end pt-4">
+                                <button type="submit" class="btn-gradient text-white px-8 py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2">
+                                    <span>Send Message</span>
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    </div><!-- End Hero Background Wrapper -->
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t border-gray-100 relative mt-16 pt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Company Info -->
+                <div>
+                    <a href="index.html" class="inline-block mb-6">
+                        <img src="images/DigiscribeLogoRB.png" alt="DigiScribe Transcription Corp." class="h-24 w-auto" data-config="logo">
+                    </a>
+                    <p class="text-xs text-gray-text leading-relaxed mb-6" data-config="tagline">
+                        A Philippine-based Medical Transcription Company Serving the Information Technology Enabled Services (ITES) Sector.
+                    </p>
+                    <div class="flex gap-3">
+                        <a href="#" class="w-8 h-8 social-gradient rounded flex items-center justify-center" data-config="social-linkedin">
+                            <i class="fab fa-linkedin-in text-white text-sm"></i>
+                        </a>
+                        <a href="#" class="w-8 h-8 social-gradient rounded flex items-center justify-center" data-config="social-facebook">
+                            <i class="fab fa-facebook-f text-white text-sm"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Office Hours -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Office Hours</h3>
+                    <div class="space-y-2 text-xs text-gray-text">
+                        <p data-config="office-hours-weekdays">Monday - Saturday: 7:00 AM - 6:00 PM</p>
+                        <p data-config="office-hours-weekend">Sunday: Closed</p>
+                        <a href="#" class="text-primary hover:underline block mt-3" data-config="timezone">Philippine Standard Time (PST)</a>
+                    </div>
+                </div>
+
+                <!-- Contact Us -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Contact Us</h3>
+                    <div class="space-y-2 text-xs text-gray-text">
+                        <p data-config="address">3rd Flr VICMAR Bldg, P Burgos St,<br>Barangay 10 Batangas City,<br>Philippines 4200</p>
+                        <p class="pt-2" data-config="phone">(043) 233-2050</p>
+                        <p data-config="email">info@digiscribeasiapacific.com</p>
+                    </div>
+                </div>
+
+                <!-- Quick Links -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Quick Links</h3>
+                    <ul class="space-y-2 text-xs text-gray-text">
+                        <li><a href="index.html" class="hover:text-primary transition-colors">Home</a></li>
+                        <li><a href="about.html" class="hover:text-primary transition-colors">About Us</a></li>
+                        <li><a href="projects.html" class="hover:text-primary transition-colors">Projects</a></li>
+                        <li><a href="services.html" class="hover:text-primary transition-colors">Services</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Copyright -->
+        <div class="border-t border-gray-100">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <p class="text-center text-xs text-gray-400">
+                    Digiscribe Transcription Corp 2024 © All Rights Reserved
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Navbar Script -->
+    <script src="navbar.js"></script>
+    <!-- Config Script -->
+    <script src="config.js"></script>
+</body>
+</html>

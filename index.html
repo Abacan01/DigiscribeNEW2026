@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - DigiScribe Transcription Corp.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="images/favicon.png">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0ea5e9',
+                        'primary-dark': '#0284c7',
+                        'dark-text': '#1e293b',
+                        'gray-text': '#64748b',
+                    },
+                    fontFamily: {
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="font-poppins">
+    <!-- Decorative Background Blobs -->
+    <div class="bg-blob-1"></div>
+    <div class="bg-blob-2"></div>
+    <div class="bg-blob-3"></div>
+    
+    <!-- Hero Background Wrapper (includes navbar) -->
+    <div class="hero-gradient">
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-50 border-b">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <!-- Logo -->
+                <a href="index.html" class="flex items-center">
+                    <img src="images/DigiscribeLogoRB.png" alt="DigiScribe Transcription Corp." class="h-14 w-auto" data-config="logo">
+                </a>
+
+                <!-- Navigation Links -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="index.html" class="text-primary text-base font-medium transition-colors">Home</a>
+                    <a href="about.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors">About</a>
+                    <div class="relative group">
+                        <a href="projects.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors flex items-center gap-1">
+                            Projects
+                            <svg class="w-4 h-4 transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <!-- Projects Dropdown -->
+                        <div class="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out transform translate-y-2 group-hover:translate-y-0 z-50">
+                            <div class="py-2">
+                                <a href="projects.html#app-marketplace" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-store text-primary/60 w-4"></i>
+                                    App Marketplace
+                                </a>
+                                <a href="projects.html#patient-fusion" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-user-injured text-primary/60 w-4"></i>
+                                    Patient Fusion
+                                </a>
+                                <a href="projects.html#practice-fusion" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-clinic-medical text-primary/60 w-4"></i>
+                                    Practice Fusion
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative group">
+                        <a href="services.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors flex items-center gap-1">
+                            Services
+                            <svg class="w-4 h-4 transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <!-- Services Dropdown -->
+                        <div class="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out transform translate-y-2 group-hover:translate-y-0 z-50">
+                            <div class="py-2">
+                                <!-- Transcription Support with Nested Dropdown -->
+                                <div class="relative group/transcription">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-headset text-primary/60 w-4"></i>
+                                            Transcription Support
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested Transcription Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/transcription:opacity-100 group-hover/transcription:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/transcription:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-transcription.html?type=medical" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-stethoscope text-primary/60 w-4"></i>
+                                                Medical
+                                            </a>
+                                            <a href="service-transcription.html?type=legal" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-balance-scale text-primary/60 w-4"></i>
+                                                Legal
+                                            </a>
+                                            <a href="service-transcription.html?type=general" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-alt text-primary/60 w-4"></i>
+                                                General
+                                            </a>
+                                            <a href="service-transcription.html?type=academic" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-graduation-cap text-primary/60 w-4"></i>
+                                                Academic
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Data Entry with Nested Dropdown -->
+                                <div class="relative group/dataentry">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-keyboard text-primary/60 w-4"></i>
+                                            Data Entry
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested Data Entry Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/dataentry:opacity-100 group-hover/dataentry:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/dataentry:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-data-entry.html?type=waybill" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-invoice text-primary/60 w-4"></i>
+                                                Waybill/Invoice/Charge
+                                            </a>
+                                            <a href="service-data-entry.html?type=batch-proof" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-clipboard-check text-primary/60 w-4"></i>
+                                                Batch Proof Report
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- EMR with Nested Dropdown -->
+                                <div class="relative group/emr">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-laptop-medical text-primary/60 w-4"></i>
+                                            EMR
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested EMR Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-60 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/emr:opacity-100 group-hover/emr:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/emr:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-emr.html?type=data-entry" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-keyboard text-primary/60 w-4"></i>
+                                                Data Entry & Digitalization
+                                            </a>
+                                            <a href="service-emr.html?type=data-migration" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-exchange-alt text-primary/60 w-4"></i>
+                                                Data Migration
+                                            </a>
+                                            <a href="service-emr.html?type=emr-management" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-cogs text-primary/60 w-4"></i>
+                                                EMR Management
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Document Conversion with Nested Dropdown -->
+                                <div class="relative group/docconversion">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-file-export text-primary/60 w-4"></i>
+                                            Document Conversion
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested Document Conversion Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-60 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/docconversion:opacity-100 group-hover/docconversion:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/docconversion:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-document-conversion.html?type=ocr" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-eye text-primary/60 w-4"></i>
+                                                OCR & Data Extraction
+                                            </a>
+                                            <a href="service-document-conversion.html?type=format" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-contract text-primary/60 w-4"></i>
+                                                File Format Conversion
+                                            </a>
+                                            <a href="service-document-conversion.html?type=book" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-book text-primary/60 w-4"></i>
+                                                Book and Ebook Conversion
+                                            </a>
+                                            <a href="service-document-conversion.html?type=indexing" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-search text-primary/60 w-4"></i>
+                                                Indexing & Redaction
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- CAD with Nested Dropdown -->
+                                <div class="relative group/cad">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-drafting-compass text-primary/60 w-4"></i>
+                                            CAD
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested CAD Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/cad:opacity-100 group-hover/cad:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/cad:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-cad.html?type=architectural" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-building text-primary/60 w-4"></i>
+                                                Architectural Drafting
+                                            </a>
+                                            <a href="service-cad.html?type=structural" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-hammer text-primary/60 w-4"></i>
+                                                Structural Drafting
+                                            </a>
+                                            <a href="service-cad.html?type=mep-hvac" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-tools text-primary/60 w-4"></i>
+                                                MEP & HVAC
+                                            </a>
+                                            <a href="service-cad.html?type=3d-visualization" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-cube text-primary/60 w-4"></i>
+                                                3D Visualization
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- E-commerce Product Listing with Nested Dropdown -->
+                                <div class="relative group/ecommerce">
+                                    <div class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-tags text-primary/60 w-4"></i>
+                                            E-commerce Product Listing
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </div>
+                                    <!-- Nested E-commerce Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/ecommerce:opacity-100 group-hover/ecommerce:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/ecommerce:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-product-listing.html?type=data-cleaning" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-broom text-primary/60 w-4"></i>
+                                                Data Cleaning & Validation
+                                            </a>
+                                            <a href="service-product-listing.html?type=data-extraction" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-magnet text-primary/60 w-4"></i>
+                                                Data Extraction
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Get Quote Button -->
+                <a href="quote.html" class="text-white px-5 py-2 rounded-full text-sm font-medium transition-all hover:shadow-lg" style="background: linear-gradient(90deg, #b8e4f7 0%, #0ea5e9 50%, #0369a1 100%);">
+                    Get Quote
+                </a>
+
+                <!-- Mobile Menu Button -->
+                <button class="md:hidden text-dark-text">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="py-12 lg:py-20 relative overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
+                <!-- Left Content -->
+                <div class="lg:w-1/2 z-10">
+                    <h1 class="text-4xl md:text-5xl lg:text-[52px] font-bold text-dark-text leading-tight mb-6">
+                        <span class="text-primary">Reliable</span> Medical Transcription & Back-Office Support
+                    </h1>
+                    <p class="text-gray-text text-sm mb-8 leading-relaxed max-w-md">
+                        We help <a href="#" class="text-primary underline">healthcare providers</a> reduce workload, improve accuracy, and streamline revenue with secure, <span class="text-primary">HIPAA-compliant</span> support services.
+                    </p>
+                    <a href="#services" class="inline-flex items-center gap-2 text-white px-6 py-3 rounded-full text-sm font-medium transition-all hover:shadow-lg" style="background: linear-gradient(90deg, #b8e4f7 0%, #0ea5e9 50%, #0369a1 100%);">
+                        Our Services
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </a>
+                </div>
+                
+                <!-- Right Image with decorative elements -->
+                <div class="lg:w-1/2 relative flex justify-center">
+                    <!-- Light blue gradient background circle -->
+                    <div class="absolute right-0 top-1/2 transform -translate-y-1/2 w-[350px] h-[350px] lg:w-[450px] lg:h-[450px] rounded-full hidden md:block" style="background: linear-gradient(135deg, #bae6fd 0%, #7dd3fc 50%, #38bdf8 100%);"></div>
+                    
+                    <!-- Dashed circle decoration -->
+                    <div class="absolute right-[-20px] top-1/2 transform -translate-y-1/2 w-[380px] h-[380px] lg:w-[480px] lg:h-[480px] dashed-circle hidden lg:block"></div>
+                    
+                    <!-- Doctor Image -->
+                    <div class="relative z-10">
+                        <img src="images/doctorhome.png" alt="Medical Professional with Headset" class="w-full max-w-sm mx-auto lg:max-w-md object-contain" data-config="hero-image">
+                        
+                        <!-- Tooltip Box with quote marks - centered at bottom -->
+                        <div class="absolute -bottom-16 left-1/2 transform -translate-x-1/2 bg-white rounded-xl shadow-lg p-4 w-[280px] z-20">
+                            <!-- Blue quotation marks -->
+                            <div class="absolute -top-5 left-4">
+                                <svg class="w-10 h-10 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/>
+                                </svg>
+                            </div>
+                            <p class="text-xs text-gray-text leading-relaxed pt-3">
+                                From data entry to revenue cycle management, Digiscribe delivers accurate, scalable healthcare support—24/7.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Decorative dots -->
+        <div class="absolute left-10 top-1/3 hidden lg:block">
+            <div class="grid grid-cols-3 gap-2">
+                <div class="w-2 h-2 bg-primary/20 rounded-full"></div>
+                <div class="w-2 h-2 bg-primary/20 rounded-full"></div>
+                <div class="w-2 h-2 bg-primary/20 rounded-full"></div>
+                <div class="w-2 h-2 bg-primary/20 rounded-full"></div>
+                <div class="w-2 h-2 bg-primary/20 rounded-full"></div>
+                <div class="w-2 h-2 bg-primary/20 rounded-full"></div>
+            </div>
+        </div>
+    </section>
+    </div><!-- End Hero Background Wrapper -->
+
+    <!-- Awards & Recognition Section with Carousel -->
+    <section class="py-12 bg-white relative section-fade-to-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <h2 class="text-3xl md:text-4xl font-semibold text-center mb-10">
+                <span class="gradient-text">Awards</span> <span class="gradient-text">&</span> <span class="gradient-text">Recognition</span>
+            </h2>
+            
+            <!-- Carousel Container -->
+            <div class="relative max-w-4xl mx-auto carousel-container">
+                <!-- Carousel Track - Populated dynamically from config.js -->
+                <div id="awardsCarousel" class="carousel-track">
+                    <!-- Slides will be generated by JavaScript -->
+                </div>
+                
+                <!-- Carousel Navigation - Arrows and Dots -->
+                <div class="flex justify-center items-center gap-4 mt-8">
+                    <!-- Prev Arrow -->
+                    <button class="carousel-arrow prev" aria-label="Previous slide">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 18l-6-6 6-6"/>
+                        </svg>
+                    </button>
+                    
+                    <!-- Dots - Populated dynamically from config.js -->
+                    <div id="carouselDots" class="flex gap-2">
+                        <!-- Dots will be generated by JavaScript -->
+                    </div>
+                    
+                    <!-- Next Arrow -->
+                    <button class="carousel-arrow next" aria-label="Next slide">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services Section -->
+    <section id="services" class="py-20 relative overflow-hidden section-fade-to-blue">
+        <!-- Gradient Background -->
+        <div class="absolute inset-0 bg-gradient-to-br from-slate-50 via-sky-50/50 to-cyan-50/30"></div>
+        
+        <!-- Decorative Elements -->
+        <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+            <!-- Floating gradient orbs -->
+            <div class="absolute top-20 left-10 w-72 h-72 bg-gradient-to-br from-cyan-200/30 to-sky-300/20 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-20 right-10 w-96 h-96 bg-gradient-to-br from-blue-200/20 to-cyan-300/30 rounded-full blur-3xl"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-sky-100/20 to-transparent rounded-full blur-3xl"></div>
+        </div>
+        
+        <!-- Wave decoration top left -->
+        <div class="absolute top-8 left-8 hidden md:block z-0 pointer-events-none">
+            <svg width="120" height="60" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 15 Q 15 5, 30 15 T 60 15 T 90 15 T 120 15" stroke="#7dd3fc" stroke-width="2" fill="none"/>
+                <path d="M0 30 Q 15 20, 30 30 T 60 30 T 90 30 T 120 30" stroke="#38bdf8" stroke-width="2" fill="none"/>
+                <path d="M0 45 Q 15 35, 30 45 T 60 45 T 90 45 T 120 45" stroke="#0ea5e9" stroke-width="2" fill="none"/>
+            </svg>
+        </div>
+        
+        <!-- Wave decoration bottom right -->
+        <div class="absolute bottom-8 right-8 hidden md:block z-0 pointer-events-none">
+            <svg width="120" height="60" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 15 Q 15 5, 30 15 T 60 15 T 90 15 T 120 15" stroke="#7dd3fc" stroke-width="2" fill="none"/>
+                <path d="M0 30 Q 15 20, 30 30 T 60 30 T 90 30 T 120 30" stroke="#38bdf8" stroke-width="2" fill="none"/>
+                <path d="M0 45 Q 15 35, 30 45 T 60 45 T 90 45 T 120 45" stroke="#0ea5e9" stroke-width="2" fill="none"/>
+            </svg>
+        </div>
+        
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <!-- Section Header -->
+            <div class="text-center mb-14">
+                <h2 class="text-3xl md:text-4xl font-bold text-dark-text mb-4">
+                    Our core <span class="gradient-text">services</span> we offer
+                </h2>
+                <p class="text-gray-text text-sm max-w-2xl mx-auto">
+                    Comprehensive transcription, data processing, and documentation solutions for your business
+                </p>
+            </div>
+
+            <!-- Services Grid - Top Row (2 cards) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-6">
+                <!-- Service 1: Medical Transcription -->
+                <a href="service-transcription.html" class="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+                    <!-- Hover gradient overlay -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <!-- Corner accent -->
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-cyan-400/10 to-transparent rounded-bl-full"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="w-14 h-14 bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-cyan-200/50 group-hover:shadow-cyan-300/60 transition-all duration-300 group-hover:scale-110">
+                            <i class="fas fa-file-medical text-white text-xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-dark-text mb-3 group-hover:text-cyan-600 transition-colors">Medical Transcription & Documentation</h3>
+                        <p class="text-sm text-gray-text leading-relaxed">Offers reliable medical transcription services designed to support patients and healthcare professionals alike. Our company prioritizes secure transfers and ensures peace of mind for our clients.</p>
+                        <div class="mt-4 flex items-center gap-2 text-cyan-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
+                            <span>Learn More</span>
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Service 2: Data Entry & EMR Management -->
+                <a href="service-data-entry.html" class="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+                    <!-- Hover gradient overlay -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <!-- Corner accent -->
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sky-400/10 to-transparent rounded-bl-full"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="w-14 h-14 bg-gradient-to-br from-sky-400 via-cyan-500 to-teal-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-sky-200/50 group-hover:shadow-sky-300/60 transition-all duration-300 group-hover:scale-110">
+                            <i class="fas fa-database text-white text-xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-dark-text mb-3 group-hover:text-sky-600 transition-colors">Data Entry & EMR Management</h3>
+                        <p class="text-sm text-gray-text leading-relaxed">Handling medical billing, charge entry, and insurance claims (including Workers' Compensation and DME).</p>
+                        <div class="mt-4 flex items-center gap-2 text-sky-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
+                            <span>Learn More</span>
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Services Grid - Bottom Row (3 cards) -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Service 3: Claims Processing & Medical Billing -->
+                <a href="service-claims.html" class="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+                    <!-- Hover gradient overlay -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <!-- Corner accent -->
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-teal-400/10 to-transparent rounded-bl-full"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="w-14 h-14 bg-gradient-to-br from-teal-400 via-cyan-500 to-sky-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-teal-200/50 group-hover:shadow-teal-300/60 transition-all duration-300 group-hover:scale-110">
+                            <i class="fas fa-file-invoice-dollar text-white text-xl"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-dark-text mb-3 group-hover:text-teal-600 transition-colors">Claims Processing & Medical Billing</h3>
+                        <p class="text-sm text-gray-text leading-relaxed">Transitioning data between systems and indexing medical records.</p>
+                        <div class="mt-4 flex items-center gap-2 text-teal-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
+                            <span>Learn More</span>
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Service 4: EMR Data Migration -->
+                <a href="service-emr.html" class="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+                    <!-- Hover gradient overlay -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <!-- Corner accent -->
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-400/10 to-transparent rounded-bl-full"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="w-14 h-14 bg-gradient-to-br from-blue-400 via-sky-500 to-cyan-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-blue-200/50 group-hover:shadow-blue-300/60 transition-all duration-300 group-hover:scale-110">
+                            <i class="fas fa-exchange-alt text-white text-xl"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-dark-text mb-3 group-hover:text-blue-600 transition-colors">EMR Data Migration & Chart Building</h3>
+                        <p class="text-sm text-gray-text leading-relaxed">Offering 24/7 technical support to reduce downtime and training staff on new EHR systems.</p>
+                        <div class="mt-4 flex items-center gap-2 text-blue-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
+                            <span>Learn More</span>
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Service 5: Revenue Cycle Management -->
+                <a href="service-rcm.html" class="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+                    <!-- Hover gradient overlay -->
+                    <div class="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <!-- Corner accent -->
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-indigo-400/10 to-transparent rounded-bl-full"></div>
+                    
+                    <div class="relative z-10">
+                        <div class="w-14 h-14 bg-gradient-to-br from-indigo-400 via-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-indigo-200/50 group-hover:shadow-indigo-300/60 transition-all duration-300 group-hover:scale-110">
+                            <i class="fas fa-chart-line text-white text-xl"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-dark-text mb-3 group-hover:text-indigo-600 transition-colors">Revenue Cycle Management (RCM)</h3>
+                        <p class="text-sm text-gray-text leading-relaxed">Improving financial outcomes through end-to-end billing support.</p>
+                        <div class="mt-4 flex items-center gap-2 text-indigo-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
+                            <span>Learn More</span>
+                            <i class="fas fa-arrow-right text-xs"></i>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Award Banner Section -->
+    <section class="py-16 bg-white relative section-fade-from-blue">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="border-2 border-primary/20 rounded-2xl p-8 md:p-12">
+                <div class="flex flex-col md:flex-row items-center gap-8">
+                    <!-- Certificate Image -->
+                    <div class="md:w-2/5">
+                        <div class="bg-gradient-to-br from-sky-50 to-white rounded-xl p-4 border border-gray-100">
+                            <img src="images/awards.jpg" alt="2023 APAC Insider Business Award" class="w-full rounded-lg shadow-md" data-config="award-image">
+                        </div>
+                    </div>
+                    
+                    <!-- Content -->
+                    <div class="md:w-3/5 text-center md:text-left">
+                        <p class="text-gray-text text-base md:text-lg mb-6 leading-relaxed">
+                            Digiscribe was honored with the <span class="font-semibold">2023 APAC Insider Business Award</span> for outstanding service quality, innovation, and client satisfaction across the region. Our relentless focus on accuracy, secure workflows, and rapid turnaround set a new benchmark for medical transcription. This award recognizes not just our technology but the dedication of every team member who makes Digiscribe a trusted global partner.
+                        </p>
+                        <a href="about.html" class="inline-flex items-center gap-2 btn-gradient text-white px-6 py-3 rounded-full text-sm font-medium">
+                            Learn more about us
+                        </a>
+                    </div>
+                </div>
+                <!-- South-East Asia BPO Title - Centered at Bottom -->
+                <div class="mt-8 pt-6 border-t border-gray-200 text-center">
+                    <p class="text-2xl md:text-3xl">
+                        <span class="gradient-text font-semibold">South-East Asia BPO:</span> 
+                        <span class="text-dark-text font-medium">Consultancy of the Year</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t border-gray-100 relative mt-16 pt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Company Info -->
+                <div>
+                    <a href="index.html" class="inline-block mb-6">
+                        <img src="images/DigiscribeLogoRB.png" alt="DigiScribe Transcription Corp." class="h-24 w-auto" data-config="logo">
+                    </a>
+                    <p class="text-xs text-gray-text leading-relaxed mb-6" data-config="tagline">
+                        A Philippine-based Medical Transcription Company Serving the Information Technology Enabled Services (ITES) Sector.
+                    </p>
+                    <div class="flex gap-3">
+                        <a href="#" class="w-8 h-8 social-gradient rounded flex items-center justify-center" data-config="social-linkedin">
+                            <i class="fab fa-linkedin-in text-white text-sm"></i>
+                        </a>
+                        <a href="#" class="w-8 h-8 social-gradient rounded flex items-center justify-center" data-config="social-facebook">
+                            <i class="fab fa-facebook-f text-white text-sm"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Office Hours -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Office Hours</h3>
+                    <div class="space-y-2 text-xs text-gray-text">
+                        <p data-config="office-hours-weekdays">Monday - Saturday: 7:00 AM - 6:00 PM</p>
+                        <p data-config="office-hours-weekend">Sunday: Closed</p>
+                        <a href="#" class="text-primary hover:underline block mt-3" data-config="timezone">Philippine Standard Time (PST)</a>
+                    </div>
+                </div>
+
+                <!-- Contact Us -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Contact Us</h3>
+                    <div class="space-y-2 text-xs text-gray-text">
+                        <p data-config="address">3rd Flr VICMAR Bldg, P Burgos St,<br>Barangay 10 Batangas City,<br>Philippines 4200</p>
+                        <p class="pt-2" data-config="phone">(043) 233-2050</p>
+                        <p data-config="email">info@digiscribeasiapacific.com</p>
+                    </div>
+                </div>
+
+                <!-- Quick Links -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Quick Links</h3>
+                    <ul class="space-y-2 text-xs text-gray-text">
+                        <li><a href="index.html" class="hover:text-primary transition-colors">Home</a></li>
+                        <li><a href="about.html" class="hover:text-primary transition-colors">About Us</a></li>
+                        <li><a href="projects.html" class="hover:text-primary transition-colors">Projects</a></li>
+                        <li><a href="services.html" class="hover:text-primary transition-colors">Services</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Copyright -->
+        <div class="border-t border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <p class="text-center text-xs text-gray-400">
+                    Digiscribe Transcription Corp 2026 © All Rights Reserved
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Config Script - Must load before carousel -->
+    <script src="config.js"></script>
+    
+    <!-- Carousel JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const track = document.getElementById('awardsCarousel');
+            const dotsContainer = document.getElementById('carouselDots');
+            const prevBtn = document.querySelector('.carousel-arrow.prev');
+            const nextBtn = document.querySelector('.carousel-arrow.next');
+            const container = document.querySelector('.carousel-container');
+            let currentSlide = 0;
+            let isAnimating = false;
+            let autoPlayInterval;
+
+            // Populate carousel from config
+            const awardsData = CONFIG.images.awardsCarousel || [];
+            
+            // Generate slides
+            awardsData.forEach((award, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'carousel-slide';
+                slide.dataset.index = index;
+                slide.innerHTML = `<img src="${award.src}" alt="${award.alt}" class="carousel-img">`;
+                track.appendChild(slide);
+            });
+
+            // Generate dots
+            awardsData.forEach((_, index) => {
+                const dot = document.createElement('button');
+                dot.className = `carousel-dot w-3 h-3 rounded-full ${index === 0 ? 'active' : 'bg-gray-300'}`;
+                dot.dataset.slide = index;
+                dotsContainer.appendChild(dot);
+            });
+
+            // Now get the generated elements
+            const slides = document.querySelectorAll('.carousel-slide');
+            const dots = document.querySelectorAll('.carousel-dot');
+            const totalSlides = slides.length;
+
+            function updateSlide(index) {
+                if (isAnimating || totalSlides === 0) return;
+                isAnimating = true;
+
+                // Calculate prev and next indices
+                const prevIndex = (index - 1 + totalSlides) % totalSlides;
+                const nextIndex = (index + 1) % totalSlides;
+
+                // Update slides positioning
+                slides.forEach((slide, i) => {
+                    slide.classList.remove('active', 'prev', 'next');
+                    
+                    if (i === index) {
+                        slide.classList.add('active');
+                    } else if (i === prevIndex) {
+                        slide.classList.add('prev');
+                    } else if (i === nextIndex) {
+                        slide.classList.add('next');
+                    }
+                });
+
+                // Update dots
+                dots.forEach((dot, i) => {
+                    dot.classList.remove('active');
+                    dot.style.width = '12px';
+                    dot.style.background = '#d1d5db';
+                });
+                
+                dots[index].classList.add('active');
+                dots[index].style.width = '24px';
+                dots[index].style.background = 'linear-gradient(90deg, #61d0ff 0%, #0ea5e9 50%, #0369a1 100%)';
+
+                currentSlide = index;
+
+                // Reset animation lock
+                setTimeout(() => {
+                    isAnimating = false;
+                }, 300);
+            }
+
+            function nextSlide() {
+                const next = (currentSlide + 1) % totalSlides;
+                updateSlide(next);
+            }
+
+            function prevSlide() {
+                const prev = (currentSlide - 1 + totalSlides) % totalSlides;
+                updateSlide(prev);
+            }
+
+            // Arrow navigation
+            nextBtn.addEventListener('click', () => {
+                nextSlide();
+                resetAutoPlay();
+            });
+
+            prevBtn.addEventListener('click', () => {
+                prevSlide();
+                resetAutoPlay();
+            });
+
+            // Dot navigation
+            dots.forEach((dot, index) => {
+                dot.addEventListener('click', () => {
+                    if (index !== currentSlide) {
+                        updateSlide(index);
+                        resetAutoPlay();
+                    }
+                });
+            });
+
+            // Touch/Swipe support
+            let touchStartX = 0;
+            let touchEndX = 0;
+            let isDragging = false;
+
+            track.addEventListener('touchstart', (e) => {
+                touchStartX = e.changedTouches[0].screenX;
+            }, { passive: true });
+
+            track.addEventListener('touchend', (e) => {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipe();
+            }, { passive: true });
+
+            // Mouse drag support
+            container.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                touchStartX = e.clientX;
+                e.preventDefault();
+            });
+
+            container.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+            });
+
+            container.addEventListener('mouseup', (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                touchEndX = e.clientX;
+                handleSwipe();
+            });
+
+            container.addEventListener('mouseleave', (e) => {
+                if (isDragging) {
+                    isDragging = false;
+                    touchEndX = e.clientX;
+                    handleSwipe();
+                }
+                startAutoPlay();
+            });
+
+            function handleSwipe() {
+                const swipeThreshold = 50;
+                const diff = touchStartX - touchEndX;
+                
+                if (Math.abs(diff) > swipeThreshold) {
+                    if (diff > 0) {
+                        nextSlide();
+                    } else {
+                        prevSlide();
+                    }
+                    resetAutoPlay();
+                }
+            }
+
+            // Auto-play (6 seconds)
+            function startAutoPlay() {
+                autoPlayInterval = setInterval(nextSlide, 6000);
+            }
+
+            function resetAutoPlay() {
+                clearInterval(autoPlayInterval);
+                startAutoPlay();
+            }
+
+            // Pause on hover
+            container.addEventListener('mouseenter', () => {
+                clearInterval(autoPlayInterval);
+            });
+
+            // Initialize - set first slide as active with prev/next
+            if (totalSlides > 0) {
+                updateSlide(0);
+                startAutoPlay();
+            }
+        });
+    </script>
+
+    <!-- Navbar Script -->
+    <script src="navbar.js"></script>
+</body>
+</html>
