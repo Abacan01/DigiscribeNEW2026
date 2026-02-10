@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indexing & Redaction - DigiScribe Transcription Corp.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="images/favicon.png">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0ea5e9',
+                        'primary-dark': '#0284c7',
+                        'dark-text': '#1e293b',
+                        'gray-text': '#64748b',
+                    },
+                    fontFamily: {
+                        poppins: ['Poppins', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="font-poppins">
+    <!-- Decorative Background Blobs -->
+    <div class="bg-blob-1"></div>
+    <div class="bg-blob-2"></div>
+    <div class="bg-blob-3"></div>
+    
+    <!-- Hero Background Wrapper (includes navbar) -->
+    <div class="hero-gradient">
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-50 border-b">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <!-- Logo -->
+                <a href="index.html" class="flex items-center">
+                    <img src="images/DigiscribeLogoRB.png" alt="DigiScribe Transcription Corp." class="h-14 w-auto">
+                </a>
+
+                <!-- Navigation Links -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="index.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors">Home</a>
+                    <a href="about.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors">About</a>
+                    <div class="relative group">
+                        <a href="projects.html" class="text-dark-text hover:text-primary text-base font-medium transition-colors flex items-center gap-1">
+                            Projects
+                            <svg class="w-4 h-4 transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <!-- Projects Dropdown -->
+                        <div class="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out transform translate-y-2 group-hover:translate-y-0 z-50">
+                            <div class="py-2">
+                                <a href="projects.html#app-marketplace" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-store text-primary/60 w-4"></i>
+                                    App Marketplace
+                                </a>
+                                <a href="projects.html#patient-fusion" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-user-injured text-primary/60 w-4"></i>
+                                    Patient Fusion
+                                </a>
+                                <a href="projects.html#practice-fusion" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-clinic-medical text-primary/60 w-4"></i>
+                                    Practice Fusion
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative group">
+                        <a href="services.html" class="text-primary text-base font-medium transition-colors flex items-center gap-1">
+                            Services
+                            <svg class="w-4 h-4 transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <!-- Services Dropdown -->
+                        <div class="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 ease-in-out transform translate-y-2 group-hover:translate-y-0 z-50">
+                            <div class="py-2">
+                                <!-- Transcription Support with Nested Dropdown -->
+                                <div class="relative group/transcription">
+                                    <a href="service-transcription.html" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-headset text-primary/60 w-4"></i>
+                                            Transcription Support
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </a>
+                                    <!-- Nested Transcription Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/transcription:opacity-100 group-hover/transcription:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/transcription:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-medical-transcription.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-stethoscope text-primary/60 w-4"></i>
+                                                Medical
+                                            </a>
+                                            <a href="service-legal-transcription.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-balance-scale text-primary/60 w-4"></i>
+                                                Legal
+                                            </a>
+                                            <a href="service-general-transcription.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-alt text-primary/60 w-4"></i>
+                                                General
+                                            </a>
+                                            <a href="service-academic-transcription.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-graduation-cap text-primary/60 w-4"></i>
+                                                Academic
+                                            </a>
+                                            <a href="service-corporate-transcription.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-building text-primary/60 w-4"></i>
+                                                Corporate/Business
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Data Entry with Nested Dropdown -->
+                                <div class="relative group/dataentry">
+                                    <a href="service-data-entry.html" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-keyboard text-primary/60 w-4"></i>
+                                            Data Entry
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </a>
+                                    <!-- Nested Data Entry Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/dataentry:opacity-100 group-hover/dataentry:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/dataentry:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-waybill-invoice.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-invoice text-primary/60 w-4"></i>
+                                                Waybill/Invoice/Charge
+                                            </a>
+                                            <a href="service-batch-proof.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-clipboard-check text-primary/60 w-4"></i>
+                                                Batch Proof Report
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- EMR with Nested Dropdown -->
+                                <div class="relative group/emr">
+                                    <a href="service-emr.html" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-laptop-medical text-primary/60 w-4"></i>
+                                            EMR
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </a>
+                                    <!-- Nested EMR Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-60 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/emr:opacity-100 group-hover/emr:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/emr:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-emr-data-entry.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-keyboard text-primary/60 w-4"></i>
+                                                Data Entry & Digitalization
+                                            </a>
+                                            <a href="service-emr-data-migration.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-exchange-alt text-primary/60 w-4"></i>
+                                                Data Migration
+                                            </a>
+                                            <a href="service-emr-management.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-cogs text-primary/60 w-4"></i>
+                                                EMR Management
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Document Conversion with Nested Dropdown -->
+                                <div class="relative group/docconversion">
+                                    <a href="service-document-conversion.html" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-file-export text-primary/60 w-4"></i>
+                                            Document Conversion
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </a>
+                                    <!-- Nested Document Conversion Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-60 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/docconversion:opacity-100 group-hover/docconversion:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/docconversion:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-ocr-data-extraction.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-eye text-primary/60 w-4"></i>
+                                                OCR & Data Extraction
+                                            </a>
+                                            <a href="service-file-format-conversion.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-file-contract text-primary/60 w-4"></i>
+                                                File Format Conversion
+                                            </a>
+                                            <a href="service-book-ebook-conversion.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-book text-primary/60 w-4"></i>
+                                                Book and Ebook Conversion
+                                            </a>
+                                            <a href="service-indexing-redaction.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-search text-primary/60 w-4"></i>
+                                                Indexing & Redaction
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- CAD with Nested Dropdown -->
+                                <div class="relative group/cad">
+                                    <a href="service-cad.html" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-drafting-compass text-primary/60 w-4"></i>
+                                            CAD
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </a>
+                                    <!-- Nested CAD Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/cad:opacity-100 group-hover/cad:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/cad:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-architectural-drafting.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-building text-primary/60 w-4"></i>
+                                                Architectural Drafting
+                                            </a>
+                                            <a href="service-structural-drafting.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-hammer text-primary/60 w-4"></i>
+                                                Structural Drafting
+                                            </a>
+                                            <a href="service-mep-hvac.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-tools text-primary/60 w-4"></i>
+                                                MEP & HVAC
+                                            </a>
+                                            <a href="service-3d-visualization.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-cube text-primary/60 w-4"></i>
+                                                3D Visualization
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- E-commerce Product Listing with Nested Dropdown -->
+                                <div class="relative group/ecommerce">
+                                    <a href="service-product-listing.html" class="flex items-center justify-between px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors cursor-pointer">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-tags text-primary/60 w-4"></i>
+                                            E-commerce Product Listing
+                                        </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </a>
+                                    <!-- Nested E-commerce Dropdown -->
+                                    <div class="absolute left-full top-0 ml-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover/ecommerce:opacity-100 group-hover/ecommerce:visible transition-all duration-300 ease-in-out transform translate-x-2 group-hover/ecommerce:translate-x-0 z-50">
+                                        <div class="py-2">
+                                            <a href="service-data-cleaning-validation.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-broom text-primary/60 w-4"></i>
+                                                Data Cleaning & Validation
+                                            </a>
+                                            <a href="service-data-extraction.html" class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-text hover:text-primary hover:bg-gray-50 transition-colors">
+                                                <i class="fas fa-magnet text-primary/60 w-4"></i>
+                                                Data Extraction
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Get Quote Button -->
+                <a href="quote.html" class="btn-gradient text-white px-5 py-2 rounded-full text-sm font-medium">
+                    Get Quote
+                </a>
+
+                <!-- Mobile Menu Button -->
+                <button class="md:hidden text-dark-text">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Back to Document Conversion -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <a href="service-document-conversion.html" class="inline-flex items-center gap-2 text-sm text-gray-text hover:text-primary transition-colors">
+            <i class="fas fa-arrow-left"></i>
+            <span>Back to</span>
+            <span class="text-primary font-medium">Document Conversion</span>
+        </a>
+    </div>
+
+    <!-- Service Detail Section -->
+    <section class="pb-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <!-- Title with decoration -->
+            <div class="flex items-center justify-center gap-4 mb-12">
+                <div class="hidden md:flex items-center gap-1">
+                    <div class="w-1 h-3 bg-primary/30 rounded"></div>
+                    <div class="w-1 h-5 bg-primary/50 rounded"></div>
+                    <div class="w-1 h-8 bg-primary rounded"></div>
+                    <div class="w-1 h-5 bg-primary/50 rounded"></div>
+                    <div class="w-1 h-3 bg-primary/30 rounded"></div>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-bold gradient-text text-center">
+                    Indexing & Redaction
+                </h1>
+                <div class="hidden md:flex items-center gap-1">
+                    <div class="w-1 h-3 bg-primary/30 rounded"></div>
+                    <div class="w-1 h-5 bg-primary/50 rounded"></div>
+                    <div class="w-1 h-8 bg-primary rounded"></div>
+                    <div class="w-1 h-5 bg-primary/50 rounded"></div>
+                    <div class="w-1 h-3 bg-primary/30 rounded"></div>
+                </div>
+            </div>
+
+            <!-- Content Area - Two Column Layout -->
+            <div class="max-w-6xl mx-auto">
+                <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start mb-16">
+                    <!-- Left Side - Text Content -->
+                    <div class="space-y-8 order-2 lg:order-1">
+                        <p class="text-gray-text leading-relaxed text-base">
+                            Protect sensitive information and organize your documents efficiently with our professional indexing and redaction services. We help businesses, legal firms, healthcare providers, and government agencies secure confidential data while maintaining document accessibility and compliance with privacy regulations.
+                        </p>
+                        
+                        <p class="text-gray-text leading-relaxed text-base">
+                            Our expert team combines manual review with advanced technology to accurately identify and redact sensitive information such as social security numbers, financial data, personal health information, and other confidential content. We create comprehensive indexes to make your document collections easily searchable and navigable.
+                        </p>
+
+                        <div>
+                            <h3 class="text-xl font-semibold text-dark-text mb-6">Our Services Include</h3>
+                            <ul class="space-y-4">
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Permanent redaction of sensitive information (PII, PHI, financial data)</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Legal document redaction for litigation and discovery</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">HIPAA and GDPR compliant redaction processes</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Document indexing and cataloging</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Full-text searchable index creation</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Metadata extraction and organization</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Cross-referencing and hyperlinked indexes</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Custom indexing based on your specific criteria</span>
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <i class="fas fa-check-circle text-primary mt-1 flex-shrink-0"></i>
+                                    <span class="text-gray-text text-base">Quality assurance and verification processes</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="text-center">
+                            <a href="quote.html" class="inline-flex items-center gap-2 btn-gradient text-white px-8 py-3 rounded-full text-base font-medium">
+                                Request a Quote
+                                <i class="fas fa-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Right Side - Image -->
+                    <div class="order-1 lg:order-2">
+                        <div class="relative bg-gradient-to-br from-blue-50 to-slate-50 rounded-2xl overflow-hidden shadow-lg border border-blue-100 aspect-[4/3]">
+                            <img src="images/services/Indexing and Redaction.jpg" alt="Indexing & Redaction" class="w-full h-full object-cover">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Features Bar -->
+                <div class="bg-gradient-primary rounded-2xl p-6 md:p-8 mb-16">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Benefit 1 -->
+                        <div class="flex items-center gap-4 text-white">
+                            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-shield-alt text-dark-text text-xl"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-sm">Secure & Compliant</h4>
+                            </div>
+                        </div>
+
+                        <!-- Benefit 2 -->
+                        <div class="flex items-center gap-4 text-white">
+                            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-search-plus text-dark-text text-xl"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-sm">Precise Accuracy</h4>
+                            </div>
+                        </div>
+
+                        <!-- Benefit 3 -->
+                        <div class="flex items-center gap-4 text-white">
+                            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-list-alt text-dark-text text-xl"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-sm">Organized Indexing</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Industries We Serve -->
+                <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 mb-16">
+                    <h3 class="text-2xl font-bold text-dark-text mb-6 text-center">Industries We Serve</h3>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0">
+                                <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-balance-scale text-primary"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-dark-text mb-2">Legal Services</h4>
+                                <p class="text-sm text-gray-text">Redaction for discovery, litigation support, and confidential legal documents. Complete indexing for case files and legal research materials.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0">
+                                <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-hospital text-primary"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-dark-text mb-2">Healthcare</h4>
+                                <p class="text-sm text-gray-text">HIPAA-compliant redaction of patient records, medical charts, and health information. Secure indexing for medical document management systems.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0">
+                                <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-university text-primary"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-dark-text mb-2">Financial Services</h4>
+                                <p class="text-sm text-gray-text">Protection of financial data, account numbers, and sensitive banking information. Document indexing for regulatory compliance and audits.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0">
+                                <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-landmark text-primary"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-dark-text mb-2">Government Agencies</h4>
+                                <p class="text-sm text-gray-text">Redaction for FOIA requests and public records. Secure indexing for government archives and classified document management.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Why Choose Us Section -->
+                <div class="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-8 border border-blue-100">
+                    <h3 class="text-2xl font-bold text-dark-text mb-6 text-center">Why Choose Our Services?</h3>
+                    <div class="grid md:grid-cols-3 gap-6">
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
+                                <i class="fas fa-user-shield text-primary text-2xl"></i>
+                            </div>
+                            <h4 class="font-semibold text-dark-text mb-2">Confidentiality Guaranteed</h4>
+                            <p class="text-sm text-gray-text">All our specialists sign NDAs and follow strict security protocols to protect your sensitive information.</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
+                                <i class="fas fa-certificate text-primary text-2xl"></i>
+                            </div>
+                            <h4 class="font-semibold text-dark-text mb-2">Compliance Experts</h4>
+                            <p class="text-sm text-gray-text">Our team is trained in HIPAA, GDPR, and other regulatory requirements to ensure full compliance.</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
+                                <i class="fas fa-tachometer-alt text-primary text-2xl"></i>
+                            </div>
+                            <h4 class="font-semibold text-dark-text mb-2">Fast Turnaround</h4>
+                            <p class="text-sm text-gray-text">We deliver redacted and indexed documents quickly without compromising quality or accuracy.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    </div><!-- End Hero Background Wrapper -->
+
+    <!-- Footer -->
+    <footer class="bg-gray-50 border-t border-gray-100 relative mt-16 pt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Company Info -->
+                <div>
+                    <a href="index.html" class="inline-block mb-6">
+                        <img src="images/DigiscribeLogoRB.png" alt="DigiScribe Transcription Corp." class="h-24 w-auto" data-config="logo">
+                    </a>
+                    <p class="text-xs text-gray-text leading-relaxed mb-6" data-config="tagline">
+                        A Philippine-based Medical Transcription Company Serving the Information Technology Enabled Services (ITES) Sector.
+                    </p>
+                    <div class="flex gap-3">
+                        <a href="#" class="w-8 h-8 social-gradient rounded flex items-center justify-center" data-config="social-linkedin">
+                            <i class="fab fa-linkedin-in text-white text-sm"></i>
+                        </a>
+                        <a href="#" class="w-8 h-8 social-gradient rounded flex items-center justify-center" data-config="social-facebook">
+                            <i class="fab fa-facebook-f text-white text-sm"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Quick Links -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Quick Links</h3>
+                    <ul class="space-y-2">
+                        <li><a href="index.html" class="text-xs text-gray-text hover:text-primary transition-colors">Home</a></li>
+                        <li><a href="about.html" class="text-xs text-gray-text hover:text-primary transition-colors">About Us</a></li>
+                        <li><a href="services.html" class="text-xs text-gray-text hover:text-primary transition-colors">Services</a></li>
+                        <li><a href="projects.html" class="text-xs text-gray-text hover:text-primary transition-colors">Projects</a></li>
+                        <li><a href="quote.html" class="text-xs text-gray-text hover:text-primary transition-colors">Request Quote</a></li>
+                    </ul>
+                </div>
+
+                <!-- Services -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Services</h3>
+                    <ul class="space-y-2">
+                        <li><a href="service-transcription.html" class="text-xs text-gray-text hover:text-primary transition-colors">Transcription Support</a></li>
+                        <li><a href="service-data-entry.html" class="text-xs text-gray-text hover:text-primary transition-colors">Data Entry</a></li>
+                        <li><a href="service-emr.html" class="text-xs text-gray-text hover:text-primary transition-colors">EMR</a></li>
+                        <li><a href="service-document-conversion.html" class="text-xs text-gray-text hover:text-primary transition-colors">Document Conversion</a></li>
+                        <li><a href="service-cad.html" class="text-xs text-gray-text hover:text-primary transition-colors">CAD Services</a></li>
+                    </ul>
+                </div>
+
+                <!-- Contact Info -->
+                <div>
+                    <h3 class="text-sm font-semibold text-dark-text mb-4">Contact Us</h3>
+                    <ul class="space-y-3">
+                        <li class="flex items-start gap-2">
+                            <i class="fas fa-map-marker-alt text-primary text-xs mt-1"></i>
+                            <span class="text-xs text-gray-text" data-config="address">
+                                10th Floor, Insular life Corporate Center Alabang, Filinvest Corporate City, Muntinlupa City
+                            </span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <i class="fas fa-phone-alt text-primary text-xs"></i>
+                            <a href="tel:+02-8807-7638" class="text-xs text-gray-text hover:text-primary transition-colors" data-config="phone">
+                                +02-8807-7638
+                            </a>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <i class="fas fa-envelope text-primary text-xs"></i>
+                            <a href="mailto:contact@digiscribe.com.ph" class="text-xs text-gray-text hover:text-primary transition-colors" data-config="email">
+                                contact@digiscribe.com.ph
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="mt-12 pt-8 border-t border-gray-200">
+                <p class="text-xs text-center text-gray-text" data-config="copyright">
+                    © 2026 DigiScribe Transcription Corp. All rights reserved.
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="navbar.js"></script>
+    <script src="config.js"></script>
+</body>
+</html>
