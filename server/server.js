@@ -12,6 +12,7 @@ import usersRouter from './routes/users.js';
 import filesRouter from './routes/files.js';
 import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
+import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,8 +30,13 @@ for (const dir of [uploadsDir, chunksDir]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-// CORS for Vite dev server
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'] }));
+// CORS — allow dev + production origins
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,  // set this to your domain, e.g. https://yourdomain.com
+].filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // Accept any image/*, audio/*, video/* MIME type
@@ -81,6 +87,7 @@ app.use('/api/admin', usersRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/transcriptions', transcriptionsRouter);
+app.use('/api/folders', foldersRouter);
 
 // POST /api/upload/chunk - receive a single chunk (auth required)
 app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), (req, res) => {
@@ -100,7 +107,7 @@ app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), (req, res
 // POST /api/upload/complete - assemble chunks into final file (auth required)
 app.post('/api/upload/complete', verifyAuth, async (req, res) => {
   try {
-    const { uploadId, fileName, totalChunks, mimeType, description, serviceCategory } = req.body;
+    const { uploadId, fileName, totalChunks, mimeType, description, serviceCategory, folderId } = req.body;
 
     console.log('[upload/complete] Received fileName:', fileName);
 
@@ -163,6 +170,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
         serviceCategory: serviceCategory || '',
         sourceType: 'file',
         sourceUrl: null,
+        folderId: folderId || null,
         url: `/api/files/${encodeStorageUrl(storagePath)}`,
       });
       fileId = docRef.id;
@@ -184,7 +192,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
 
 // POST /api/upload/url - Upload from URL (auth required)
 app.post('/api/upload/url', verifyAuth, async (req, res) => {
-  const { url, customName, description, serviceCategory } = req.body;
+  const { url, customName, description, serviceCategory, folderId } = req.body;
 
   console.log('[upload/url] Received customName:', customName);
 
@@ -245,6 +253,7 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
         serviceCategory: serviceCategory || '',
         sourceType: 'url',
         sourceUrl: url,
+        folderId: folderId || null,
         url: `/api/files/${encodeStorageUrl(storagePath)}`,
       });
       fileId = docRef.id;
@@ -437,7 +446,21 @@ app.get('/api/files/*path', (req, res) => {
   }
 });
 
+// --- Serve React build (production) ---
+const distPath = path.join(__dirname, '..', 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  // Catch-all: serve index.html for React Router client-side routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// --- Start server (used by cPanel Passenger & local dev) ---
 app.listen(PORT, () => {
-  console.log(`Upload server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Files will be saved to: ${uploadsDir}`);
 });
+
+// Export for Passenger (cPanel Node.js)
+export default app;

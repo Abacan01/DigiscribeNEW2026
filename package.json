@@ -10,7 +10,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "node server/server.js"
+    "server": "node server/server.js",
+    "start": "node server/server.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",

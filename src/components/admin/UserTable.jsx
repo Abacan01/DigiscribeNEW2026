@@ -88,7 +88,6 @@ export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading 
           <thead>
             <tr className="border-t border-b border-gray-100 bg-gray-50/50">
               <th className="text-left px-8 py-3 text-xs font-semibold text-gray-text uppercase tracking-wider">Email</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-text uppercase tracking-wider">Display Name</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-text uppercase tracking-wider">Role</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-text uppercase tracking-wider">Created</th>
               <th className="text-right px-8 py-3 text-xs font-semibold text-gray-text uppercase tracking-wider">Actions</th>
@@ -106,9 +105,6 @@ export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading 
                     </div>
                     <span className="text-sm font-medium text-dark-text truncate max-w-[200px]">{user.email}</span>
                   </div>
-                </td>
-                <td className="px-4 py-4">
-                  <span className="text-sm text-gray-text">{user.displayName || '--'}</span>
                 </td>
                 <td className="px-4 py-4">
                   {user.role === 'admin' ? (
@@ -197,9 +193,7 @@ export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading 
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-dark-text truncate">{user.email}</p>
-                  {user.displayName && (
-                    <p className="text-xs text-gray-text truncate">{user.displayName}</p>
-                  )}
+
                 </div>
               </div>
               {user.role === 'admin' ? (

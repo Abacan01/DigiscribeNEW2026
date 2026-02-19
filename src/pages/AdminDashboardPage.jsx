@@ -1,19 +1,25 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
+import FolderRow from '../components/dashboard/FolderRow';
+import FolderCard from '../components/dashboard/FolderCard';
+import Breadcrumbs from '../components/dashboard/Breadcrumbs';
+import CreateFolderModal from '../components/dashboard/CreateFolderModal';
+import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import CreateUserForm from '../components/admin/CreateUserForm';
 import UserTable from '../components/admin/UserTable';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
+import { useFolders } from '../hooks/useFolders';
+import { useFolderActions } from '../hooks/useFolderActions';
 import { useTranscriptions } from '../hooks/useTranscriptions';
 import { useAdminUsers } from '../hooks/useAdminUsers';
 import { useAuth } from '../contexts/AuthContext';
 
 const TABS = [
   { id: 'files', label: 'Files', icon: 'fa-folder-open' },
-  { id: 'transcriptions', label: 'Transcriptions', icon: 'fa-file-alt' },
   { id: 'users', label: 'Users', icon: 'fa-users-gear' },
 ];
 
@@ -125,8 +131,10 @@ function getFileIconColor(type) {
 
 /* ─────────────────────────── Files Tab ─────────────────────────── */
 
-function FilesTab({ allFiles, filesLoading, filesError }) {
+function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoading, folderActions }) {
   const { getIdToken } = useAuth();
+  const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = folderActions;
+
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
@@ -145,7 +153,16 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
   // Context menu state
   const [contextMenu, setContextMenu] = useState(null);
 
-  // Compute counts
+  // Folder state
+  const [currentFolderId, setCurrentFolderId] = useState(null);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [moveTarget, setMoveTarget] = useState(null);
+  const [renamingFolder, setRenamingFolder] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [dragOverFolder, setDragOverFolder] = useState(null);
+  const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+
+  // Compute counts (across ALL files)
   const counts = useMemo(() => {
     const result = { total: allFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
     for (const file of allFiles) {
@@ -154,9 +171,37 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
     return result;
   }, [allFiles]);
 
+  // Files in current folder (or all files when searching)
+  const currentFolderFiles = useMemo(() => {
+    if (searchQuery.trim()) return allFiles;
+    return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
+  }, [allFiles, currentFolderId, searchQuery]);
+
+  // Subfolders
+  const currentSubfolders = useMemo(() => {
+    if (searchQuery.trim()) return [];
+    return allFolders
+      .filter((f) => (f.parentId || null) === currentFolderId)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [allFolders, currentFolderId, searchQuery]);
+
+  // Item counts per folder
+  const folderItemCounts = useMemo(() => {
+    const c = {};
+    for (const f of allFiles) {
+      const fid = f.folderId || null;
+      if (fid) c[fid] = (c[fid] || 0) + 1;
+    }
+    for (const f of allFolders) {
+      const pid = f.parentId || null;
+      if (pid) c[pid] = (c[pid] || 0) + 1;
+    }
+    return c;
+  }, [allFiles, allFolders]);
+
   // Filter + sort
   const filteredFiles = useMemo(() => {
-    let result = [...allFiles];
+    let result = [...currentFolderFiles];
 
     if (statusFilter) result = result.filter((f) => f.status === statusFilter);
     if (searchQuery.trim()) {
@@ -171,29 +216,19 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
     }
 
     switch (sortBy) {
-      case 'oldest':
-        result.sort((a, b) => new Date(a.uploadedAt || 0) - new Date(b.uploadedAt || 0));
-        break;
-      case 'name-asc':
-        result.sort((a, b) => (a.originalName || '').localeCompare(b.originalName || ''));
-        break;
-      case 'name-desc':
-        result.sort((a, b) => (b.originalName || '').localeCompare(a.originalName || ''));
-        break;
-      case 'size':
-        result.sort((a, b) => (b.size || 0) - (a.size || 0));
-        break;
-      default:
-        result.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0));
-        break;
+      case 'oldest': result.sort((a, b) => new Date(a.uploadedAt || 0) - new Date(b.uploadedAt || 0)); break;
+      case 'name-asc': result.sort((a, b) => (a.originalName || '').localeCompare(b.originalName || '')); break;
+      case 'name-desc': result.sort((a, b) => (b.originalName || '').localeCompare(a.originalName || '')); break;
+      case 'size': result.sort((a, b) => (b.size || 0) - (a.size || 0)); break;
+      default: result.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0)); break;
     }
     return result;
-  }, [allFiles, statusFilter, searchQuery, sortBy]);
+  }, [currentFolderFiles, statusFilter, searchQuery, sortBy]);
 
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, searchQuery, sortBy]);
+  }, [statusFilter, searchQuery, sortBy, currentFolderId]);
 
   // Selection helpers
   const filteredIds = useMemo(() => new Set(filteredFiles.map((f) => f.id)), [filteredFiles]);
@@ -201,11 +236,8 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
   const someSelected = filteredFiles.some((f) => selectedIds.has(f.id));
 
   const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredFiles.map((f) => f.id)));
-    }
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredFiles.map((f) => f.id)));
   };
 
   const toggleSelect = (id) => {
@@ -217,56 +249,49 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
     });
   };
 
-  const handleStatusChange = useCallback(
-    async (fileId, newStatus) => {
-      setStatusLoading(fileId);
-      setMessage(null);
-      try {
-        const token = await getIdToken();
-        const res = await fetch(`/api/files/metadata/${fileId}/status`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ status: newStatus }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update status.');
-        setMessage({ type: 'success', text: 'Status updated.' });
-      } catch (err) {
-        setMessage({ type: 'error', text: err.message });
-      } finally {
-        setStatusLoading(null);
-        setTimeout(() => setMessage(null), 3000);
-      }
-    },
-    [getIdToken]
-  );
+  const handleStatusChange = useCallback(async (fileId, newStatus) => {
+    setStatusLoading(fileId);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/files/metadata/${fileId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update status.');
+      setMessage({ type: 'success', text: 'Status updated.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setStatusLoading(null);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [getIdToken]);
 
-  const handleDeleteFile = useCallback(
-    async (fileId) => {
-      setDeleteLoading(fileId);
-      setMessage(null);
-      try {
-        const token = await getIdToken();
-        const res = await fetch(`/api/files/metadata/${fileId}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete file.');
-        setMessage({ type: 'success', text: 'File deleted.' });
-        setSelectedIds((prev) => { const next = new Set(prev); next.delete(fileId); return next; });
-      } catch (err) {
-        setMessage({ type: 'error', text: err.message });
-      } finally {
-        setDeleteLoading(null);
-        setDeleteConfirm(null);
-        setTimeout(() => setMessage(null), 3000);
-      }
-    },
-    [getIdToken]
-  );
+  const handleDeleteFile = useCallback(async (fileId) => {
+    setDeleteLoading(fileId);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/files/metadata/${fileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete file.');
+      setMessage({ type: 'success', text: 'File deleted.' });
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(fileId); return next; });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setDeleteLoading(null);
+      setDeleteConfirm(null);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [getIdToken]);
 
-  // Bulk download as zip
   const handleBulkDownload = useCallback(async () => {
     const ids = [...selectedIds].filter((id) => filteredIds.has(id));
     if (ids.length === 0) return;
@@ -301,7 +326,6 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
     }
   }, [selectedIds, filteredIds, getIdToken]);
 
-  // Bulk delete
   const handleBulkDelete = useCallback(async () => {
     const ids = [...selectedIds].filter((id) => filteredIds.has(id));
     if (ids.length === 0) return;
@@ -327,7 +351,6 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
     }
   }, [selectedIds, filteredIds, getIdToken]);
 
-  // Copy file URL to clipboard
   const copyFileUrl = useCallback((file) => {
     const url = `${window.location.origin}${file.url}`;
     navigator.clipboard.writeText(url).then(
@@ -336,14 +359,117 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
     );
   }, []);
 
-  // Right-click handler
-  const handleContextMenu = useCallback((e, file) => {
+  // Folder action handlers
+  const handleCreateFolder = useCallback(async (name, parentId) => {
+    await createFolder(name, parentId);
+    setMessage({ type: 'success', text: `Folder "${name}" created.` });
+    setTimeout(() => setMessage(null), 3000);
+  }, [createFolder]);
+
+  const handleRenameFolder = useCallback(async (folderId, newName) => {
+    try {
+      await renameFolder(folderId, newName);
+      setMessage({ type: 'success', text: 'Folder renamed.' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setRenamingFolder(null);
+  }, [renameFolder]);
+
+  const handleDeleteFolder = useCallback(async (folderId) => {
+    try {
+      await deleteFolder(folderId);
+      setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
+      setTimeout(() => setMessage(null), 3000);
+      if (currentFolderId === folderId) {
+        const folder = allFolders.find((f) => f.id === folderId);
+        setCurrentFolderId(folder?.parentId || null);
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setDeleteFolderConfirm(null);
+  }, [deleteFolder, currentFolderId, allFolders]);
+
+  const handleDrop = useCallback(async (e, targetFolderId) => {
+    setDragOverFolder(null);
+    try {
+      const payload = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (payload.type === 'file') {
+        await moveFileToFolder(payload.id, targetFolderId);
+        setMessage({ type: 'success', text: 'File moved.' });
+      } else if (payload.type === 'folder') {
+        if (payload.id === targetFolderId) return;
+        await moveFolder(payload.id, targetFolderId);
+        setMessage({ type: 'success', text: 'Folder moved.' });
+      }
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  }, [moveFileToFolder, moveFolder]);
+
+  const handleMoveConfirm = useCallback(async (targetFolderId) => {
+    if (!moveTarget) return;
+    try {
+      if (moveTarget.type === 'file') {
+        await moveFileToFolder(moveTarget.item.id, targetFolderId);
+        setMessage({ type: 'success', text: 'File moved.' });
+      } else {
+        await moveFolder(moveTarget.item.id, targetFolderId);
+        setMessage({ type: 'success', text: 'Folder moved.' });
+      }
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setMoveTarget(null);
+  }, [moveTarget, moveFileToFolder, moveFolder]);
+
+  const getDescendantIds = useCallback((folderId) => {
+    const ids = new Set([folderId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const f of allFolders) {
+        if (f.parentId && ids.has(f.parentId) && !ids.has(f.id)) {
+          ids.add(f.id);
+          changed = true;
+        }
+      }
+    }
+    return [...ids];
+  }, [allFolders]);
+
+  // Context menu handlers
+  const handleFileContextMenu = useCallback((e, file) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, file });
+    setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'file' });
+  }, []);
+
+  const handleFolderContextMenu = useCallback((e, folder) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, folder, type: 'folder' });
   }, []);
 
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
+
+    if (contextMenu.type === 'folder') {
+      const folder = contextMenu.folder;
+      return [
+        { icon: 'fa-folder-open', label: 'Open', onClick: () => setCurrentFolderId(folder.id) },
+        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
+          setRenamingFolder(folder.id);
+          setRenameValue(folder.name);
+        }},
+        { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
+        { divider: true },
+        { icon: 'fa-trash-alt', label: 'Delete Folder', danger: true, onClick: () => setDeleteFolderConfirm(folder.id) },
+      ];
+    }
+
     const file = contextMenu.file;
     return [
       { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
@@ -357,12 +483,11 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
       }},
       { icon: 'fa-copy', label: 'Copy URL', shortcut: 'Ctrl+C', onClick: () => copyFileUrl(file) },
       { divider: true },
+      { icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) },
       { icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) },
       { divider: true },
       { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) },
-      { icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => {
-        setDeleteConfirm(file.id);
-      }},
+      { icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => { setDeleteConfirm(file.id); }},
     ];
   }, [contextMenu, selectedIds, copyFileUrl]);
 
@@ -372,7 +497,10 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
   };
 
   const hasActiveFilters = statusFilter || searchQuery;
+  const isSearching = searchQuery.trim().length > 0;
   const selectedCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
+  const totalItems = currentSubfolders.length + filteredFiles.length;
+  const isLoading = filesLoading || foldersLoading;
 
   return (
     <div className="space-y-4">
@@ -417,23 +545,11 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
 
       {/* Messages */}
       {message && (
-        <div
-          className={`p-3 rounded-xl border flex items-center gap-3 ${
-            message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-          }`}
-        >
-          <i
-            className={`fas ${
-              message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'
-            }`}
-          ></i>
-          <p
-            className={`text-sm font-medium ${
-              message.type === 'success' ? 'text-green-700' : 'text-red-700'
-            }`}
-          >
-            {message.text}
-          </p>
+        <div className={`p-3 rounded-xl border flex items-center gap-3 ${
+          message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
+        }`}>
+          <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
+          <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{message.text}</p>
         </div>
       )}
       {filesError && (
@@ -443,10 +559,16 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
         </div>
       )}
 
+      {/* Breadcrumbs */}
+      <Breadcrumbs
+        folders={allFolders}
+        currentFolderId={currentFolderId}
+        onNavigate={setCurrentFolderId}
+      />
+
       {/* Filter Bar */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
         <div className="flex flex-col lg:flex-row gap-3">
-          {/* Search */}
           <div className="relative flex-1">
             <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
             <input
@@ -457,16 +579,12 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 <i className="fas fa-times text-xs"></i>
               </button>
             )}
           </div>
 
-          {/* Sort */}
           <div className="relative">
             <select
               value={sortBy}
@@ -474,15 +592,20 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
               className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[150px]"
             >
               {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
             <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
           </div>
 
-          {/* Clear */}
+          <button
+            onClick={() => setShowCreateFolder(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors whitespace-nowrap border border-indigo-200"
+          >
+            <i className="fas fa-folder-plus text-xs"></i>
+            New Folder
+          </button>
+
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
@@ -494,29 +617,23 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
           )}
         </div>
 
-        {/* Active filter pills */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
             <span className="text-xs text-gray-400">Showing:</span>
             {statusFilter && (
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${STATUS_CONFIG[statusFilter].bg} ${STATUS_CONFIG[statusFilter].text}`}
-              >
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${STATUS_CONFIG[statusFilter].bg} ${STATUS_CONFIG[statusFilter].text}`}>
                 {STATUS_CONFIG[statusFilter].label}
-                <button onClick={() => setStatusFilter('')} className="hover:opacity-70">
-                  <i className="fas fa-times text-[8px]"></i>
-                </button>
+                <button onClick={() => setStatusFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
               </span>
             )}
             {searchQuery && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
                 &quot;{searchQuery}&quot;
-                <button onClick={() => setSearchQuery('')} className="hover:opacity-70">
-                  <i className="fas fa-times text-[8px]"></i>
-                </button>
+                <button onClick={() => setSearchQuery('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
               </span>
             )}
             <span className="text-xs text-gray-400 ml-1">
+              {isSearching ? 'Searching across all folders \u00b7 ' : ''}
               {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -581,34 +698,55 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
         </div>
       )}
 
+      {/* Delete folder confirmation */}
+      {deleteFolderConfirm && (
+        <div className="p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
+          <i className="fas fa-exclamation-triangle text-red-500"></i>
+          <span className="text-sm font-medium text-red-700">
+            Delete this folder? Contents will be moved to the parent folder.
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => handleDeleteFolder(deleteFolderConfirm)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setDeleteFolderConfirm(null)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
-      {filesLoading ? (
+      {isLoading ? (
         <div className="text-center py-24">
           <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
           <p className="text-sm text-gray-text">Loading files...</p>
         </div>
-      ) : filteredFiles.length === 0 ? (
+      ) : totalItems === 0 && !hasActiveFilters ? (
         <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i className={`fas ${hasActiveFilters ? 'fa-search' : 'fa-folder-open'} text-primary text-xl`}></i>
+            <i className={`fas ${currentFolderId ? 'fa-folder-open' : 'fa-folder-open'} text-primary text-xl`}></i>
           </div>
           <p className="text-sm font-medium text-dark-text">
-            {hasActiveFilters ? 'No files match your filters' : 'No files uploaded yet'}
+            {currentFolderId ? 'This folder is empty' : 'No files uploaded yet'}
           </p>
           <p className="text-xs text-gray-text mt-1 mb-5">
-            {hasActiveFilters
-              ? 'Try adjusting your search or filters.'
-              : 'No files uploaded yet.'}
+            {currentFolderId ? 'Drag files here or upload new ones.' : 'No files uploaded yet.'}
           </p>
-          {hasActiveFilters ? (
+          <div className="flex items-center gap-3 justify-center">
             <button
-              onClick={clearFilters}
-              className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-dark transition-colors"
+              onClick={() => setShowCreateFolder(true)}
+              className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
             >
-              <i className="fas fa-times text-xs"></i>
-              Clear all filters
+              <i className="fas fa-folder-plus text-xs"></i>
+              Create Folder
             </button>
-          ) : (
             <Link
               to="/upload"
               className="inline-flex items-center gap-2 btn-gradient text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all"
@@ -616,7 +754,22 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
               <i className="fas fa-plus text-xs"></i>
               Upload Files
             </Link>
-          )}
+          </div>
+        </div>
+      ) : filteredFiles.length === 0 && currentSubfolders.length === 0 && hasActiveFilters ? (
+        <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i className="fas fa-search text-primary text-xl"></i>
+          </div>
+          <p className="text-sm font-medium text-dark-text">No files match your filters</p>
+          <p className="text-xs text-gray-text mt-1 mb-5">Try adjusting your search or filters.</p>
+          <button
+            onClick={clearFilters}
+            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-dark transition-colors"
+          >
+            <i className="fas fa-times text-xs"></i>
+            Clear all filters
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
@@ -634,27 +787,68 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                       className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                     />
                   </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    File
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Uploaded By
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-28">
-                    Actions
-                  </th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">File</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Type</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Uploaded By</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Date</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-28">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
+                {/* Folder rows first */}
+                {currentSubfolders.map((folder) => {
+                  if (renamingFolder === folder.id) {
+                    return (
+                      <tr key={folder.id} className="bg-primary/[0.03]">
+                        <td colSpan={7} className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500">
+                              <i className="fas fa-folder text-xs"></i>
+                            </div>
+                            <form
+                              className="flex-1 flex items-center gap-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                if (renameValue.trim()) handleRenameFolder(folder.id, renameValue.trim());
+                              }}
+                            >
+                              <input
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                autoFocus
+                                className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                onBlur={() => setRenamingFolder(null)}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFolder(null); }}
+                              />
+                              <button type="submit" className="text-primary hover:text-primary-dark">
+                                <i className="fas fa-check text-sm"></i>
+                              </button>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <FolderRow
+                      key={folder.id}
+                      folder={folder}
+                      onOpen={(id) => setCurrentFolderId(id)}
+                      onContextMenu={handleFolderContextMenu}
+                      isSelected={false}
+                      onSelect={() => {}}
+                      isDragOver={dragOverFolder === folder.id}
+                      onDragOver={setDragOverFolder}
+                      onDragLeave={() => setDragOverFolder(null)}
+                      onDrop={handleDrop}
+                      itemCount={folderItemCounts[folder.id] || 0}
+                    />
+                  );
+                })}
+
+                {/* File rows */}
                 {filteredFiles.map((file) => {
                   const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                   const isSelected = selectedIds.has(file.id);
@@ -662,7 +856,12 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                     <tr
                       key={file.id}
                       className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
-                      onContextMenu={(e) => handleContextMenu(e, file)}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onContextMenu={(e) => handleFileContextMenu(e, file)}
                     >
                       <td className="text-center px-3 py-3.5">
                         <input
@@ -677,9 +876,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                           <button
                             type="button"
                             onClick={() => setPreviewFile(file)}
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(
-                              file.type
-                            )} hover:scale-105 transition-transform cursor-pointer`}
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} hover:scale-105 transition-transform cursor-pointer`}
                             title="Preview file"
                           >
                             <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
@@ -693,10 +890,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                               {file.originalName}
                             </span>
                             {file.description && (
-                              <p
-                                className="text-[10px] text-gray-400 truncate max-w-[200px] mt-0.5"
-                                title={file.description}
-                              >
+                              <p className="text-[10px] text-gray-400 truncate max-w-[200px] mt-0.5" title={file.description}>
                                 {file.description}
                               </p>
                             )}
@@ -718,9 +912,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                             className={`appearance-none px-2.5 py-1 pr-7 rounded-md border text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${cfg.bg} ${cfg.text} ${cfg.border}`}
                           >
                             {STATUS_OPTIONS.map((s) => (
-                              <option key={s} value={s}>
-                                {STATUS_CONFIG[s].label}
-                              </option>
+                              <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
                             ))}
                           </select>
                         )}
@@ -785,6 +977,23 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
 
           {/* Mobile Cards */}
           <div className="lg:hidden p-4 space-y-3">
+            {/* Mobile folder cards */}
+            {currentSubfolders.map((folder) => (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                onOpen={(id) => setCurrentFolderId(id)}
+                onContextMenu={handleFolderContextMenu}
+                isDragOver={dragOverFolder === folder.id}
+                onDragOver={setDragOverFolder}
+                onDragLeave={() => setDragOverFolder(null)}
+                onDrop={handleDrop}
+                itemCount={folderItemCounts[folder.id] || 0}
+                showOwner
+              />
+            ))}
+
+            {/* Mobile file cards */}
             {filteredFiles.map((file) => {
               const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
               const isSelected = selectedIds.has(file.id);
@@ -792,7 +1001,12 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                 <div
                   key={file.id}
                   className={`p-4 rounded-xl border transition-colors ${isSelected ? 'border-primary/30 bg-primary/[0.02]' : 'border-gray-100'}`}
-                  onContextMenu={(e) => handleContextMenu(e, file)}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  onContextMenu={(e) => handleFileContextMenu(e, file)}
                 >
                   <div className="flex items-start gap-3 mb-3">
                     <input
@@ -804,9 +1018,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                     <button
                       type="button"
                       onClick={() => setPreviewFile(file)}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(
-                        file.type
-                      )} cursor-pointer hover:scale-105 transition-transform`}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} cursor-pointer hover:scale-105 transition-transform`}
                     >
                       <i className={`fas ${getFileIcon(file.type)} text-sm`}></i>
                     </button>
@@ -816,10 +1028,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                         <p className="text-[11px] text-gray-400 truncate mt-0.5">{file.description}</p>
                       )}
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400 mt-1.5">
-                        <span>
-                          <i className="fas fa-user mr-1 text-[9px]"></i>
-                          {file.uploadedByEmail || '--'}
-                        </span>
+                        <span><i className="fas fa-user mr-1 text-[9px]"></i>{file.uploadedByEmail || '--'}</span>
                         <span>{formatSize(file.size)}</span>
                         <span>{formatRelativeDate(file.uploadedAt)}</span>
                       </div>
@@ -845,10 +1054,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                           {deleteLoading === file.id ? (
                             <i className="fas fa-spinner fa-spin text-[10px]"></i>
                           ) : (
-                            <>
-                              <i className="fas fa-check text-[10px]"></i>
-                              Confirm
-                            </>
+                            <><i className="fas fa-check text-[10px]"></i>Confirm</>
                           )}
                         </button>
                         <button
@@ -878,9 +1084,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
                         className={`appearance-none px-2.5 py-1.5 pr-7 rounded-md border text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ml-auto ${cfg.bg} ${cfg.text} ${cfg.border}`}
                       >
                         {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
-                            {STATUS_CONFIG[s].label}
-                          </option>
+                          <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
                         ))}
                       </select>
                     )}
@@ -896,12 +1100,7 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
               onClick={toggleSelectAll}
               className="w-full py-2.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-text hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
             >
-              <input
-                type="checkbox"
-                checked={allSelected}
-                readOnly
-                className="w-3.5 h-3.5 rounded border-gray-300 text-primary pointer-events-none"
-              />
+              <input type="checkbox" checked={allSelected} readOnly className="w-3.5 h-3.5 rounded border-gray-300 text-primary pointer-events-none" />
               {allSelected ? 'Deselect All' : 'Select All'}
             </button>
           </div>
@@ -923,6 +1122,26 @@ function FilesTab({ allFiles, filesLoading, filesError }) {
 
       {/* Properties Modal */}
       {propertiesFile && <FilePropertiesModal file={propertiesFile} onClose={() => setPropertiesFile(null)} />}
+
+      {/* Create Folder Modal */}
+      <CreateFolderModal
+        isOpen={showCreateFolder}
+        onClose={() => setShowCreateFolder(false)}
+        onCreateFolder={handleCreateFolder}
+        parentFolderId={currentFolderId}
+      />
+
+      {/* Move Modal */}
+      {moveTarget && (
+        <MoveFolderModal
+          isOpen={true}
+          onClose={() => setMoveTarget(null)}
+          onSelect={handleMoveConfirm}
+          folders={allFolders}
+          excludeIds={moveTarget.type === 'folder' ? getDescendantIds(moveTarget.item.id) : []}
+          title={moveTarget.type === 'file' ? `Move "${moveTarget.item.originalName}"` : `Move "${moveTarget.item.name}"`}
+        />
+      )}
     </div>
   );
 }
@@ -979,10 +1198,8 @@ function TranscriptionsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Filter Bar */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
           <div className="relative flex-1">
             <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
             <input
@@ -993,16 +1210,11 @@ function TranscriptionsTab() {
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 <i className="fas fa-times text-xs"></i>
               </button>
             )}
           </div>
-
-          {/* Refresh */}
           <button
             onClick={() => fetchTranscriptions({})}
             className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-gray-text hover:text-primary hover:bg-primary/5 rounded-lg transition-colors whitespace-nowrap"
@@ -1011,7 +1223,6 @@ function TranscriptionsTab() {
             Refresh
           </button>
         </div>
-
         {searchQuery && (
           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
             <span className="text-xs text-gray-400">
@@ -1021,16 +1232,13 @@ function TranscriptionsTab() {
         )}
       </div>
 
-      {/* Transcriptions List */}
       {transcriptions.length === 0 ? (
         <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <i className="fas fa-file-alt text-primary text-xl"></i>
           </div>
           <p className="text-sm font-medium text-dark-text">No transcriptions yet</p>
-          <p className="text-xs text-gray-text mt-1 mb-5">
-            Transcriptions for uploaded files will appear here.
-          </p>
+          <p className="text-xs text-gray-text mt-1 mb-5">Transcriptions for uploaded files will appear here.</p>
         </div>
       ) : filteredTranscriptions.length === 0 ? (
         <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
@@ -1039,35 +1247,21 @@ function TranscriptionsTab() {
           </div>
           <p className="text-sm font-medium text-dark-text">No transcriptions match your search</p>
           <p className="text-xs text-gray-text mt-1 mb-4">Try adjusting your search query.</p>
-          <button
-            onClick={() => setSearchQuery('')}
-            className="text-sm font-medium text-primary hover:text-primary-dark transition-colors"
-          >
+          <button onClick={() => setSearchQuery('')} className="text-sm font-medium text-primary hover:text-primary-dark transition-colors">
             Clear search
           </button>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
-          {/* Desktop Table */}
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    File Name
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Transcription Title
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">
-                    Created By
-                  </th>
-                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-24">
-                    Actions
-                  </th>
+                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">File Name</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Transcription Title</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Created</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Created By</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-24">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -1078,18 +1272,13 @@ function TranscriptionsTab() {
                         <div className="w-8 h-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
                           <i className="fas fa-file-audio text-xs"></i>
                         </div>
-                        <span
-                          className="text-sm font-medium text-dark-text truncate max-w-[200px]"
-                          title={t.fileName || t.fileId}
-                        >
+                        <span className="text-sm font-medium text-dark-text truncate max-w-[200px]" title={t.fileName || t.fileId}>
                           {t.fileName || t.fileId || '--'}
                         </span>
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
-                      <span className="text-sm text-dark-text truncate block max-w-[220px]" title={t.title}>
-                        {t.title || 'Untitled'}
-                      </span>
+                      <span className="text-sm text-dark-text truncate block max-w-[220px]" title={t.title}>{t.title || 'Untitled'}</span>
                     </td>
                     <td className="px-4 py-3.5">
                       <span className="text-sm text-gray-text">{formatDate(t.createdAt)}</span>
@@ -1112,7 +1301,6 @@ function TranscriptionsTab() {
             </table>
           </div>
 
-          {/* Mobile Cards */}
           <div className="lg:hidden p-4 space-y-3">
             {filteredTranscriptions.map((t) => (
               <Link
@@ -1125,21 +1313,11 @@ function TranscriptionsTab() {
                     <i className="fas fa-file-audio text-sm"></i>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-dark-text truncate">
-                      {t.title || 'Untitled'}
-                    </p>
-                    <p className="text-[11px] text-gray-400 truncate mt-0.5">
-                      {t.fileName || t.fileId || '--'}
-                    </p>
+                    <p className="text-sm font-medium text-dark-text truncate">{t.title || 'Untitled'}</p>
+                    <p className="text-[11px] text-gray-400 truncate mt-0.5">{t.fileName || t.fileId || '--'}</p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400 mt-1.5">
-                      <span>
-                        <i className="fas fa-user mr-1 text-[9px]"></i>
-                        {t.createdByEmail || '--'}
-                      </span>
-                      <span>
-                        <i className="fas fa-calendar mr-1 text-[9px]"></i>
-                        {formatRelativeDate(t.createdAt)}
-                      </span>
+                      <span><i className="fas fa-user mr-1 text-[9px]"></i>{t.createdByEmail || '--'}</span>
+                      <span><i className="fas fa-calendar mr-1 text-[9px]"></i>{formatRelativeDate(t.createdAt)}</span>
                     </div>
                   </div>
                   <i className="fas fa-chevron-right text-gray-300 text-xs mt-1"></i>
@@ -1161,13 +1339,14 @@ export default function AdminDashboardPage() {
   const [userMessage, setUserMessage] = useState(null);
 
   const { files: allFiles, loading: filesLoading, error: filesError } = useFirestoreFiles();
+  const { folders: allFolders, loading: foldersLoading } = useFolders();
+  const folderActions = useFolderActions();
   const { users, loading: usersLoading, error: usersError, createUser, deleteUser, toggleAdmin } = useAdminUsers();
 
   useEffect(() => {
     document.title = 'Admin Dashboard - DigiScribe';
   }, []);
 
-  // User management handlers
   useEffect(() => {
     if (userMessage) {
       const timer = setTimeout(() => setUserMessage(null), 5000);
@@ -1220,9 +1399,7 @@ export default function AdminDashboardPage() {
               Admin Dashboard
             </h1>
             <div className="flex items-center gap-3 mt-1">
-              <p className="text-sm text-gray-text">
-                {user?.email || 'Admin'}
-              </p>
+              <p className="text-sm text-gray-text">{user?.email || 'Admin'}</p>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
                 <i className="fas fa-shield-alt text-[8px]"></i>
                 Admin
@@ -1231,7 +1408,6 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3 self-start sm:self-auto">
-            {/* Tab Navigation */}
             <div className="inline-flex bg-white rounded-xl shadow-sm border border-gray-100 p-1">
               {TABS.map((tab) => (
                 <button
@@ -1249,7 +1425,6 @@ export default function AdminDashboardPage() {
               ))}
             </div>
 
-            {/* Upload button */}
             <Link
               to="/upload"
               className="btn-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all inline-flex items-center gap-2"
@@ -1268,9 +1443,15 @@ export default function AdminDashboardPage() {
       <div className="min-h-screen bg-[#f8fafc]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {activeTab === 'files' && (
-            <FilesTab allFiles={allFiles} filesLoading={filesLoading} filesError={filesError} />
+            <FilesTab
+              allFiles={allFiles}
+              allFolders={allFolders}
+              filesLoading={filesLoading}
+              filesError={filesError}
+              foldersLoading={foldersLoading}
+              folderActions={folderActions}
+            />
           )}
-          {activeTab === 'transcriptions' && <TranscriptionsTab />}
           {activeTab === 'users' && (
             <div className="space-y-6">
               {usersError && (

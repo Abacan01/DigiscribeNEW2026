@@ -3,7 +3,6 @@ import { useState } from 'react';
 export default function CreateUserForm({ onCreateUser, loading }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [admin, setAdmin] = useState(false);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -32,10 +31,9 @@ export default function CreateUserForm({ onCreateUser, loading }) {
 
     setSubmitting(true);
     try {
-      await onCreateUser({ email: email.trim(), password, displayName: displayName.trim(), admin });
+      await onCreateUser({ email: email.trim(), password, admin });
       setEmail('');
       setPassword('');
-      setDisplayName('');
       setAdmin(false);
       setErrors({});
       setExpanded(false);
@@ -83,7 +81,7 @@ export default function CreateUserForm({ onCreateUser, loading }) {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="p-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Email */}
           <div>
             <label htmlFor="create-email" className="block text-[11px] font-medium text-gray-text uppercase tracking-wide mb-1.5">
@@ -126,21 +124,6 @@ export default function CreateUserForm({ onCreateUser, loading }) {
             )}
           </div>
 
-          {/* Display Name */}
-          <div>
-            <label htmlFor="create-displayname" className="block text-[11px] font-medium text-gray-text uppercase tracking-wide mb-1.5">
-              Display Name
-            </label>
-            <input
-              id="create-displayname"
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-dark-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
-              placeholder="John Doe"
-              disabled={isDisabled}
-            />
-          </div>
 
           {/* Role + Submit */}
           <div className="flex items-end gap-3">

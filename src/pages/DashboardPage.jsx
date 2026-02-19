@@ -2,10 +2,16 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import FileCard from '../components/dashboard/FileCard';
+import FolderCard from '../components/dashboard/FolderCard';
+import Breadcrumbs from '../components/dashboard/Breadcrumbs';
+import CreateFolderModal from '../components/dashboard/CreateFolderModal';
+import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
+import { useFolders } from '../hooks/useFolders';
+import { useFolderActions } from '../hooks/useFolderActions';
 import { useTranscriptions } from '../hooks/useTranscriptions';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -42,7 +48,18 @@ export default function DashboardPage() {
   // Context menu state
   const [contextMenu, setContextMenu] = useState(null);
 
+  // Folder state
+  const [currentFolderId, setCurrentFolderId] = useState(null);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [moveTarget, setMoveTarget] = useState(null); // { type: 'file'|'folder', item }
+  const [renamingFolder, setRenamingFolder] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [dragOverFolder, setDragOverFolder] = useState(null);
+  const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+
   const { files: allFiles, loading, error } = useFirestoreFiles();
+  const { folders: allFolders, loading: foldersLoading } = useFolders();
+  const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = useFolderActions();
   const { transcriptions, loading: transLoading, error: transError, fetchTranscriptions } = useTranscriptions();
 
   useEffect(() => {
@@ -55,7 +72,7 @@ export default function DashboardPage() {
     }
   }, [activeTab, fetchTranscriptions]);
 
-  // Compute counts
+  // Compute counts (across ALL files, not just current folder)
   const counts = useMemo(() => {
     const result = { total: allFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
     for (const file of allFiles) {
@@ -73,9 +90,37 @@ export default function DashboardPage() {
     return Array.from(cats).sort();
   }, [allFiles]);
 
-  // Filter + sort
+  // Files in current folder (or all files when searching)
+  const currentFolderFiles = useMemo(() => {
+    if (searchQuery.trim()) return allFiles; // flatten when searching
+    return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
+  }, [allFiles, currentFolderId, searchQuery]);
+
+  // Subfolders of current folder
+  const currentSubfolders = useMemo(() => {
+    if (searchQuery.trim()) return []; // hide folders when searching
+    return allFolders
+      .filter((f) => (f.parentId || null) === currentFolderId)
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [allFolders, currentFolderId, searchQuery]);
+
+  // Count items per folder (files + subfolders)
+  const folderItemCounts = useMemo(() => {
+    const counts = {};
+    for (const f of allFiles) {
+      const fid = f.folderId || null;
+      if (fid) counts[fid] = (counts[fid] || 0) + 1;
+    }
+    for (const f of allFolders) {
+      const pid = f.parentId || null;
+      if (pid) counts[pid] = (counts[pid] || 0) + 1;
+    }
+    return counts;
+  }, [allFiles, allFolders]);
+
+  // Filter + sort (applies on current folder files)
   const filteredFiles = useMemo(() => {
-    let result = [...allFiles];
+    let result = [...currentFolderFiles];
 
     if (statusFilter) result = result.filter((f) => f.status === statusFilter);
     if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
@@ -97,7 +142,7 @@ export default function DashboardPage() {
       default: result.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0)); break;
     }
     return result;
-  }, [allFiles, statusFilter, serviceFilter, searchQuery, sortBy]);
+  }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy]);
 
   const handleStatusChange = useCallback(async (fileId, newStatus) => {
     setStatusError(null);
@@ -119,7 +164,7 @@ export default function DashboardPage() {
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, serviceFilter, searchQuery, sortBy]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId]);
 
   // Selection helpers
   const filteredIds = useMemo(() => new Set(filteredFiles.map((f) => f.id)), [filteredFiles]);
@@ -188,14 +233,122 @@ export default function DashboardPage() {
     );
   }, []);
 
-  // Right-click handler
-  const handleContextMenu = useCallback((e, file) => {
+  // Folder actions
+  const handleCreateFolder = useCallback(async (name, parentId) => {
+    await createFolder(name, parentId);
+    setMessage({ type: 'success', text: `Folder "${name}" created.` });
+    setTimeout(() => setMessage(null), 3000);
+  }, [createFolder]);
+
+  const handleRenameFolder = useCallback(async (folderId, newName) => {
+    try {
+      await renameFolder(folderId, newName);
+      setMessage({ type: 'success', text: 'Folder renamed.' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setRenamingFolder(null);
+  }, [renameFolder]);
+
+  const handleDeleteFolder = useCallback(async (folderId) => {
+    try {
+      await deleteFolder(folderId);
+      setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
+      setTimeout(() => setMessage(null), 3000);
+      // If we're inside the deleted folder, navigate to parent
+      if (currentFolderId === folderId) {
+        const folder = allFolders.find((f) => f.id === folderId);
+        setCurrentFolderId(folder?.parentId || null);
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setDeleteFolderConfirm(null);
+  }, [deleteFolder, currentFolderId, allFolders]);
+
+  // Drag and drop handler
+  const handleDrop = useCallback(async (e, targetFolderId) => {
+    setDragOverFolder(null);
+    try {
+      const payload = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (payload.type === 'file') {
+        await moveFileToFolder(payload.id, targetFolderId);
+        setMessage({ type: 'success', text: 'File moved.' });
+      } else if (payload.type === 'folder') {
+        if (payload.id === targetFolderId) return;
+        await moveFolder(payload.id, targetFolderId);
+        setMessage({ type: 'success', text: 'Folder moved.' });
+      }
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  }, [moveFileToFolder, moveFolder]);
+
+  // Move modal handler
+  const handleMoveConfirm = useCallback(async (targetFolderId) => {
+    if (!moveTarget) return;
+    try {
+      if (moveTarget.type === 'file') {
+        await moveFileToFolder(moveTarget.item.id, targetFolderId);
+        setMessage({ type: 'success', text: 'File moved.' });
+      } else {
+        await moveFolder(moveTarget.item.id, targetFolderId);
+        setMessage({ type: 'success', text: 'Folder moved.' });
+      }
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setMoveTarget(null);
+  }, [moveTarget, moveFileToFolder, moveFolder]);
+
+  // Get descendant folder IDs (for excluding from move targets)
+  const getDescendantIds = useCallback((folderId) => {
+    const ids = new Set([folderId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const f of allFolders) {
+        if (f.parentId && ids.has(f.parentId) && !ids.has(f.id)) {
+          ids.add(f.id);
+          changed = true;
+        }
+      }
+    }
+    return [...ids];
+  }, [allFolders]);
+
+  // Right-click handler for files
+  const handleFileContextMenu = useCallback((e, file) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, file });
+    setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'file' });
+  }, []);
+
+  // Right-click handler for folders
+  const handleFolderContextMenu = useCallback((e, folder) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, folder, type: 'folder' });
   }, []);
 
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
+
+    if (contextMenu.type === 'folder') {
+      const folder = contextMenu.folder;
+      return [
+        { icon: 'fa-folder-open', label: 'Open', onClick: () => setCurrentFolderId(folder.id) },
+        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
+          setRenamingFolder(folder.id);
+          setRenameValue(folder.name);
+        }},
+        { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
+        { divider: true },
+        { icon: 'fa-trash-alt', label: 'Delete Folder', danger: true, onClick: () => setDeleteFolderConfirm(folder.id) },
+      ];
+    }
+
     const file = contextMenu.file;
     return [
       { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
@@ -209,6 +362,7 @@ export default function DashboardPage() {
       }},
       { icon: 'fa-copy', label: 'Copy URL', shortcut: 'Ctrl+C', onClick: () => copyFileUrl(file) },
       { divider: true },
+      { icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) },
       { icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) },
       { divider: true },
       { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) },
@@ -222,6 +376,8 @@ export default function DashboardPage() {
   };
 
   const hasActiveFilters = statusFilter || serviceFilter || searchQuery;
+  const isSearching = searchQuery.trim().length > 0;
+  const totalItems = currentSubfolders.length + filteredFiles.length;
 
   const heroContent = (
     <div className="relative z-10 py-10 pb-6">
@@ -235,39 +391,22 @@ export default function DashboardPage() {
               Welcome back, {user?.email?.split('@')[0] || 'User'}
             </p>
           </div>
-          <Link
-            to="/upload"
-            className="btn-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 inline-flex items-center gap-2 self-start sm:self-auto"
-          >
-            <i className="fas fa-plus text-xs"></i>
-            New Upload
-          </Link>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 mt-6 bg-gray-100/80 rounded-lg p-1 w-fit">
-          <button
-            onClick={() => setActiveTab('files')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              activeTab === 'files'
-                ? 'bg-white text-dark-text shadow-sm'
-                : 'text-gray-text hover:text-dark-text'
-            }`}
-          >
-            <i className="fas fa-folder-open text-xs mr-2"></i>
-            My Files
-          </button>
-          <button
-            onClick={() => setActiveTab('transcriptions')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              activeTab === 'transcriptions'
-                ? 'bg-white text-dark-text shadow-sm'
-                : 'text-gray-text hover:text-dark-text'
-            }`}
-          >
-            <i className="fas fa-file-lines text-xs mr-2"></i>
-            Transcriptions
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => setShowCreateFolder(true)}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-dark-text hover:bg-gray-50 transition-all duration-300 inline-flex items-center gap-2"
+            >
+              <i className="fas fa-folder-plus text-xs text-indigo-500"></i>
+              New Folder
+            </button>
+            <Link
+              to="/upload"
+              className="btn-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 inline-flex items-center gap-2"
+            >
+              <i className="fas fa-plus text-xs"></i>
+              New Upload
+            </Link>
+          </div>
         </div>
       </div>
     </div>
@@ -282,7 +421,6 @@ export default function DashboardPage() {
             <>
               {/* Stats Row */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-                {/* Total */}
                 <button
                   onClick={() => { setStatusFilter(''); }}
                   className={`bg-white rounded-xl border p-4 text-left transition-all hover:shadow-md ${
@@ -299,7 +437,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </button>
-                {/* Status cards */}
                 {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
                   <button
                     key={key}
@@ -328,22 +465,13 @@ export default function DashboardPage() {
                     message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
                   }`}
                 >
-                  <i
-                    className={`fas ${
-                      message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'
-                    }`}
-                  ></i>
-                  <p
-                    className={`text-sm font-medium ${
-                      message.type === 'success' ? 'text-green-700' : 'text-red-700'
-                    }`}
-                  >
+                  <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
+                  <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
                     {message.text}
                   </p>
                 </div>
               )}
 
-              {/* Alerts */}
               {statusError && (
                 <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
                   <i className="fas fa-exclamation-circle text-red-500"></i>
@@ -357,10 +485,16 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* Breadcrumbs */}
+              <Breadcrumbs
+                folders={allFolders}
+                currentFolderId={currentFolderId}
+                onNavigate={setCurrentFolderId}
+              />
+
               {/* Filter Bar */}
               <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 shadow-sm">
                 <div className="flex flex-col lg:flex-row gap-3">
-                  {/* Search */}
                   <div className="relative flex-1">
                     <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
                     <input
@@ -377,7 +511,6 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  {/* Service Category Filter */}
                   {serviceCategories.length > 0 && (
                     <div className="relative">
                       <select
@@ -394,7 +527,6 @@ export default function DashboardPage() {
                     </div>
                   )}
 
-                  {/* Sort */}
                   <div className="relative">
                     <select
                       value={sortBy}
@@ -408,7 +540,6 @@ export default function DashboardPage() {
                     <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
                   </div>
 
-                  {/* Clear Filters */}
                   {hasActiveFilters && (
                     <button
                       onClick={clearFilters}
@@ -420,7 +551,6 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Active filter pills */}
                 {hasActiveFilters && (
                   <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
                     <span className="text-xs text-gray-400">Showing:</span>
@@ -442,9 +572,16 @@ export default function DashboardPage() {
                         <button onClick={() => setSearchQuery('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 ml-1">
-                      {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
-                    </span>
+                    {isSearching && (
+                      <span className="text-xs text-gray-400 ml-1">
+                        Searching across all folders &middot; {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {!isSearching && (
+                      <span className="text-xs text-gray-400 ml-1">
+                        {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -497,37 +634,63 @@ export default function DashboardPage() {
                     {allSelected ? 'Deselect All' : 'Select All'}
                   </button>
                   <span className="text-xs text-gray-400">
+                    {currentSubfolders.length > 0 && `${currentSubfolders.length} folder${currentSubfolders.length !== 1 ? 's' : ''}, `}
                     {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               )}
 
+              {/* Delete folder confirmation */}
+              {deleteFolderConfirm && (
+                <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
+                  <i className="fas fa-exclamation-triangle text-red-500"></i>
+                  <span className="text-sm font-medium text-red-700">
+                    Delete this folder? Contents will be moved to the parent folder.
+                  </span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      onClick={() => handleDeleteFolder(deleteFolderConfirm)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setDeleteFolderConfirm(null)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Content */}
-              {loading ? (
+              {loading || foldersLoading ? (
                 <div className="text-center py-24">
                   <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
                   <p className="text-sm text-gray-text">Loading your files...</p>
                 </div>
-              ) : filteredFiles.length === 0 ? (
+              ) : totalItems === 0 && !hasActiveFilters ? (
                 <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i className={`fas ${hasActiveFilters ? 'fa-search' : 'fa-cloud-upload-alt'} text-primary text-xl`}></i>
+                    <i className={`fas ${currentFolderId ? 'fa-folder-open' : 'fa-cloud-upload-alt'} text-primary text-xl`}></i>
                   </div>
                   <p className="text-sm font-medium text-dark-text">
-                    {hasActiveFilters ? 'No files match your filters' : 'No files uploaded yet'}
+                    {currentFolderId ? 'This folder is empty' : 'No files uploaded yet'}
                   </p>
                   <p className="text-xs text-gray-text mt-1 mb-5">
-                    {hasActiveFilters ? 'Try adjusting your search or filters.' : 'Upload your first file to get started.'}
+                    {currentFolderId
+                      ? 'Drag files here or upload new ones.'
+                      : 'Upload your first file to get started.'}
                   </p>
-                  {hasActiveFilters ? (
+                  <div className="flex items-center gap-3 justify-center">
                     <button
-                      onClick={clearFilters}
-                      className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-dark transition-colors"
+                      onClick={() => setShowCreateFolder(true)}
+                      className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
                     >
-                      <i className="fas fa-times text-xs"></i>
-                      Clear all filters
+                      <i className="fas fa-folder-plus text-xs"></i>
+                      Create Folder
                     </button>
-                  ) : (
                     <Link
                       to="/upload"
                       className="inline-flex items-center gap-2 btn-gradient text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all"
@@ -535,19 +698,103 @@ export default function DashboardPage() {
                       <i className="fas fa-plus text-xs"></i>
                       Upload Files
                     </Link>
-                  )}
+                  </div>
+                </div>
+              ) : filteredFiles.length === 0 && currentSubfolders.length === 0 && hasActiveFilters ? (
+                <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i className="fas fa-search text-primary text-xl"></i>
+                  </div>
+                  <p className="text-sm font-medium text-dark-text">No files match your filters</p>
+                  <p className="text-xs text-gray-text mt-1 mb-5">Try adjusting your search or filters.</p>
+                  <button
+                    onClick={clearFilters}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-dark transition-colors"
+                  >
+                    <i className="fas fa-times text-xs"></i>
+                    Clear all filters
+                  </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                <div
+                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+                  onDragOver={(e) => {
+                    // Allow drop on the grid background (move to current folder)
+                    if (e.target === e.currentTarget) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (e.target === e.currentTarget) {
+                      e.preventDefault();
+                      handleDrop(e, currentFolderId);
+                    }
+                  }}
+                >
+                  {/* Folders first */}
+                  {currentSubfolders.map((folder) => {
+                    // Inline rename
+                    if (renamingFolder === folder.id) {
+                      return (
+                        <div key={folder.id} className="bg-white rounded-xl border border-primary/30 p-5 ring-2 ring-primary/20">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500">
+                              <i className="fas fa-folder text-lg"></i>
+                            </div>
+                            <form
+                              className="flex-1 flex items-center gap-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                if (renameValue.trim()) handleRenameFolder(folder.id, renameValue.trim());
+                              }}
+                            >
+                              <input
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                autoFocus
+                                className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                onBlur={() => setRenamingFolder(null)}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFolder(null); }}
+                              />
+                              <button type="submit" className="text-primary hover:text-primary-dark">
+                                <i className="fas fa-check text-sm"></i>
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <FolderCard
+                        key={folder.id}
+                        folder={folder}
+                        onOpen={(id) => setCurrentFolderId(id)}
+                        onContextMenu={handleFolderContextMenu}
+                        isDragOver={dragOverFolder === folder.id}
+                        onDragOver={setDragOverFolder}
+                        onDragLeave={() => setDragOverFolder(null)}
+                        onDrop={handleDrop}
+                        itemCount={folderItemCounts[folder.id] || 0}
+                      />
+                    );
+                  })}
+
+                  {/* Then files */}
                   {filteredFiles.map((file) => {
                     const isSelected = selectedIds.has(file.id);
                     return (
                       <div
                         key={file.id}
                         className={`relative transition-all ${isSelected ? 'ring-2 ring-primary/30 rounded-xl' : ''}`}
-                        onContextMenu={(e) => handleContextMenu(e, file)}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onContextMenu={(e) => handleFileContextMenu(e, file)}
                       >
-                        {/* Selection checkbox */}
                         <div className="absolute top-3 left-3 z-10">
                           <input
                             type="checkbox"
@@ -670,6 +917,26 @@ export default function DashboardPage() {
           y={contextMenu.y}
           items={contextMenuItems}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Create Folder Modal */}
+      <CreateFolderModal
+        isOpen={showCreateFolder}
+        onClose={() => setShowCreateFolder(false)}
+        onCreateFolder={handleCreateFolder}
+        parentFolderId={currentFolderId}
+      />
+
+      {/* Move Modal */}
+      {moveTarget && (
+        <MoveFolderModal
+          isOpen={true}
+          onClose={() => setMoveTarget(null)}
+          onSelect={handleMoveConfirm}
+          folders={allFolders}
+          excludeIds={moveTarget.type === 'folder' ? getDescendantIds(moveTarget.item.id) : []}
+          title={moveTarget.type === 'file' ? `Move "${moveTarget.item.originalName}"` : `Move "${moveTarget.item.name}"`}
         />
       )}
     </Layout>

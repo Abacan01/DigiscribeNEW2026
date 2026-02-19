@@ -310,15 +310,7 @@ function MobileMenu({ isOpen, onClose }) {
             {/* Auth-dependent mobile links */}
             {user && (
               <>
-                <Link
-                  to="/upload"
-                  onClick={onClose}
-                  className="block px-3 py-3 text-base font-medium text-dark-text hover:text-primary transition-colors"
-                >
-                  <i className="fas fa-cloud-upload-alt text-primary/60 mr-2"></i>
-                  Upload
-                </Link>
-                {isAdmin ? (
+{isAdmin ? (
                   <Link
                     to="/admin/dashboard"
                     onClick={onClose}
@@ -479,19 +471,7 @@ export default function Navbar() {
 
             {/* Right side buttons */}
             <div className="hidden md:flex items-center gap-3">
-              {user && (
-                <Link
-                  to="/upload"
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    location.pathname === '/upload'
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-dark-text hover:text-primary hover:bg-primary/5'
-                  }`}
-                >
-                  <i className="fas fa-cloud-upload-alt text-sm"></i>
-                  Upload
-                </Link>
-              )}
+
               {user ? (
                 <UserDropdown />
               ) : (

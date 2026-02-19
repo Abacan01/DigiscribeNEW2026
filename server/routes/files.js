@@ -13,7 +13,7 @@ const router = Router();
 
 // POST /api/files/metadata - Save file metadata
 router.post('/metadata', verifyAuth, async (req, res) => {
-  const { originalName, savedAs, size, type, description, serviceCategory, sourceType, sourceUrl } = req.body;
+  const { originalName, savedAs, size, type, description, serviceCategory, sourceType, sourceUrl, folderId } = req.body;
 
   if (!originalName || !savedAs) {
     return res.status(400).json({ success: false, error: 'Missing required fields.' });
@@ -33,6 +33,7 @@ router.post('/metadata', verifyAuth, async (req, res) => {
       serviceCategory: serviceCategory || '',
       sourceType: sourceType || 'file',
       sourceUrl: sourceUrl || null,
+      folderId: folderId || null,
       url: `/api/files/${encodeURIComponent(savedAs)}`,
     });
 
@@ -99,6 +100,40 @@ router.put('/metadata/:fileId/status', verifyAuth, async (req, res) => {
     }
 
     await docRef.update({ status, updatedAt: new Date() });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/files/metadata/:fileId/folder - Move file to folder
+router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
+  const { folderId } = req.body;
+
+  try {
+    const docRef = adminDb.collection('files').doc(req.params.fileId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'File not found.' });
+    }
+
+    const fileData = doc.data();
+
+    // Regular users can only move their own files
+    if (req.user.role !== 'admin' && fileData.uploadedBy !== req.user.uid) {
+      return res.status(403).json({ success: false, error: 'Access denied.' });
+    }
+
+    // If folderId specified, verify the folder exists
+    if (folderId) {
+      const folderDoc = await adminDb.collection('folders').doc(folderId).get();
+      if (!folderDoc.exists) {
+        return res.status(404).json({ success: false, error: 'Folder not found.' });
+      }
+    }
+
+    await docRef.update({ folderId: folderId || null, updatedAt: new Date() });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

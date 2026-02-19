@@ -124,6 +124,7 @@ export default defineConfig({
       '/api/files/bulk-download': 'http://localhost:3001',
       '/api/files/bulk-delete': 'http://localhost:3001',
       '/api/pipeline': 'http://localhost:3001',
+      '/api/folders': 'http://localhost:3001',
       '/api/lgus': 'http://localhost:3001',
       '/api/transcriptions': 'http://localhost:3001',
     },
