@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
 import FileCard from '../components/dashboard/FileCard';
 import FolderCard from '../components/dashboard/FolderCard';
@@ -226,7 +227,7 @@ export default function DashboardPage() {
 
   // Copy file URL to clipboard
   const copyFileUrl = useCallback((file) => {
-    const url = `${window.location.origin}${file.url}`;
+    const url = fileUrl(file.url);
     navigator.clipboard.writeText(url).then(
       () => { setMessage({ type: 'success', text: 'URL copied to clipboard.' }); setTimeout(() => setMessage(null), 2000); },
       () => { setMessage({ type: 'error', text: 'Failed to copy URL.' }); }
@@ -354,7 +355,7 @@ export default function DashboardPage() {
       { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
       { icon: 'fa-download', label: 'Download', onClick: () => {
         const a = document.createElement('a');
-        a.href = file.url;
+        a.href = fileUrl(file.url);
         a.download = file.originalName;
         document.body.appendChild(a);
         a.click();

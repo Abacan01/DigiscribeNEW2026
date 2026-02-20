@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
@@ -389,7 +390,7 @@ export default function TranscriptionDetailPage() {
                   </button>
                   {file.url && (
                     <a
-                      href={file.url}
+                      href={fileUrl(file.url)}
                       download={file.originalName}
                       className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-medium text-dark-text rounded-xl hover:bg-gray-50 transition-colors"
                     >

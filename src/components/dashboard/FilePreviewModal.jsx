@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo } from 'react';
+import { fileUrl } from '../../lib/fileUrl';
 
 function getMediaType(type) {
   if (!type) return 'unknown';
@@ -156,7 +157,7 @@ export default function FilePreviewModal({ file, onClose }) {
             </a>
             {file.url && (
               <a
-                href={file.url}
+                href={fileUrl(file.url)}
                 download={file.originalName}
                 className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
               >
@@ -173,7 +174,7 @@ export default function FilePreviewModal({ file, onClose }) {
     if (mediaType === 'image') {
       return (
         <img
-          src={file.url}
+          src={fileUrl(file.url)}
           alt={file.originalName}
           className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
         />
@@ -189,7 +190,7 @@ export default function FilePreviewModal({ file, onClose }) {
             </div>
             <p className="text-sm font-medium text-dark-text mb-6 truncate">{file.originalName}</p>
             <audio controls className="w-full" preload="metadata">
-              <source src={file.url} type={file.type} />
+              <source src={fileUrl(file.url)} type={file.type} />
               Your browser does not support the audio element.
             </audio>
           </div>
@@ -204,7 +205,7 @@ export default function FilePreviewModal({ file, onClose }) {
           className="max-w-full max-h-[70vh] rounded-lg shadow-sm"
           preload="metadata"
         >
-          <source src={file.url} type={file.type} />
+          <source src={fileUrl(file.url)} type={file.type} />
           Your browser does not support the video element.
         </video>
       );
@@ -220,7 +221,7 @@ export default function FilePreviewModal({ file, onClose }) {
         <p className="text-xs text-gray-text mb-5">This file type cannot be previewed in the browser.</p>
         {file.url && (
           <a
-            href={file.url}
+            href={fileUrl(file.url)}
             download={file.originalName}
             className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
           >
@@ -298,7 +299,7 @@ export default function FilePreviewModal({ file, onClose }) {
           <div className="flex items-center gap-2">
             {file.url && (
               <a
-                href={file.url}
+                href={fileUrl(file.url)}
                 download={file.originalName}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-text hover:text-dark-text hover:bg-gray-100 rounded-lg transition-colors"
               >
