@@ -592,9 +592,11 @@ app.post('/api/quote', async (req, res) => {
       submittedAt: new Date().toISOString(),
     });
 
-    // Send email notification if SMTP is configured
+    res.json({ success: true });
+
+    // Send email notification if SMTP is configured (fire-and-forget)
     if (emailTransporter) {
-      try {
+      (async () => {
         // Read notification email from Firestore settings, fallback to env var
         let notificationEmail = process.env.QUOTE_EMAIL || '';
         try {
@@ -604,23 +606,24 @@ app.post('/api/quote', async (req, res) => {
           }
         } catch {}
 
-        if (notificationEmail) {
-          const subjectLabels = {
-            'service-details': 'Service Details',
-            'service-status': 'Service Status',
-            'general-inquiry': 'General Inquiry',
-            'transcription': 'Transcription',
-          };
-          const subjectLabel = subjectLabels[subject] || subject || 'General';
-          const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+        if (!notificationEmail) return;
 
-          await emailTransporter.sendMail({
-            from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
-            to: notificationEmail,
-            replyTo: email,
-            subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
-            text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
-            html: `<h2 style="color:#0284c7">New Quote Request</h2>
+        const subjectLabels = {
+          'service-details': 'Service Details',
+          'service-status': 'Service Status',
+          'general-inquiry': 'General Inquiry',
+          'transcription': 'Transcription',
+        };
+        const subjectLabel = subjectLabels[subject] || subject || 'General';
+        const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+
+        emailTransporter.sendMail({
+          from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
+          to: notificationEmail,
+          replyTo: email,
+          subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
+          text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
+          html: `<h2 style="color:#0284c7">New Quote Request</h2>
 <table style="border-collapse:collapse;width:100%;max-width:600px;font-family:sans-serif;font-size:14px">
 <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${fullName}</td></tr>
 <tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${email}" style="color:#0284c7">${email}</a></td></tr>
@@ -629,15 +632,11 @@ app.post('/api/quote', async (req, res) => {
 </table>
 <h3 style="color:#374151;font-family:sans-serif;margin-top:20px">Message</h3>
 <p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
-          });
-        }
-      } catch (emailErr) {
-        console.error('[quote] Email send failed:', emailErr.message);
-        // Don't fail the request because email failed
-      }
+        })
+          .then(() => console.log('[quote] Email sent to', notificationEmail))
+          .catch(emailErr => console.error('[quote] Email send failed:', emailErr.message));
+      })();
     }
-
-    res.json({ success: true });
   } catch (err) {
     console.error('[quote] Error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
@@ -695,7 +694,8 @@ app.get('/api/files/*path', async (req, res) => {
   const stat = fs.statSync(tmpPath);
   const fileSize = stat.size;
 
-  res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+  const isDownload = req.query.download === '1';
+  res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeName}"`);
   res.setHeader('Accept-Ranges', 'bytes');
 
   const rangeHeader = req.headers.range;

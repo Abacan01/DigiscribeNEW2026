@@ -238,7 +238,8 @@ export default function FilePreviewModal({ file, onClose }) {
       return (
         <iframe
           src={fileUrl(file.url)}
-          className="w-full h-full border-0"
+          className="w-full border-0"
+          style={{ minHeight: '70vh' }}
           title={file.originalName}
         />
       );
@@ -280,8 +281,7 @@ export default function FilePreviewModal({ file, onClose }) {
         <p className="text-xs text-gray-text mb-5">This file type cannot be previewed in the browser.</p>
         {file.url && (
           <a
-            href={fileUrl(file.url)}
-            download={file.originalName}
+            href={fileUrl(file.url) + '?download=1'}
             className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
           >
             <i className="fas fa-download text-xs"></i>
@@ -358,8 +358,7 @@ export default function FilePreviewModal({ file, onClose }) {
           <div className="flex items-center gap-2">
             {file.url && (
               <a
-                href={fileUrl(file.url)}
-                download={file.originalName}
+                href={fileUrl(file.url) + '?download=1'}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-text hover:text-dark-text hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <i className="fas fa-download text-[10px]"></i>

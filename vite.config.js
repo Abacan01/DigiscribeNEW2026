@@ -43,6 +43,7 @@ function fileServerPlugin() {
         if (urlPath.startsWith('metadata') || urlPath.startsWith('bulk-')) return next()
 
         const filePath = urlPath
+        const isDownload = req.url.includes('download=1')
         if (filePath) {
           // Decode URI components for backward compatibility with %2F-encoded paths
           const decoded = decodeURIComponent(filePath)
@@ -94,14 +95,14 @@ function fileServerPlugin() {
               'Content-Range': `bytes ${start}-${end}/${fileSize}`,
               'Content-Length': chunkSize,
               'Accept-Ranges': 'bytes',
-              'Content-Disposition': `inline; filename="${safeName}"`,
+              'Content-Disposition': `${isDownload ? 'attachment' : 'inline'}; filename="${safeName}"`,
             })
             fs.createReadStream(resolvedPath, { start, end }).pipe(res)
           } else {
             res.writeHead(200, {
               'Content-Type': mime,
               'Content-Length': fileSize,
-              'Content-Disposition': `inline; filename="${safeName}"`,
+              'Content-Disposition': `${isDownload ? 'attachment' : 'inline'}; filename="${safeName}"`,
               'Accept-Ranges': 'bytes',
               'Cache-Control': 'public, max-age=3600',
             })

@@ -629,8 +629,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       } },
       { icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
         const a = document.createElement('a');
-        a.href = fileUrl(file.url);
-        a.download = file.originalName;
+        a.href = fileUrl(file.url) + '?download=1';
         document.body.appendChild(a);
         a.click();
         a.remove();
