@@ -22,7 +22,6 @@ import { useAuth } from '../contexts/AuthContext';
 const TABS = [
   { id: 'files', label: 'Files', icon: 'fa-folder-open' },
   { id: 'users', label: 'Users', icon: 'fa-users-gear' },
-  { id: 'settings', label: 'Settings', icon: 'fa-sliders-h' },
 ];
 
 const STATUS_OPTIONS = ['pending', 'in-progress', 'transcribed'];
@@ -183,6 +182,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // File rename state
   const [renamingFileId, setRenamingFileId] = useState(null);
   const [renameFileValue, setRenameFileValue] = useState('');
+  const [renameFileExt, setRenameFileExt] = useState('');
 
   // Compute counts (across ALL files)
   const counts = useMemo(() => {
@@ -619,7 +619,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     const isUrl = file.sourceType === 'url';
     const items = [
       { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
-      { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => { setRenamingFileId(file.id); setRenameFileValue(file.originalName); } },
+      { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
+        const name = file.originalName || '';
+        const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
+        const base = ext ? name.slice(0, -ext.length) : name;
+        setRenamingFileId(file.id);
+        setRenameFileExt(ext);
+        setRenameFileValue(base);
+      } },
       { icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
         const a = document.createElement('a');
         a.href = fileUrl(file.url);
@@ -1073,7 +1080,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                     <tr
                       key={file.id}
                       className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
-                      draggable
+                      draggable={renamingFileId !== file.id}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
                         e.dataTransfer.effectAllowed = 'move';
@@ -1102,19 +1109,22 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                             {renamingFileId === file.id ? (
                               <form
                                 className="flex items-center gap-1"
-                                onSubmit={(e) => { e.preventDefault(); handleRenameFile(file.id, renameFileValue); }}
+                                onSubmit={(e) => { e.preventDefault(); handleRenameFile(file.id, renameFileValue.trim() + renameFileExt); }}
                               >
                                 <input
                                   type="text"
                                   value={renameFileValue}
                                   onChange={(e) => setRenameFileValue(e.target.value)}
                                   autoFocus
-                                  className="flex-1 px-2 py-1 bg-gray-50 border border-primary/40 rounded text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-0 max-w-[180px]"
-                                  onBlur={() => setRenamingFileId(null)}
+                                  className="flex-1 px-2 py-1 bg-gray-50 border border-primary/40 rounded text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-0 max-w-[160px]"
                                   onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFileId(null); }}
                                 />
+                                {renameFileExt && <span className="text-sm text-gray-400 flex-shrink-0">{renameFileExt}</span>}
                                 <button type="submit" className="text-primary hover:text-primary-dark flex-shrink-0">
                                   <i className="fas fa-check text-xs"></i>
+                                </button>
+                                <button type="button" onClick={() => setRenamingFileId(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                                  <i className="fas fa-times text-xs"></i>
                                 </button>
                               </form>
                             ) : (
@@ -1253,7 +1263,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 <div
                   key={file.id}
                   className={`p-4 rounded-xl border transition-colors ${isSelected ? 'border-primary/30 bg-primary/[0.02]' : 'border-gray-100'}`}
-                  draggable
+                  draggable={renamingFileId !== file.id}
                   onDragStart={(e) => {
                     e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
                     e.dataTransfer.effectAllowed = 'move';
@@ -1278,7 +1288,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       {renamingFileId === file.id ? (
                         <form
                           className="flex items-center gap-1 mb-1"
-                          onSubmit={(e) => { e.preventDefault(); handleRenameFile(file.id, renameFileValue); }}
+                          onSubmit={(e) => { e.preventDefault(); handleRenameFile(file.id, renameFileValue.trim() + renameFileExt); }}
                         >
                           <input
                             type="text"
@@ -1286,11 +1296,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                             onChange={(e) => setRenameFileValue(e.target.value)}
                             autoFocus
                             className="flex-1 px-2 py-1 bg-gray-50 border border-primary/40 rounded text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-0"
-                            onBlur={() => setRenamingFileId(null)}
                             onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFileId(null); }}
                           />
+                          {renameFileExt && <span className="text-sm text-gray-400 flex-shrink-0">{renameFileExt}</span>}
                           <button type="submit" className="text-primary hover:text-primary-dark flex-shrink-0">
                             <i className="fas fa-check text-xs"></i>
+                          </button>
+                          <button type="button" onClick={() => setRenamingFileId(null)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                            <i className="fas fa-times text-xs"></i>
                           </button>
                         </form>
                       ) : (
@@ -1624,104 +1637,6 @@ function TranscriptionsTab() {
   );
 }
 
-/* ──────────────────────── Settings Tab ─────────────────────────── */
-
-function SettingsTab() {
-  const { getIdToken } = useAuth();
-  const [quoteEmail, setQuoteEmail] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(null);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const token = await getIdToken();
-        const res = await fetch('/api/admin/settings', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.success) setQuoteEmail(data.settings.quoteEmail || '');
-      } catch (err) {
-        setMessage({ type: 'error', text: err.message?.includes('<') ? 'Could not reach the server. Make sure the server is running.' : (err.message || 'Failed to load settings.') });
-      }
-      setLoading(false);
-    };
-    load();
-  }, [getIdToken]);
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setMessage(null);
-    try {
-      const token = await getIdToken();
-      const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ quoteEmail }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Save failed.');
-      setMessage({ type: 'success', text: 'Settings saved.' });
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message?.includes('<') ? 'Could not reach the server. Make sure the server is running.' : (err.message || 'Save failed.') });
-    } finally {
-      setSaving(false);
-      setTimeout(() => setMessage(null), 3000);
-    }
-  };
-
-  return (
-    <div className="max-w-lg">
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-dark-text mb-1">Notification Settings</h3>
-        <p className="text-xs text-gray-text mb-6">Configure where quote form submissions are sent via email.</p>
-
-        {message && (
-          <div className={`mb-4 p-3 rounded-lg border flex items-center gap-2 text-sm ${
-            message.type === 'success' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'
-          }`}>
-            <i className={`fas ${message.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}`}></i>
-            {message.text}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="py-8 text-center">
-            <i className="fas fa-spinner fa-spin text-primary text-xl"></i>
-          </div>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-dark-text mb-2">Quote Notification Email</label>
-              <input
-                type="email"
-                value={quoteEmail}
-                onChange={(e) => setQuoteEmail(e.target.value)}
-                placeholder="admin@example.com"
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-              />
-              <p className="text-[11px] text-gray-400 mt-1.5">Quote form submissions from the website will be emailed to this address.</p>
-            </div>
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center gap-2 btn-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm disabled:opacity-70 transition-all"
-              >
-                {saving
-                  ? <><i className="fas fa-spinner fa-spin text-xs"></i>Saving...</>
-                  : <><i className="fas fa-save text-xs"></i>Save Settings</>}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ───────────────────── Main Page Component ─────────────────────── */
 
 export default function AdminDashboardPage() {
@@ -1870,7 +1785,6 @@ export default function AdminDashboardPage() {
               <UserTable users={users} onDeleteUser={handleDeleteUser} onToggleAdmin={handleToggleAdmin} loading={usersLoading} />
             </div>
           )}
-          {activeTab === 'settings' && <SettingsTab />}
         </div>
       </div>
     </Layout>

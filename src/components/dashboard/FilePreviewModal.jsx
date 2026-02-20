@@ -236,22 +236,11 @@ export default function FilePreviewModal({ file, onClose }) {
 
     if (mediaType === 'pdf') {
       return (
-        <div className="w-full flex flex-col items-center gap-3">
-          <iframe
-            src={fileUrl(file.url)}
-            className="w-full rounded-lg border border-gray-200 shadow-sm"
-            style={{ height: '70vh' }}
-            title={file.originalName}
-          />
-          <a
-            href={fileUrl(file.url)}
-            download={file.originalName}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-gray-text hover:text-dark-text hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <i className="fas fa-download text-[10px]"></i>
-            Download PDF
-          </a>
-        </div>
+        <iframe
+          src={fileUrl(file.url)}
+          className="w-full h-full border-0"
+          title={file.originalName}
+        />
       );
     }
 
@@ -340,7 +329,7 @@ export default function FilePreviewModal({ file, onClose }) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-6 flex items-center justify-center bg-gray-50/50">
+        <div className={`flex-1 overflow-auto bg-gray-50/50 ${mediaType === 'pdf' ? '' : 'p-6 flex items-center justify-center'}`}>
           {renderContent()}
         </div>
 
