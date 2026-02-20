@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
+import { config as loadEnv } from 'dotenv'
+
+loadEnv()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const uploadsDir = path.join(__dirname, 'server', 'uploads')
@@ -114,19 +117,22 @@ function fileServerPlugin() {
 }
 
 // https://vite.dev/config/
+const serverPort = process.env.PORT || 3001
+const serverOrigin = `http://localhost:${serverPort}`
+
 export default defineConfig({
   plugins: [fileServerPlugin(), react()],
   server: {
     proxy: {
-      '/api/upload': 'http://localhost:3001',
-      '/api/admin': 'http://localhost:3001',
-      '/api/files/metadata': 'http://localhost:3001',
-      '/api/files/bulk-download': 'http://localhost:3001',
-      '/api/files/bulk-delete': 'http://localhost:3001',
-      '/api/pipeline': 'http://localhost:3001',
-      '/api/folders': 'http://localhost:3001',
-      '/api/lgus': 'http://localhost:3001',
-      '/api/transcriptions': 'http://localhost:3001',
+      '/api/upload': serverOrigin,
+      '/api/admin': serverOrigin,
+      '/api/files/metadata': serverOrigin,
+      '/api/files/bulk-download': serverOrigin,
+      '/api/files/bulk-delete': serverOrigin,
+      '/api/pipeline': serverOrigin,
+      '/api/folders': serverOrigin,
+      '/api/lgus': serverOrigin,
+      '/api/transcriptions': serverOrigin,
     },
   },
 })

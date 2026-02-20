@@ -151,15 +151,13 @@ router.get('/', verifyAuth, async (req, res) => {
       query = query.where('fileId', '==', fileId);
     }
 
-    query = query.orderBy('createdAt', 'desc');
-
     const snapshot = await query.get();
     let transcriptions = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || doc.data().createdAt,
       updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || doc.data().updatedAt,
-    }));
+    })).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     // Client-side text search (Firestore doesn't support full-text search)
     if (search) {

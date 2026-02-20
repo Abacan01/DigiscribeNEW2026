@@ -62,14 +62,12 @@ router.get('/metadata', verifyAuth, async (req, res) => {
       query = query.where('status', '==', status);
     }
 
-    query = query.orderBy('uploadedAt', 'desc');
-
     const snapshot = await query.get();
     const files = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
       uploadedAt: doc.data().uploadedAt?.toDate?.()?.toISOString() || doc.data().uploadedAt,
-    }));
+    })).sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0));
 
     res.json({ success: true, files });
   } catch (err) {
