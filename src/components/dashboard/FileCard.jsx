@@ -209,8 +209,7 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview }) {
         {/* Platform badge (URL uploads) + Service Category */}
         <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
           {isUrl && urlPlatform && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${urlPlatform.color}`}>
-              <i className={`fab ${urlPlatform.icon} text-[9px]`}></i>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border ${urlPlatform.color}`}>
               {urlPlatform.label}
             </span>
           )}

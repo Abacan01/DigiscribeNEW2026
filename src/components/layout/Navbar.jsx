@@ -221,7 +221,7 @@ function MobileMenu({ isOpen, onClose }) {
           </div>
 
           <nav className="space-y-1">
-            {navigationLinks.map((link) => {
+            {!user && navigationLinks.map((link) => {
               if (!link.children) {
                 return (
                   <Link
@@ -376,7 +376,7 @@ export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const dropdownTimeoutRef = useRef(null);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   useNavbarScroll(headerRef);
 
@@ -407,12 +407,12 @@ export default function Navbar() {
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Logo */}
-            <Link to="/" className="flex items-center">
+            <Link to={user ? (isAdmin ? '/admin/dashboard' : '/dashboard') : '/'} className="flex items-center">
               <img src={config.company.logo.main} alt={config.company.logo.alt} className="h-14 w-auto" />
             </Link>
 
-            {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center space-x-8">
+            {/* Desktop Navigation Links — hidden when logged in */}
+            {!user && <div className="hidden md:flex items-center space-x-8">
               {navigationLinks.map((link) => {
                 if (!link.children) {
                   return (
@@ -467,7 +467,7 @@ export default function Navbar() {
                   </div>
                 );
               })}
-            </div>
+            </div>}
 
             {/* Right side buttons */}
             <div className="hidden md:flex items-center gap-3">

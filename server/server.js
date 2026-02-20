@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
+import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
 import { adminDb } from './firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from './middleware/authMiddleware.js';
@@ -21,6 +22,20 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Email transporter (optional — only active when SMTP_USER/PASS are configured)
+let emailTransporter = null;
+if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  emailTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_PORT === '465',
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  console.log('[email] SMTP transporter configured.');
+} else {
+  console.log('[email] SMTP not configured — quote notifications will be skipped.');
+}
 
 console.log('[startup] adminDb initialized:', !!adminDb);
 
@@ -555,6 +570,99 @@ app.post('/api/files/download-folder/:folderId', verifyAuth, async (req, res) =>
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: err.message });
     }
+  }
+});
+
+// POST /api/quote - Public contact/quote form submission
+app.post('/api/quote', async (req, res) => {
+  try {
+    const { firstName, lastName, email, phone, subject, message } = req.body;
+    if (!email || !message) {
+      return res.status(400).json({ success: false, error: 'Email and message are required.' });
+    }
+
+    // Store in Firestore
+    await adminDb.collection('quotes').add({
+      firstName: firstName || '',
+      lastName: lastName || '',
+      email,
+      phone: phone || '',
+      subject: subject || 'service-details',
+      message,
+      submittedAt: new Date().toISOString(),
+    });
+
+    // Send email notification if SMTP is configured
+    if (emailTransporter) {
+      try {
+        // Read notification email from Firestore settings, fallback to env var
+        let notificationEmail = process.env.QUOTE_EMAIL || '';
+        try {
+          const settingsDoc = await adminDb.collection('settings').doc('notifications').get();
+          if (settingsDoc.exists && settingsDoc.data().quoteEmail) {
+            notificationEmail = settingsDoc.data().quoteEmail;
+          }
+        } catch {}
+
+        if (notificationEmail) {
+          const subjectLabels = {
+            'service-details': 'Service Details',
+            'service-status': 'Service Status',
+            'general-inquiry': 'General Inquiry',
+            'transcription': 'Transcription',
+          };
+          const subjectLabel = subjectLabels[subject] || subject || 'General';
+          const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+
+          await emailTransporter.sendMail({
+            from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
+            to: notificationEmail,
+            replyTo: email,
+            subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
+            text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
+            html: `<h2 style="color:#0284c7">New Quote Request</h2>
+<table style="border-collapse:collapse;width:100%;max-width:600px;font-family:sans-serif;font-size:14px">
+<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${fullName}</td></tr>
+<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${email}" style="color:#0284c7">${email}</a></td></tr>
+<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${phone || 'N/A'}</td></tr>
+<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Subject</td><td style="padding:10px 14px;color:#111">${subjectLabel}</td></tr>
+</table>
+<h3 style="color:#374151;font-family:sans-serif;margin-top:20px">Message</h3>
+<p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
+          });
+        }
+      } catch (emailErr) {
+        console.error('[quote] Email send failed:', emailErr.message);
+        // Don't fail the request because email failed
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[quote] Error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
+  }
+});
+
+// GET /api/admin/settings - Get admin notification settings
+app.get('/api/admin/settings', verifyAdmin, async (req, res) => {
+  try {
+    const doc = await adminDb.collection('settings').doc('notifications').get();
+    const data = doc.exists ? doc.data() : {};
+    res.json({ success: true, settings: { quoteEmail: data.quoteEmail || process.env.QUOTE_EMAIL || '' } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/admin/settings - Update admin notification settings
+app.put('/api/admin/settings', verifyAdmin, async (req, res) => {
+  try {
+    const { quoteEmail } = req.body;
+    await adminDb.collection('settings').doc('notifications').set({ quoteEmail: quoteEmail || '' }, { merge: true });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

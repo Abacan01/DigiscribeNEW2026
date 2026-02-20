@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { config } from '../data/config';
@@ -10,8 +10,46 @@ export default function QuotePage() {
     document.title = 'Get Quote - DigiScribe Transcription Corp.';
   }, []);
 
-  const handleSubmit = (e) => {
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    subject: 'service-details',
+    message: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.email.trim() || !form.message.trim()) {
+      setError('Email and message are required.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Submission failed.');
+      setSuccess(true);
+      setForm({ firstName: '', lastName: '', email: '', phone: '', subject: 'service-details', message: '' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const heroContent = (
@@ -81,10 +119,10 @@ export default function QuotePage() {
                 <div className="mt-12 pt-8 border-t border-white/20">
                   <p className="text-cyan-100 text-xs mb-4">Follow Us</p>
                   <div className="flex gap-3">
-                    <a href={config.socialMedia.linkedin} className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-300">
+                    <a href={config.socialMedia.linkedin} target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-300">
                       <i className="fab fa-linkedin-in text-white"></i>
                     </a>
-                    <a href={config.socialMedia.facebook} className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-300">
+                    <a href={config.socialMedia.facebook} target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-300">
                       <i className="fab fa-facebook-f text-white"></i>
                     </a>
                   </div>
@@ -104,76 +142,139 @@ export default function QuotePage() {
                 <p className="text-sm text-gray-text">Fill out the form below and we'll get back to you shortly.</p>
               </div>
 
-              <form className="space-y-6" onSubmit={handleSubmit}>
-                {/* Name Row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-medium text-dark-text mb-2">First Name</label>
-                    <input type="text" placeholder="Enter your first name" className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white" />
+              {success ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mb-4">
+                    <i className="fas fa-check-circle text-green-500 text-3xl"></i>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-dark-text mb-2">Last Name</label>
-                    <input type="text" placeholder="Enter your last name" className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white" />
-                  </div>
-                </div>
-
-                {/* Email & Contact Row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-medium text-dark-text mb-2">Email Address</label>
-                    <input type="email" placeholder="your@email.com" className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-dark-text mb-2">Contact Number</label>
-                    <input type="tel" placeholder="+63 XXX XXX XXXX" className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white" />
-                  </div>
-                </div>
-
-                {/* Subject Selection */}
-                <div>
-                  <label className="block text-xs font-medium text-dark-text mb-4">Select Subject</label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <label className="relative cursor-pointer">
-                      <input type="radio" name="subject" value="service-details" className="peer sr-only" defaultChecked />
-                      <div className="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
-                        Service Details
-                      </div>
-                    </label>
-                    <label className="relative cursor-pointer">
-                      <input type="radio" name="subject" value="service-status" className="peer sr-only" />
-                      <div className="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
-                        Service Status
-                      </div>
-                    </label>
-                    <label className="relative cursor-pointer">
-                      <input type="radio" name="subject" value="general-inquiry" className="peer sr-only" />
-                      <div className="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
-                        General Inquiry
-                      </div>
-                    </label>
-                    <label className="relative cursor-pointer">
-                      <input type="radio" name="subject" value="transcription" className="peer sr-only" />
-                      <div className="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
-                        Transcription
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Message */}
-                <div>
-                  <label className="block text-xs font-medium text-dark-text mb-2">Message</label>
-                  <textarea rows="4" placeholder="Write your message here..." className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none bg-white"></textarea>
-                </div>
-
-                {/* Submit Button */}
-                <div className="flex justify-end pt-4">
-                  <button type="submit" className="btn-gradient text-white px-8 py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2">
-                    <span>Send Message</span>
-                    <i className="fas fa-paper-plane"></i>
+                  <h4 className="text-lg font-semibold text-dark-text mb-2">Message Sent!</h4>
+                  <p className="text-sm text-gray-text mb-6">Thank you for reaching out. We'll get back to you shortly.</p>
+                  <button
+                    onClick={() => setSuccess(false)}
+                    className="text-sm font-medium text-primary hover:text-primary-dark transition-colors"
+                  >
+                    Send another message
                   </button>
                 </div>
-              </form>
+              ) : (
+                <form className="space-y-6" onSubmit={handleSubmit}>
+                  {error && (
+                    <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2">
+                      <i className="fas fa-exclamation-circle text-red-500 text-sm"></i>
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
+
+                  {/* Name Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-medium text-dark-text mb-2">First Name</label>
+                      <input
+                        type="text"
+                        name="firstName"
+                        value={form.firstName}
+                        onChange={handleChange}
+                        placeholder="Enter your first name"
+                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-dark-text mb-2">Last Name</label>
+                      <input
+                        type="text"
+                        name="lastName"
+                        value={form.lastName}
+                        onChange={handleChange}
+                        placeholder="Enter your last name"
+                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email & Contact Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-medium text-dark-text mb-2">Email Address <span className="text-red-500">*</span></label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={form.email}
+                        onChange={handleChange}
+                        placeholder="your@email.com"
+                        required
+                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-dark-text mb-2">Contact Number</label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={form.phone}
+                        onChange={handleChange}
+                        placeholder="+63 XXX XXX XXXX"
+                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Subject Selection */}
+                  <div>
+                    <label className="block text-xs font-medium text-dark-text mb-4">Select Subject</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { value: 'service-details', label: 'Service Details' },
+                        { value: 'service-status', label: 'Service Status' },
+                        { value: 'general-inquiry', label: 'General Inquiry' },
+                        { value: 'transcription', label: 'Transcription' },
+                      ].map((opt) => (
+                        <label key={opt.value} className="relative cursor-pointer">
+                          <input
+                            type="radio"
+                            name="subject"
+                            value={opt.value}
+                            checked={form.subject === opt.value}
+                            onChange={handleChange}
+                            className="peer sr-only"
+                          />
+                          <div className="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-center text-xs text-gray-600 peer-checked:border-primary peer-checked:bg-primary/5 peer-checked:text-primary transition-all hover:border-primary/50">
+                            {opt.label}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Message */}
+                  <div>
+                    <label className="block text-xs font-medium text-dark-text mb-2">Message <span className="text-red-500">*</span></label>
+                    <textarea
+                      name="message"
+                      value={form.message}
+                      onChange={handleChange}
+                      rows="4"
+                      placeholder="Write your message here..."
+                      required
+                      className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none bg-white"
+                    ></textarea>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex justify-end pt-4">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="btn-gradient text-white px-8 py-3.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 flex items-center gap-2 disabled:opacity-70"
+                    >
+                      {loading ? (
+                        <><i className="fas fa-spinner fa-spin text-sm"></i><span>Sending...</span></>
+                      ) : (
+                        <><span>Send Message</span><i className="fas fa-paper-plane"></i></>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

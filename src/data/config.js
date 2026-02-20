@@ -29,8 +29,8 @@ export const config = {
   },
 
   socialMedia: {
-    linkedin: "#",
-    facebook: "#",
+    linkedin: "https://ph.linkedin.com/company/digiscribe-transcription-corp",
+    facebook: "https://www.facebook.com/MedicalTranscription",
     twitter: "#",
     instagram: "#"
   },

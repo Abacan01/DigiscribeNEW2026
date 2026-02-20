@@ -1,3 +1,20 @@
+const PLATFORM_MAP = [
+  { pattern: /youtu\.?be/i, label: 'YouTube' },
+  { pattern: /facebook\.com|fb\.com/i, label: 'Facebook' },
+  { pattern: /instagram\.com/i, label: 'Instagram' },
+  { pattern: /tiktok\.com/i, label: 'TikTok' },
+  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X' },
+  { pattern: /vimeo\.com/i, label: 'Vimeo' },
+  { pattern: /soundcloud\.com/i, label: 'SoundCloud' },
+  { pattern: /twitch\.tv/i, label: 'Twitch' },
+];
+
+function getUrlPlatformLabel(url) {
+  if (!url) return 'URL';
+  const match = PLATFORM_MAP.find((p) => p.pattern.test(url));
+  return match ? match.label : 'URL';
+}
+
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
@@ -23,7 +40,7 @@ export default function FilePropertiesModal({ file, onClose }) {
 
   const rows = [
     { label: 'File Name', value: file.originalName },
-    { label: 'Type', value: file.type || '--' },
+    { label: 'Type', value: file.sourceType === 'url' ? getUrlPlatformLabel(file.url) : (file.type || '--') },
     { label: 'Size', value: formatSize(file.size) },
     { label: 'Status', value: file.status || '--' },
     { label: 'Category', value: file.serviceCategory || '--' },

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import Layout from '../components/layout/Layout';
 import { useAuth } from '../contexts/AuthContext';
 
 function getDefaultRoute(role) {
@@ -49,17 +48,22 @@ export default function LoginPage() {
     }
   };
 
-  const heroContent = (
-    <main className="relative z-10 py-12">
-      <div className="max-w-md mx-auto px-4 sm:px-6">
-        <h1 className="text-2xl md:text-3xl font-semibold gradient-text text-center mb-10">Customer Login</h1>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-indigo-50 flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <img
+            src="/images/favicon.png"
+            alt="DigiScribe"
+            className="h-20 w-auto mx-auto"
+          />
+        </div>
 
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
           <div className="p-8">
             <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <i className="fas fa-user-lock text-primary text-2xl"></i>
-              </div>
+              <h1 className="text-xl font-semibold text-dark-text mb-1">Customer Login</h1>
               <p className="text-sm text-gray-text">
                 Access is restricted to verified customers only.
               </p>
@@ -141,8 +145,6 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
-    </main>
+    </div>
   );
-
-  return <Layout heroContent={heroContent}><div /></Layout>;
 }

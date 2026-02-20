@@ -132,6 +132,25 @@ router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
   }
 });
 
+// PUT /api/files/metadata/:fileId/rename - Rename file display name (admin only)
+router.put('/metadata/:fileId/rename', verifyAdmin, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, error: 'Name is required.' });
+  }
+  try {
+    const docRef = adminDb.collection('files').doc(req.params.fileId);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'File not found.' });
+    }
+    await docRef.update({ originalName: name.trim(), updatedAt: new Date() });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // DELETE /api/files/metadata/:fileId - Delete file metadata and uploaded file (admin only)
 router.delete('/metadata/:fileId', verifyAdmin, async (req, res) => {
   try {

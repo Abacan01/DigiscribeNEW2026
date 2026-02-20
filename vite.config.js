@@ -126,9 +126,13 @@ export default defineConfig({
     proxy: {
       '/api/upload': serverOrigin,
       '/api/admin': serverOrigin,
+      '/api/quote': serverOrigin,
       '/api/files/metadata': serverOrigin,
       '/api/files/bulk-download': serverOrigin,
       '/api/files/bulk-delete': serverOrigin,
+      '/api/files/bulk-move': serverOrigin,
+      '/api/files/bulk-status': serverOrigin,
+      '/api/files/download-folder': serverOrigin,
       '/api/pipeline': serverOrigin,
       '/api/folders': serverOrigin,
       '/api/lgus': serverOrigin,

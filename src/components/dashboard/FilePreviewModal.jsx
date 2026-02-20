@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { fileUrl } from '../../lib/fileUrl';
 
 function getMediaType(type) {
@@ -6,6 +6,8 @@ function getMediaType(type) {
   if (type.startsWith('image/')) return 'image';
   if (type.startsWith('audio/')) return 'audio';
   if (type.startsWith('video/')) return 'video';
+  if (type === 'application/pdf') return 'pdf';
+  if (type.startsWith('text/')) return 'text';
   return 'unknown';
 }
 
@@ -59,6 +61,9 @@ function formatSize(bytes) {
 
 export default function FilePreviewModal({ file, onClose }) {
   const overlayRef = useRef(null);
+  const [textContent, setTextContent] = useState(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const [textError, setTextError] = useState(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -77,6 +82,22 @@ export default function FilePreviewModal({ file, onClose }) {
   };
 
   const mediaType = getMediaType(file.type);
+
+  // Fetch text file content for preview
+  useEffect(() => {
+    if (mediaType !== 'text' || !file.url) return;
+    setTextLoading(true);
+    setTextError(null);
+    fetch(fileUrl(file.url))
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load file.');
+        return res.text();
+      })
+      .then((text) => setTextContent(text))
+      .catch((err) => setTextError(err.message))
+      .finally(() => setTextLoading(false));
+  }, [mediaType, file.url]);
+
   const sourceUrl = file.sourceUrl || file.url;
   const isUrlUpload = file.sourceType === 'url';
 
@@ -114,6 +135,8 @@ export default function FilePreviewModal({ file, onClose }) {
     if (mediaType === 'image') return { icon: 'fa-image', color: 'text-violet-600 bg-violet-50' };
     if (mediaType === 'audio') return { icon: 'fa-music', color: 'text-sky-600 bg-sky-50' };
     if (mediaType === 'video') return { icon: 'fa-video', color: 'text-rose-500 bg-rose-50' };
+    if (mediaType === 'pdf') return { icon: 'fa-file-pdf', color: 'text-red-600 bg-red-50' };
+    if (mediaType === 'text') return { icon: 'fa-file-alt', color: 'text-gray-600 bg-gray-50' };
     if (isUrlUpload) return { icon: 'fa-link', color: 'text-indigo-600 bg-indigo-50' };
     return { icon: 'fa-file', color: 'text-gray-400 bg-gray-50' };
   }, [embedInfo, mediaType, isUrlUpload]);
@@ -208,6 +231,53 @@ export default function FilePreviewModal({ file, onClose }) {
           <source src={fileUrl(file.url)} type={file.type} />
           Your browser does not support the video element.
         </video>
+      );
+    }
+
+    if (mediaType === 'pdf') {
+      return (
+        <div className="w-full flex flex-col items-center gap-3">
+          <iframe
+            src={fileUrl(file.url)}
+            className="w-full rounded-lg border border-gray-200 shadow-sm"
+            style={{ height: '70vh' }}
+            title={file.originalName}
+          />
+          <a
+            href={fileUrl(file.url)}
+            download={file.originalName}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-gray-text hover:text-dark-text hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <i className="fas fa-download text-[10px]"></i>
+            Download PDF
+          </a>
+        </div>
+      );
+    }
+
+    if (mediaType === 'text') {
+      return (
+        <div className="w-full">
+          {textLoading && (
+            <div className="text-center py-12">
+              <i className="fas fa-spinner fa-spin text-primary text-2xl mb-3 block"></i>
+              <p className="text-sm text-gray-text">Loading file...</p>
+            </div>
+          )}
+          {textError && (
+            <div className="text-center py-12">
+              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i className="fas fa-exclamation-circle text-red-400 text-xl"></i>
+              </div>
+              <p className="text-sm text-red-600">{textError}</p>
+            </div>
+          )}
+          {!textLoading && !textError && textContent !== null && (
+            <pre className="w-full bg-gray-50 rounded-xl border border-gray-200 p-5 text-xs text-gray-700 font-mono overflow-auto max-h-[65vh] whitespace-pre-wrap break-words">
+              {textContent}
+            </pre>
+          )}
+        </div>
       );
     }
 

@@ -22,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 const TABS = [
   { id: 'files', label: 'Files', icon: 'fa-folder-open' },
   { id: 'users', label: 'Users', icon: 'fa-users-gear' },
+  { id: 'settings', label: 'Settings', icon: 'fa-sliders-h' },
 ];
 
 const STATUS_OPTIONS = ['pending', 'in-progress', 'transcribed'];
@@ -127,6 +128,22 @@ function getFileIconColor(type) {
   return 'text-gray-400 bg-gray-50';
 }
 
+const PLATFORM_MAP = [
+  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-youtube', color: 'text-red-600 bg-red-50' },
+  { pattern: /facebook\.com|fb\.com/i, label: 'Facebook', icon: 'fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
+  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-instagram', color: 'text-pink-600 bg-pink-50' },
+  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-tiktok', color: 'text-gray-900 bg-gray-100' },
+  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
+  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
+  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-twitch', color: 'text-violet-600 bg-violet-50' },
+];
+
+function getUrlPlatform(sourceUrl) {
+  if (!sourceUrl) return { label: 'URL', icon: 'fa-link', color: 'text-gray-600 bg-gray-100' };
+  return PLATFORM_MAP.find((p) => p.pattern.test(sourceUrl)) || { label: 'URL', icon: 'fa-link', color: 'text-gray-600 bg-gray-100' };
+}
+
 /* ─────────────────────────── Files Tab ─────────────────────────── */
 
 function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoading, folderActions }) {
@@ -162,6 +179,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [renameValue, setRenameValue] = useState('');
   const [dragOverFolder, setDragOverFolder] = useState(null);
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+
+  // File rename state
+  const [renamingFileId, setRenamingFileId] = useState(null);
+  const [renameFileValue, setRenameFileValue] = useState('');
 
   // Compute counts (across ALL files)
   const counts = useMemo(() => {
@@ -384,6 +405,25 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setRenamingFolder(null);
   }, [renameFolder]);
 
+  const handleRenameFile = useCallback(async (fileId, newName) => {
+    if (!newName.trim()) return;
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/files/metadata/${fileId}/rename`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Rename failed.');
+      setMessage({ type: 'success', text: 'File renamed.' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+    setRenamingFileId(null);
+  }, [getIdToken]);
+
   const handleDeleteFolder = useCallback(async (folderId) => {
     try {
       await deleteFolder(folderId);
@@ -579,6 +619,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     const isUrl = file.sourceType === 'url';
     const items = [
       { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
+      { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => { setRenamingFileId(file.id); setRenameFileValue(file.originalName); } },
       { icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
         const a = document.createElement('a');
         a.href = fileUrl(file.url);
@@ -1027,6 +1068,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 {filteredFiles.map((file) => {
                   const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                   const isSelected = selectedIds.has(file.id);
+                  const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
                   return (
                     <tr
                       key={file.id}
@@ -1057,39 +1099,73 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                             <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
                           </button>
                           <div className="min-w-0">
-                            <span
-                              className="text-sm font-medium text-dark-text truncate block max-w-[200px] cursor-pointer hover:text-primary transition-colors"
-                              title={file.originalName}
-                              onClick={() => setPreviewFile(file)}
-                            >
-                              {file.originalName}
-                            </span>
+                            {renamingFileId === file.id ? (
+                              <form
+                                className="flex items-center gap-1"
+                                onSubmit={(e) => { e.preventDefault(); handleRenameFile(file.id, renameFileValue); }}
+                              >
+                                <input
+                                  type="text"
+                                  value={renameFileValue}
+                                  onChange={(e) => setRenameFileValue(e.target.value)}
+                                  autoFocus
+                                  className="flex-1 px-2 py-1 bg-gray-50 border border-primary/40 rounded text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-0 max-w-[180px]"
+                                  onBlur={() => setRenamingFileId(null)}
+                                  onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFileId(null); }}
+                                />
+                                <button type="submit" className="text-primary hover:text-primary-dark flex-shrink-0">
+                                  <i className="fas fa-check text-xs"></i>
+                                </button>
+                              </form>
+                            ) : (
+                              <span
+                                className="text-sm font-medium text-dark-text truncate block max-w-[200px] cursor-pointer hover:text-primary transition-colors"
+                                title={file.originalName}
+                                onClick={() => setPreviewFile(file)}
+                              >
+                                {file.originalName}
+                              </span>
+                            )}
                             {file.description && (
                               <p className="text-[10px] text-gray-400 truncate max-w-[200px] mt-0.5" title={file.description}>
                                 {file.description}
                               </p>
                             )}
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {file.size > 0 && (
+                                <span className="text-[10px] text-gray-400">{formatSize(file.size)}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="text-xs text-gray-text">
-                          {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
-                        </span>
+                        {urlPlatform ? (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${urlPlatform.color}`}>
+                            {urlPlatform.label}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-text">
+                            {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3.5">
                         {statusLoading === file.id ? (
                           <i className="fas fa-spinner fa-spin text-primary text-sm"></i>
                         ) : (
-                          <select
-                            value={file.status || 'pending'}
-                            onChange={(e) => handleStatusChange(file.id, e.target.value)}
-                            className={`appearance-none px-2.5 py-1 pr-7 rounded-md border text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${cfg.bg} ${cfg.text} ${cfg.border}`}
-                          >
-                            {STATUS_OPTIONS.map((s) => (
-                              <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                            ))}
-                          </select>
+                          <div className="relative inline-block">
+                            <select
+                              value={file.status || 'pending'}
+                              onChange={(e) => handleStatusChange(file.id, e.target.value)}
+                              className={`appearance-none px-2.5 py-1 pr-7 rounded-md border text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${cfg.bg} ${cfg.text} ${cfg.border}`}
+                            >
+                              {STATUS_OPTIONS.map((s) => (
+                                <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                              ))}
+                            </select>
+                            <i className={`fas fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] pointer-events-none ${cfg.text}`}></i>
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3.5">
@@ -1172,6 +1248,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             {filteredFiles.map((file) => {
               const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
               const isSelected = selectedIds.has(file.id);
+              const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
               return (
                 <div
                   key={file.id}
@@ -1198,7 +1275,27 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       <i className={`fas ${getFileIcon(file.type)} text-sm`}></i>
                     </button>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-dark-text truncate">{file.originalName}</p>
+                      {renamingFileId === file.id ? (
+                        <form
+                          className="flex items-center gap-1 mb-1"
+                          onSubmit={(e) => { e.preventDefault(); handleRenameFile(file.id, renameFileValue); }}
+                        >
+                          <input
+                            type="text"
+                            value={renameFileValue}
+                            onChange={(e) => setRenameFileValue(e.target.value)}
+                            autoFocus
+                            className="flex-1 px-2 py-1 bg-gray-50 border border-primary/40 rounded text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-0"
+                            onBlur={() => setRenamingFileId(null)}
+                            onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFileId(null); }}
+                          />
+                          <button type="submit" className="text-primary hover:text-primary-dark flex-shrink-0">
+                            <i className="fas fa-check text-xs"></i>
+                          </button>
+                        </form>
+                      ) : (
+                        <p className="text-sm font-medium text-dark-text truncate">{file.originalName}</p>
+                      )}
                       {file.description && (
                         <p className="text-[11px] text-gray-400 truncate mt-0.5">{file.description}</p>
                       )}
@@ -1206,6 +1303,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                         <span><i className="fas fa-user mr-1 text-[9px]"></i>{file.uploadedByEmail || '--'}</span>
                         <span>{formatSize(file.size)}</span>
                         <span>{formatRelativeDate(file.uploadedAt)}</span>
+                        {urlPlatform && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${urlPlatform.color}`}>
+                            {urlPlatform.label}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1253,15 +1355,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                     {statusLoading === file.id ? (
                       <i className="fas fa-spinner fa-spin text-primary text-sm ml-auto"></i>
                     ) : (
-                      <select
-                        value={file.status || 'pending'}
-                        onChange={(e) => handleStatusChange(file.id, e.target.value)}
-                        className={`appearance-none px-2.5 py-1.5 pr-7 rounded-md border text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ml-auto ${cfg.bg} ${cfg.text} ${cfg.border}`}
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                        ))}
-                      </select>
+                      <div className="relative inline-block ml-auto">
+                        <select
+                          value={file.status || 'pending'}
+                          onChange={(e) => handleStatusChange(file.id, e.target.value)}
+                          className={`appearance-none px-2.5 py-1.5 pr-7 rounded-md border text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${cfg.bg} ${cfg.text} ${cfg.border}`}
+                        >
+                          {STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                          ))}
+                        </select>
+                        <i className={`fas fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[8px] pointer-events-none ${cfg.text}`}></i>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1519,6 +1624,104 @@ function TranscriptionsTab() {
   );
 }
 
+/* ──────────────────────── Settings Tab ─────────────────────────── */
+
+function SettingsTab() {
+  const { getIdToken } = useAuth();
+  const [quoteEmail, setQuoteEmail] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const token = await getIdToken();
+        const res = await fetch('/api/admin/settings', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) setQuoteEmail(data.settings.quoteEmail || '');
+      } catch (err) {
+        setMessage({ type: 'error', text: err.message?.includes('<') ? 'Could not reach the server. Make sure the server is running.' : (err.message || 'Failed to load settings.') });
+      }
+      setLoading(false);
+    };
+    load();
+  }, [getIdToken]);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ quoteEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Save failed.');
+      setMessage({ type: 'success', text: 'Settings saved.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message?.includes('<') ? 'Could not reach the server. Make sure the server is running.' : (err.message || 'Save failed.') });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setMessage(null), 3000);
+    }
+  };
+
+  return (
+    <div className="max-w-lg">
+      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+        <h3 className="text-base font-semibold text-dark-text mb-1">Notification Settings</h3>
+        <p className="text-xs text-gray-text mb-6">Configure where quote form submissions are sent via email.</p>
+
+        {message && (
+          <div className={`mb-4 p-3 rounded-lg border flex items-center gap-2 text-sm ${
+            message.type === 'success' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'
+          }`}>
+            <i className={`fas ${message.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}`}></i>
+            {message.text}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-8 text-center">
+            <i className="fas fa-spinner fa-spin text-primary text-xl"></i>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-dark-text mb-2">Quote Notification Email</label>
+              <input
+                type="email"
+                value={quoteEmail}
+                onChange={(e) => setQuoteEmail(e.target.value)}
+                placeholder="admin@example.com"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+              <p className="text-[11px] text-gray-400 mt-1.5">Quote form submissions from the website will be emailed to this address.</p>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 btn-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm disabled:opacity-70 transition-all"
+              >
+                {saving
+                  ? <><i className="fas fa-spinner fa-spin text-xs"></i>Saving...</>
+                  : <><i className="fas fa-save text-xs"></i>Save Settings</>}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ───────────────────── Main Page Component ─────────────────────── */
 
 export default function AdminDashboardPage() {
@@ -1667,6 +1870,7 @@ export default function AdminDashboardPage() {
               <UserTable users={users} onDeleteUser={handleDeleteUser} onToggleAdmin={handleToggleAdmin} loading={usersLoading} />
             </div>
           )}
+          {activeTab === 'settings' && <SettingsTab />}
         </div>
       </div>
     </Layout>
