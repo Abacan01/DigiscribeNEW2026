@@ -140,7 +140,7 @@ export default function AboutPage() {
         <section className="py-12 lg:py-16 bg-white relative section-fade-from-blue">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="bg-white rounded-3xl p-8 md:p-10 shadow-lg border border-primary/20" style={{ boxShadow: '0 4px 30px rgba(14, 165, 233, 0.15)' }}>
-              <h2 className="text-2xl md:text-3xl font-bold gradient-text mb-8">Get Quote now</h2>
+              <h2 className="text-2xl md:text-3xl font-bold gradient-text mb-8">Get a Quote</h2>
 
               <div className="flex flex-col md:flex-row items-end gap-6">
                 {/* Email Address */}
@@ -179,7 +179,7 @@ export default function AboutPage() {
                 {/* Get Quote Button */}
                 <div className="flex-shrink-0 w-full md:w-auto">
                   <Link to="/quote" className="inline-flex items-center justify-center gap-2 btn-gradient text-white px-8 py-3 rounded-xl text-sm font-semibold w-full md:w-auto">
-                    Get Quote
+                    Get a Quote
                     <i className="fas fa-check-circle"></i>
                   </Link>
                 </div>

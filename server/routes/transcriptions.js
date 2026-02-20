@@ -5,18 +5,17 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { adminDb } from '../firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from '../middleware/authMiddleware.js';
+import { uploadToFtp, deleteFromFtp } from '../services/ftp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-const deliveryDir = path.join(uploadsDir, '_deliveries');
-
-// Ensure delivery directory exists
-if (!fs.existsSync(deliveryDir)) fs.mkdirSync(deliveryDir, { recursive: true });
+// Temporary staging directory for incoming delivery file uploads
+const deliveryTmpDir = path.join(__dirname, '..', 'chunks', '_deliveries');
+if (!fs.existsSync(deliveryTmpDir)) fs.mkdirSync(deliveryTmpDir, { recursive: true });
 
 const deliveryUpload = multer({
   storage: multer.diskStorage({
-    destination: deliveryDir,
+    destination: deliveryTmpDir,
     filename: (req, file, cb) => {
       const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
       cb(null, `${Date.now()}-${safeName}`);
@@ -99,7 +98,12 @@ router.post('/upload', verifyAdmin, deliveryUpload.single('deliveryFile'), async
     const fileData = fileDoc.data();
 
     const now = new Date();
-    const deliveryPath = path.relative(uploadsDir, req.file.path);
+    // FTP path: _deliveries/filename (relative to FTP_BASE)
+    const deliveryPath = `_deliveries/${path.basename(req.file.path)}`;
+
+    // Upload to FTP, then remove local temp file
+    await uploadToFtp(req.file.path, deliveryPath);
+    fs.unlinkSync(req.file.path);
 
     const docRef = await adminDb.collection('transcriptions').add({
       fileId,
@@ -242,6 +246,16 @@ router.delete('/:id', verifyAdmin, async (req, res) => {
 
     if (!doc.exists) {
       return res.status(404).json({ success: false, error: 'Transcription not found.' });
+    }
+
+    const data = doc.data();
+    // Delete delivery file from FTP if present
+    if (data.deliveryType === 'file' && data.deliveryFileUrl) {
+      // deliveryFileUrl is like /api/files/_deliveries/filename — extract the remote path
+      const match = data.deliveryFileUrl.match(/^\/api\/files\/(.+)$/);
+      if (match) {
+        await deleteFromFtp(decodeURIComponent(match[1]));
+      }
     }
 
     await docRef.delete();

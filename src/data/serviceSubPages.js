@@ -18,7 +18,7 @@ export const serviceSubPages = {
       "Multi-level quality assurance and review",
       "Secure, encrypted file transmission and storage"
     ],
-    ctaButton: { text: "Get a Medical Transcription Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-user-md", title: "Certified Medical Transcriptionists" },
       { icon: "fas fa-shield-virus", title: "99.8% Medical Accuracy" },
@@ -68,7 +68,7 @@ export const serviceSubPages = {
       "Secure, encrypted file handling",
       "Multiple legal specializations covered"
     ],
-    ctaButton: { text: "Get a Legal Transcription Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-balance-scale", title: "Certified Legal Transcriptionists" },
       { icon: "fas fa-shield-check", title: "99.7% Legal Accuracy" },
@@ -108,7 +108,7 @@ export const serviceSubPages = {
       "Secure file handling and delivery",
       "Competitive pricing for all project sizes"
     ],
-    ctaButton: { text: "Get a General Transcription Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-globe", title: "Multi-Industry Expertise" },
       { icon: "fas fa-check-double", title: "99.5% Accuracy Rate" },
@@ -148,7 +148,7 @@ export const serviceSubPages = {
       "Rush delivery for thesis deadlines",
       "Quality assurance with academic proofreading"
     ],
-    ctaButton: { text: "Get an Academic Transcription Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-graduation-cap", title: "PhD-Level Expertise" },
       { icon: "fas fa-user-secret", title: "Research Confidentiality" },
@@ -188,7 +188,7 @@ export const serviceSubPages = {
       "API integration for workflow automation",
       "Compliance with corporate governance standards"
     ],
-    ctaButton: { text: "Get a Corporate Transcription Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-shield-alt", title: "Enterprise Security" },
       { icon: "fas fa-user-tie", title: "Dedicated Account Manager" },
@@ -228,7 +228,7 @@ export const serviceSubPages = {
       "Quality assurance and error detection protocols",
       "Integration with shipping and accounting systems"
     ],
-    ctaButton: { text: "Get a Processing Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-truck", title: "Logistics Expertise" },
       { icon: "fas fa-calculator", title: "Accurate Calculations" },
@@ -267,7 +267,7 @@ export const serviceSubPages = {
       "Custom reporting formats and analytics",
       "Real-time monitoring and alert systems"
     ],
-    ctaButton: { text: "Get a Batch Proof Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-shield-check", title: "Data Integrity Assured" },
       { icon: "fas fa-chart-bar", title: "Detailed Analytics" },
@@ -306,7 +306,7 @@ export const serviceSubPages = {
       "Quality assurance and data validation",
       "HIPAA-compliant secure data handling"
     ],
-    ctaButton: { text: "Get EMR Data Entry Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-shield-check", title: "HIPAA Compliant" },
       { icon: "fas fa-clock", title: "Fast Turnaround" },
@@ -345,7 +345,7 @@ export const serviceSubPages = {
       "Backup and rollback procedures",
       "HIPAA-compliant secure data handling"
     ],
-    ctaButton: { text: "Get Migration Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-shield-check", title: "Data Integrity Guaranteed" },
       { icon: "fas fa-clock", title: "Minimal Downtime" },
@@ -385,7 +385,7 @@ export const serviceSubPages = {
       "Technical support and troubleshooting",
       "Compliance monitoring and auditing"
     ],
-    ctaButton: { text: "Get Management Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-shield-alt", title: "Secure & Compliant" },
       { icon: "fas fa-sync-alt", title: "24/7 Monitoring" },
@@ -425,7 +425,7 @@ export const serviceSubPages = {
       "Structured data output in multiple formats",
       "Large-scale document processing capabilities"
     ],
-    ctaButton: { text: "Get OCR Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-eye", title: "99% Accuracy Rate" },
       { icon: "fas fa-bolt", title: "Fast Processing" },
@@ -465,7 +465,7 @@ export const serviceSubPages = {
       "Web-compatible format optimization",
       "Batch conversion for large document sets"
     ],
-    ctaButton: { text: "Get Conversion Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-file-contract", title: "Format Integrity" },
       { icon: "fas fa-layer-group", title: "Batch Processing" },
@@ -507,7 +507,7 @@ export const serviceSubPages = {
       "Accessibility compliance (WCAG standards)",
       "Cover design and metadata optimization"
     ],
-    ctaButton: { text: "Get Conversion Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-book-open", title: "Multi-Format Support" },
       { icon: "fas fa-mobile-alt", title: "Device Compatible" },
@@ -549,7 +549,7 @@ export const serviceSubPages = {
       "Custom indexing based on your specific criteria",
       "Quality assurance and verification processes"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-shield-alt", title: "Secure & Compliant" },
       { icon: "fas fa-search-plus", title: "Precise Accuracy" },
@@ -601,7 +601,7 @@ export const serviceSubPages = {
       "CAD conversion and redrafting",
       "Building Information Modeling (BIM)"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-ruler-combined", title: "Precise Measurements" },
       { icon: "fas fa-certificate", title: "Code Compliant" },
@@ -653,7 +653,7 @@ export const serviceSubPages = {
       "Seismic and wind bracing systems",
       "Shop drawings and fabrication details"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-hard-hat", title: "Safety Standards" },
       { icon: "fas fa-calculator", title: "Load Analysis" },
@@ -705,7 +705,7 @@ export const serviceSubPages = {
       "Clash detection and coordination drawings",
       "As-built documentation and redlines"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-project-diagram", title: "Coordinated Systems" },
       { icon: "fas fa-leaf", title: "Energy Efficient" },
@@ -757,7 +757,7 @@ export const serviceSubPages = {
       "Lighting studies and day/night renderings",
       "Marketing and presentation materials"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-eye", title: "Photorealistic Quality" },
       { icon: "fas fa-clock", title: "Fast Turnaround" },
@@ -809,7 +809,7 @@ export const serviceSubPages = {
       "Data enrichment and missing information completion",
       "Marketplace compliance and format validation"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-chart-line", title: "Improved Conversion" },
       { icon: "fas fa-shield-alt", title: "Data Accuracy" },
@@ -861,7 +861,7 @@ export const serviceSubPages = {
       "Inventory availability and stock level monitoring",
       "Custom data extraction based on specific requirements"
     ],
-    ctaButton: { text: "Request a Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-clock", title: "Time Savings" },
       { icon: "fas fa-bullseye", title: "High Accuracy" },
@@ -908,7 +908,7 @@ export const serviceSubPages = {
       "Payment posting and reconciliation",
       "Accounts receivable management"
     ],
-    ctaButton: { text: "Get a Free Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-percentage", title: "98% Clean Claim Rate" },
       { icon: "fas fa-certificate", title: "AAPC & AHIMA Certified Coders" },
@@ -934,7 +934,7 @@ export const serviceSubPages = {
       "Denial management and appeals",
       "Patient collections and statement processing"
     ],
-    ctaButton: { text: "Get a Free Quote", href: "/quote" },
+    ctaButton: { text: "Get a Quote", href: "/quote" },
     featureBar: [
       { icon: "fas fa-dollar-sign", title: "Up to 20% Revenue Growth" },
       { icon: "fas fa-chart-bar", title: "Real-Time Analytics & Insights" },

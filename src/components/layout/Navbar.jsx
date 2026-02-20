@@ -361,7 +361,7 @@ function MobileMenu({ isOpen, onClose }) {
               onClick={onClose}
               className="block text-center text-white px-5 py-3 rounded-full text-sm font-medium btn-gradient"
             >
-              Get Quote
+              Get a Quote
             </Link>
           </div>
         </div>
@@ -487,7 +487,7 @@ export default function Navbar() {
                 className="text-white px-5 py-2 rounded-full text-sm font-medium transition-all hover:shadow-lg"
                 style={{ background: 'linear-gradient(90deg, #b8e4f7 0%, #0ea5e9 50%, #0369a1 100%)' }}
               >
-                Get Quote
+                Get a Quote
               </Link>
             </div>
 

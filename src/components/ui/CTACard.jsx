@@ -12,7 +12,7 @@ export default function CTACard({ icon, title, description }) {
         to="/quote"
         className="inline-flex items-center gap-2 bg-white text-primary px-6 py-3 rounded-full text-sm font-medium hover:bg-gray-50 transition-colors"
       >
-        Get a Free Quote
+        Get a Quote
         <i className="fas fa-arrow-right"></i>
       </Link>
     </div>

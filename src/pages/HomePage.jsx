@@ -32,7 +32,7 @@ export default function HomePage() {
               <span className="text-primary">Reliable</span> Medical Transcription &amp; Back-Office Support
             </h1>
             <p className="text-gray-text text-sm mb-8 leading-relaxed max-w-md">
-              We help <a href="#" className="text-primary underline">healthcare providers</a> reduce workload, improve accuracy, and streamline revenue with secure, <span className="text-primary">HIPAA-compliant</span> support services.
+              We help healthcare providers reduce workload, improve accuracy, and streamline revenue with secure, <span className="text-primary">HIPAA compliant</span> support services.
             </p>
             <a href="#services" className="inline-flex items-center gap-2 text-white px-6 py-3 rounded-full text-sm font-medium transition-all hover:shadow-lg" style={{ background: 'linear-gradient(90deg, #b8e4f7 0%, #0ea5e9 50%, #0369a1 100%)' }}>
               Our Services
@@ -43,7 +43,7 @@ export default function HomePage() {
           </div>
 
           {/* Right Image with decorative elements */}
-          <div className="lg:w-1/2 relative flex justify-center">
+          <div className="lg:w-1/2 relative flex justify-center pb-20">
             {/* Light blue gradient background circle */}
             <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-[350px] h-[350px] lg:w-[450px] lg:h-[450px] rounded-full hidden md:block" style={{ background: 'linear-gradient(135deg, #bae6fd 0%, #7dd3fc 50%, #38bdf8 100%)' }}></div>
 

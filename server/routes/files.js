@@ -1,13 +1,7 @@
 import { Router } from 'express';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { adminDb } from '../firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from '../middleware/authMiddleware.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+import { deleteFromFtp } from '../services/ftp.js';
 
 const router = Router();
 
@@ -150,13 +144,10 @@ router.delete('/metadata/:fileId', verifyAdmin, async (req, res) => {
 
     const fileData = doc.data();
 
-    // Delete the physical file from uploads
-    const filePath = fileData.storagePath
-      ? path.join(uploadsDir, fileData.storagePath)
-      : (fileData.savedAs ? path.join(uploadsDir, fileData.savedAs) : null);
-
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete the file from FTP
+    const remotePath = fileData.storagePath || fileData.savedAs;
+    if (remotePath) {
+      await deleteFromFtp(remotePath);
     }
 
     // Delete the Firestore document

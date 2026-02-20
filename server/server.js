@@ -14,6 +14,7 @@ import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
+import { uploadToFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,12 +24,9 @@ const PORT = process.env.PORT || 3001;
 
 console.log('[startup] adminDb initialized:', !!adminDb);
 
-// Ensure directories exist
-const uploadsDir = path.join(__dirname, 'uploads');
+// Temporary directory for chunk uploads and in-flight processing
 const chunksDir = path.join(__dirname, 'chunks');
-for (const dir of [uploadsDir, chunksDir]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
+if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
 
 // CORS — allow dev + production origins
 const allowedOrigins = [
@@ -120,13 +118,13 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     }
 
     // Build structured storage path
-    const storageSub = buildStoragePath(serviceCategory, mimeType);    const storageDir = path.join(uploadsDir, storageSub);
+    const storageSub = buildStoragePath(serviceCategory, mimeType);    const storageDir = path.join(chunksDir, 'assemble-tmp');
     if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
 
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${Date.now()}-${safeName}`;
     const storagePath = `${storageSub}/${finalName}`;
-    const finalPath = path.join(uploadsDir, storagePath);
+    const finalPath = path.join(storageDir, finalName);
     const writeStream = fs.createWriteStream(finalPath);
 
     for (let i = 0; i < totalChunks; i++) {
@@ -150,6 +148,10 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
       const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
       if (fs.existsSync(chunkPath)) fs.unlinkSync(chunkPath);
     }
+
+    // Upload assembled file to FTP, then remove local temp
+    await uploadToFtp(finalPath, storagePath);
+    fs.unlinkSync(finalPath);
 
     // Save metadata to Firestore
     let fileId = null;
@@ -205,34 +207,28 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
 
     // For video platforms, use yt-dlp to extract the actual media
     if (isVideoPlatformUrl(url)) {
-      const result = await downloadWithYtdlp(url, uploadsDir);
+      const result = await downloadWithYtdlp(url, chunksDir);
       finalPath = result.filePath;
       finalName = result.fileName;
       contentType = result.mimeType;
       originalName = result.originalName;
     } else {
       // Direct URL — just fetch normally
-      const fetched = await fetchUrlDirect(url, uploadsDir);
+      const fetched = await fetchUrlDirect(url, chunksDir);
       finalPath = fetched.finalPath;
       finalName = fetched.finalName;
       contentType = fetched.contentType;
       originalName = fetched.originalName;
     }
 
-    // Move file to structured storage path
     const storageSub = buildStoragePath(serviceCategory, contentType);
-    const storageDir = path.join(uploadsDir, storageSub);
-    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-
     const storagePath = `${storageSub}/${finalName}`;
-    const newPath = path.join(uploadsDir, storagePath);
-    if (finalPath !== newPath) {
-      fs.renameSync(finalPath, newPath);
-      finalPath = newPath;
-    }
-
     const stats = fs.statSync(finalPath);
     const displayName = customName?.trim() || originalName;
+
+    // Upload to FTP, then remove local temp
+    await uploadToFtp(finalPath, storagePath);
+    fs.unlinkSync(finalPath);
 
     // Save metadata to Firestore
     let fileId = null;
@@ -329,17 +325,25 @@ app.post('/api/files/bulk-download', verifyAuth, async (req, res) => {
     archive.on('error', (err) => res.status(500).json({ success: false, error: err.message }));
     archive.pipe(res);
 
+    const tempFiles = [];
     for (const file of files) {
-      const filePath = file.storagePath
-        ? path.join(uploadsDir, file.storagePath)
-        : (file.savedAs ? path.join(uploadsDir, file.savedAs) : null);
-
-      if (filePath && fs.existsSync(filePath)) {
-        archive.file(filePath, { name: file.originalName || path.basename(filePath) });
+      if (!file.storagePath && !file.savedAs) continue;
+      const remotePath = file.storagePath || file.savedAs;
+      const tmpFile = path.join(chunksDir, `dl-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      try {
+        await downloadFromFtp(remotePath, tmpFile);
+        archive.file(tmpFile, { name: file.originalName || path.basename(remotePath) });
+        tempFiles.push(tmpFile);
+      } catch (dlErr) {
+        console.warn('[bulk-download] Could not download:', remotePath, dlErr.message);
       }
     }
 
     await archive.finalize();
+    // Clean up temp files after archiving
+    for (const tmp of tempFiles) {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    }
   } catch (err) {
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: err.message });
@@ -362,12 +366,9 @@ app.post('/api/files/bulk-delete', verifyAdmin, async (req, res) => {
       if (!doc.exists) continue;
 
       const fileData = doc.data();
-      const filePath = fileData.storagePath
-        ? path.join(uploadsDir, fileData.storagePath)
-        : (fileData.savedAs ? path.join(uploadsDir, fileData.savedAs) : null);
-
-      if (filePath && fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      const remotePath = fileData.storagePath || fileData.savedAs;
+      if (remotePath) {
+        await deleteFromFtp(remotePath);
       }
 
       await docRef.delete();
@@ -380,8 +381,8 @@ app.post('/api/files/bulk-delete', verifyAdmin, async (req, res) => {
   }
 });
 
-// GET /api/files/* - Serve uploaded files with range request support for video/audio seeking
-app.get('/api/files/*path', (req, res) => {
+// GET /api/files/* - Serve uploaded files via FTP proxy with range request support
+app.get('/api/files/*path', async (req, res) => {
   // req.params.path is an array of decoded segments in this Express version
   const segments = Array.isArray(req.params.path) ? req.params.path : [req.params.path];
   // decodeURIComponent handles old Firestore records that stored %2F-encoded paths
@@ -391,30 +392,22 @@ app.get('/api/files/*path', (req, res) => {
   if (requestPath.startsWith('metadata')) return res.status(404).json({ success: false, error: 'Not found.' });
 
   // Prevent path traversal
-  const normalized = path.normalize(requestPath).replace(/^(\.\.(\/|\\|$))+/, '');
-  const fullPath = path.join(uploadsDir, normalized);
+  const normalized = path.posix.normalize(requestPath).replace(/^(\.\.(\/|$))+/, '');
 
-  // Verify the resolved path is still within uploadsDir
-  if (!fullPath.startsWith(uploadsDir)) {
-    return res.status(403).json({ success: false, error: 'Access denied.' });
-  }
-
-  // Resolve actual file path (with legacy flat-file fallback)
-  let resolvedPath = fullPath;
-  if (!fs.existsSync(fullPath)) {
-    const safeName = path.basename(normalized);
-    const flatPath = path.join(uploadsDir, safeName);
-    if (fs.existsSync(flatPath)) {
-      resolvedPath = flatPath;
-    } else {
-      return res.status(404).json({ success: false, error: 'File not found.' });
-    }
-  }
-
-  const safeName = path.basename(resolvedPath);
+  const safeName = path.basename(normalized);
   const ext = path.extname(safeName).toLowerCase();
   const mime = EXT_TO_MIME[ext] || 'application/octet-stream';
-  const stat = fs.statSync(resolvedPath);
+
+  // Download from FTP to a temp file, serve it, then clean up
+  const tmpPath = path.join(chunksDir, `serve-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  try {
+    await downloadFromFtp(normalized, tmpPath);
+  } catch (err) {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    return res.status(404).json({ success: false, error: 'File not found on FTP.' });
+  }
+
+  const stat = fs.statSync(tmpPath);
   const fileSize = stat.size;
 
   res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
@@ -422,12 +415,12 @@ app.get('/api/files/*path', (req, res) => {
 
   const rangeHeader = req.headers.range;
   if (rangeHeader) {
-    // Parse "bytes=start-end"
     const [startStr, endStr] = rangeHeader.replace(/bytes=/, '').split('-');
     const start = parseInt(startStr, 10);
     const end = endStr ? parseInt(endStr, 10) : fileSize - 1;
 
     if (start >= fileSize || end >= fileSize || start > end) {
+      fs.unlinkSync(tmpPath);
       res.setHeader('Content-Range', `bytes */${fileSize}`);
       return res.status(416).end();
     }
@@ -437,12 +430,16 @@ app.get('/api/files/*path', (req, res) => {
     res.setHeader('Content-Length', chunkSize);
     res.setHeader('Content-Type', mime);
     res.status(206);
-    fs.createReadStream(resolvedPath, { start, end }).pipe(res);
+    const stream = fs.createReadStream(tmpPath, { start, end });
+    stream.pipe(res);
+    stream.on('close', () => { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); });
   } else {
     res.setHeader('Content-Length', fileSize);
     res.setHeader('Content-Type', mime);
     res.status(200);
-    fs.createReadStream(resolvedPath).pipe(res);
+    const stream = fs.createReadStream(tmpPath);
+    stream.pipe(res);
+    stream.on('close', () => { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); });
   }
 });
 
@@ -459,7 +456,8 @@ if (fs.existsSync(distPath)) {
 // --- Start server (used by cPanel Passenger & local dev) ---
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Files will be saved to: ${uploadsDir}`);
+  console.log(`FTP host: ${process.env.FTP_HOST || '(not configured)'}`);
+  console.log(`FTP base path: ${process.env.FTP_BASE_PATH || 'uploads'}`);
 });
 
 // Export for Passenger (cPanel Node.js)

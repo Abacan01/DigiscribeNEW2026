@@ -204,7 +204,7 @@ export const config = {
     title: "Medical Transcription and Healthcare Solutions Provider",
     subtitle: "Transforming healthcare documentation with accuracy, security, and efficiency.",
     primaryButton: { text: "Learn more about us", link: "/about" },
-    secondaryButton: { text: "Get free quote", link: "/quote" }
+    secondaryButton: { text: "Get a Quote", link: "/quote" }
   },
 
   stats: {
