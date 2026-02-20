@@ -29,10 +29,14 @@ const chunksDir = path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
 
 // CORS — allow dev + production origins
+// FRONTEND_URL supports comma-separated values, e.g.:
+//   https://digiscribedev2026.onrender.com,https://devteam.digiscribeasiapacific.com
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.FRONTEND_URL,  // set this to your domain, e.g. https://yourdomain.com
+  ...(process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map((u) => u.trim())
+    : []),
 ].filter(Boolean);
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
