@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 
 export default function AboutPage() {
   const animationRef = useScrollAnimation();
-  const [dateInputType, setDateInputType] = useState('text');
 
   useEffect(() => {
     document.title = 'About Us - DigiScribe Transcription Corp.';
@@ -136,57 +134,6 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* Get Quote CTA Section */}
-        <section className="py-12 lg:py-16 bg-white relative section-fade-from-blue">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="bg-white rounded-3xl p-8 md:p-10 shadow-lg border border-primary/20" style={{ boxShadow: '0 4px 30px rgba(14, 165, 233, 0.15)' }}>
-              <h2 className="text-2xl md:text-3xl font-bold gradient-text mb-8">Get a Quote</h2>
-
-              <div className="flex flex-col md:flex-row items-end gap-6">
-                {/* Email Address */}
-                <div className="flex-1 w-full">
-                  <label className="flex items-center gap-2 text-sm text-gray-text mb-3">
-                    <i className="fas fa-envelope text-primary"></i>
-                    Email Address
-                  </label>
-                  <input type="email" className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-300" placeholder="Enter Your Email Address" />
-                </div>
-
-                {/* Contact Number */}
-                <div className="flex-1 w-full">
-                  <label className="flex items-center gap-2 text-sm text-gray-text mb-3">
-                    <i className="fas fa-phone text-primary"></i>
-                    Contact Number
-                  </label>
-                  <input type="tel" className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-300" placeholder="Enter Your Contact Number" />
-                </div>
-
-                {/* Date of Appointment */}
-                <div className="flex-1 w-full">
-                  <label className="flex items-center gap-2 text-sm text-gray-text mb-3">
-                    <i className="fas fa-calendar-alt text-primary"></i>
-                    Date of Appointment
-                  </label>
-                  <input
-                    type={dateInputType}
-                    onFocus={() => setDateInputType('date')}
-                    onBlur={() => setDateInputType('text')}
-                    className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-300"
-                    placeholder="Select Date of Appointment"
-                  />
-                </div>
-
-                {/* Get Quote Button */}
-                <div className="flex-shrink-0 w-full md:w-auto">
-                  <Link to="/quote" className="inline-flex items-center justify-center gap-2 btn-gradient text-white px-8 py-3 rounded-xl text-sm font-semibold w-full md:w-auto">
-                    Get a Quote
-                    <i className="fas fa-check-circle"></i>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </Layout>
   );

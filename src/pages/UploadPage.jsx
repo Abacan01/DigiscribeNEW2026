@@ -306,6 +306,14 @@ export default function UploadPage() {
   const { getIdToken, role } = useAuth();
   const fileInputRef = useRef(null);
 
+  const handleBackNavigation = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(role === 'admin' ? '/admin/dashboard' : '/dashboard');
+  };
+
   // Wizard state
   const [currentStep, setCurrentStep] = useState(1);
   const [uploadMethod, setUploadMethod] = useState(null); // 'file' | 'url'
@@ -1390,6 +1398,14 @@ export default function UploadPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
+          <button
+            type="button"
+            onClick={handleBackNavigation}
+            className="inline-flex items-center gap-2 text-sm font-medium text-gray-text hover:text-primary transition-colors mb-3"
+          >
+            <i className="fas fa-arrow-left text-xs"></i>
+            Back
+          </button>
           <h1 className="text-2xl md:text-3xl font-semibold gradient-text">
             Upload Files
           </h1>

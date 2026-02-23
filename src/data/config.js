@@ -67,7 +67,7 @@ export const config = {
       cardImage: "/images/services/Tanscription%20Services/Medical%20Trans.jpg",
       accentColor: "primary",
       link: "/services/transcription",
-      shortDescription: "Professional transcription services designed to support healthcare providers with accurate documentation of medical records and reports.",
+      shortDescription: "We provide comprehensive transcription solutions that deliver exceptional quality and reliability. Our dedicated team works with precision to meet your documentation needs across various industries and applications.",
       fullDescription: "Our transcription support services convert audio recordings from healthcare providers into accurate, written documentation. Our team of certified transcriptionists ensures every report meets the highest standards of accuracy and compliance.",
       features: [
         "HIPAA-compliant dictation processing",
@@ -90,7 +90,7 @@ export const config = {
       cardImage: "/images/services/Data%20entry/Batch%20Proof%20Report.jpg",
       accentColor: "sky-600",
       link: "/services/data-entry",
-      shortDescription: "Accurate and efficient data entry services for medical records, billing information, and patient data management.",
+      shortDescription: "Our professional data entry specialists deliver accurate, efficient, and cost-effective data processing solutions for businesses across all industries. From simple document digitization to complex database management, we handle your data entry needs with precision and confidentiality.",
       fullDescription: "Our data entry specialists handle the accurate input of patient information, medical records, and billing data into your systems. We ensure data integrity while maintaining strict confidentiality.",
       features: [
         "Patient demographic entry",
@@ -113,7 +113,7 @@ export const config = {
       cardImage: "/images/services/EMR%20Services/Appointment%20Scheduling.png",
       accentColor: "emerald-600",
       link: "/services/emr",
-      shortDescription: "Electronic Medical Records management, data migration, and chart building services for seamless healthcare operations.",
+      shortDescription: "We specialize in seamless EMR data migration, ensuring your patient records are accurately transferred between systems. Our chart building services create complete, organized patient charts from legacy records.",
       fullDescription: "We specialize in seamless EMR data migration, ensuring your patient records are accurately transferred between systems. Our chart building services create complete, organized patient charts from legacy records.",
       features: [
         "Legacy system data extraction",
@@ -136,7 +136,7 @@ export const config = {
       cardImage: "/images/services/Documnt%20Conversion.png",
       accentColor: "violet-600",
       link: "/services/document-conversion",
-      shortDescription: "Converting documents between formats while maintaining accuracy, formatting, and data integrity.",
+      shortDescription: "Our document conversion services transform your files into the formats you need. Whether converting paper documents to digital, or transforming between file formats, we ensure accuracy and maintain data integrity throughout the process.",
       fullDescription: "Our document conversion services transform your files into the formats you need. Whether converting paper documents to digital, or transforming between file formats, we ensure accuracy and maintain data integrity throughout the process.",
       features: [
         "Paper to digital conversion",
@@ -159,7 +159,7 @@ export const config = {
       cardImage: "/images/services/CAD%20Service/2D%20Drafting.jpg",
       accentColor: "amber-600",
       link: "/services/cad",
-      shortDescription: "Computer-Aided Design services for technical drawings, blueprints, and design documentation.",
+      shortDescription: "Our CAD services provide professional technical drawing and design support for various industries. From precise 2D drafting to detailed 3D modeling, we deliver high-quality technical drawings and design documentation that meet industry standards and project requirements.",
       fullDescription: "Our CAD services provide professional technical drawing and design support. From 2D drafting to 3D modeling, we deliver precise and detailed design documentation for various industries.",
       features: [
         "2D drafting and detailing",
@@ -182,7 +182,7 @@ export const config = {
       cardImage: "/images/services/Data%20entry/Product%20Listing.jpg",
       accentColor: "rose-600",
       link: "/services/product-listing",
-      shortDescription: "E-commerce product listing services including data entry, image optimization, and catalog management.",
+      shortDescription: "Our e-commerce product listing services help businesses maximize their online presence. We provide comprehensive catalog management, including product data entry, image optimization, SEO-friendly descriptions, and multi-platform listing to ensure your products reach the widest audience possible.",
       fullDescription: "Our product listing services help e-commerce businesses manage their online catalogs efficiently. We handle product data entry, image optimization, description writing, and catalog organization across multiple platforms.",
       features: [
         "Product data entry",

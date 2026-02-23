@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/layout/ScrollToTop';
@@ -20,6 +21,46 @@ import TranscriptionDetailPage from './pages/TranscriptionDetailPage';
 import UserTranscriptionViewPage from './pages/UserTranscriptionViewPage';
 
 function App() {
+  useEffect(() => {
+    const bindImage = (img) => {
+      if (!(img instanceof HTMLImageElement)) return;
+      if (img.dataset.mediaBound === 'true') return;
+
+      img.dataset.mediaBound = 'true';
+      img.classList.add('media-loading');
+
+      const finalize = () => {
+        img.classList.remove('media-loading');
+        img.classList.add('media-loaded');
+      };
+
+      if (img.complete) {
+        finalize();
+        return;
+      }
+
+      img.addEventListener('load', finalize, { once: true });
+      img.addEventListener('error', finalize, { once: true });
+    };
+
+    document.querySelectorAll('img').forEach(bindImage);
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element)) continue;
+
+          if (node.tagName === 'IMG') bindImage(node);
+          node.querySelectorAll?.('img').forEach(bindImage);
+        }
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

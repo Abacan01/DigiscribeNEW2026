@@ -979,9 +979,22 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
       {/* Content */}
       {isLoading ? (
-        <div className="text-center py-24">
-          <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
-          <p className="text-sm text-gray-text">Loading files...</p>
+        <div className="py-8">
+          <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+            <i className="fas fa-spinner fa-spin text-[11px]"></i>
+            Loading files and folders...
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, idx) => (
+              <div key={idx} className="bg-white rounded-xl border border-gray-100 p-4 animate-pulse">
+                <div className="h-2 w-20 rounded bg-sky-100 mb-4"></div>
+                <div className="h-4 w-3/4 rounded bg-gray-200 mb-2"></div>
+                <div className="h-3 w-1/2 rounded bg-gray-100 mb-4"></div>
+                <div className="h-3 w-full rounded bg-gray-100 mb-2"></div>
+                <div className="h-3 w-2/3 rounded bg-gray-100"></div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : totalItems === 0 && !hasActiveFilters ? (
         <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
@@ -1892,45 +1905,47 @@ export default function AdminDashboardPage() {
 
   return (
     <Layout heroContent={heroContent}>
-      <div className="min-h-screen bg-[#f8fafc]">
+      <div className="min-h-screen bg-[#f8fafc] dashboard-page-enter">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {activeTab === 'files' && (
-            <FilesTab
-              allFiles={allFiles}
-              allFolders={allFolders}
-              filesLoading={filesLoading}
-              filesError={filesError}
-              foldersLoading={foldersLoading}
-              folderActions={folderActions}
-            />
-          )}
-          {activeTab === 'users' && (
-            <div className="space-y-6">
-              {usersError && (
-                <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm text-red-700">{usersError}</p>
-                </div>
-              )}
-              {userMessage && (
-                <div className={`p-4 rounded-xl border transition-all duration-300 ${
-                  userMessage.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <i className={`fas ${userMessage.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-                      <p className={`text-sm font-medium ${userMessage.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{userMessage.text}</p>
-                    </div>
-                    <button onClick={() => setUserMessage(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                      <i className="fas fa-times"></i>
-                    </button>
+          <div key={activeTab} className="dashboard-tab-enter">
+            {activeTab === 'files' && (
+              <FilesTab
+                allFiles={allFiles}
+                allFolders={allFolders}
+                filesLoading={filesLoading}
+                filesError={filesError}
+                foldersLoading={foldersLoading}
+                folderActions={folderActions}
+              />
+            )}
+            {activeTab === 'users' && (
+              <div className="space-y-6">
+                {usersError && (
+                  <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
+                    <i className="fas fa-exclamation-circle text-red-500"></i>
+                    <p className="text-sm text-red-700">{usersError}</p>
                   </div>
-                </div>
-              )}
-              <CreateUserForm onCreateUser={handleCreateUser} loading={usersLoading} />
-              <UserTable users={users} onDeleteUser={handleDeleteUser} onToggleAdmin={handleToggleAdmin} loading={usersLoading} />
-            </div>
-          )}
+                )}
+                {userMessage && (
+                  <div className={`p-4 rounded-xl border transition-all duration-300 ${
+                    userMessage.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <i className={`fas ${userMessage.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
+                        <p className={`text-sm font-medium ${userMessage.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{userMessage.text}</p>
+                      </div>
+                      <button onClick={() => setUserMessage(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <CreateUserForm onCreateUser={handleCreateUser} loading={usersLoading} />
+                <UserTable users={users} onDeleteUser={handleDeleteUser} onToggleAdmin={handleToggleAdmin} loading={usersLoading} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Layout>
