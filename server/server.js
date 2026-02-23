@@ -15,7 +15,7 @@ import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
-import { uploadToFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
+import { uploadToFtp, uploadBufferToFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,6 +105,11 @@ function encodeStorageUrl(storagePath) {
   return storagePath.split('/').map(encodeURIComponent).join('/');
 }
 
+function getTempChunkRemotePath(uploadId, chunkIndex) {
+  const safeUploadId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `_chunks/${safeUploadId}/chunk-${chunkIndex}`;
+}
+
 const EXT_TO_MIME = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.jfif': 'image/jpeg',
   '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp',
@@ -137,7 +142,7 @@ app.use('/api/transcriptions', transcriptionsRouter);
 app.use('/api/folders', foldersRouter);
 
 // POST /api/upload/chunk - receive a single chunk (auth required)
-app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), (req, res) => {
+app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, error: 'No chunk received.' });
 
   const { uploadId, chunkIndex } = req.body || {};
@@ -146,9 +151,18 @@ app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), (req, res
   }
 
   const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${chunkIndex}`);
-  fs.promises.writeFile(chunkPath, req.file.buffer)
-    .then(() => res.json({ success: true }))
-    .catch((err) => res.status(500).json({ success: false, error: err.message || 'Failed to write chunk.' }));
+  try {
+    await fs.promises.writeFile(chunkPath, req.file.buffer);
+
+    if (IS_VERCEL) {
+      const remoteChunkPath = getTempChunkRemotePath(uploadId, chunkIndex);
+      await uploadBufferToFtp(req.file.buffer, remoteChunkPath);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to write chunk.' });
+  }
 });
 
 // POST /api/upload/complete - assemble chunks into final file (auth required)
@@ -209,9 +223,20 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     for (let i = 0; i < totalChunks; i++) {
       const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
       if (!fs.existsSync(chunkPath)) {
-        writeStream.destroy();
-        if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
-        return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
+        if (IS_VERCEL) {
+          try {
+            const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
+            await downloadFromFtp(remoteChunkPath, chunkPath);
+          } catch {
+            writeStream.destroy();
+            if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+            return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
+          }
+        } else {
+          writeStream.destroy();
+          if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+          return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
+        }
       }
 
       await appendChunkToStream(chunkPath);
@@ -230,6 +255,10 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
       const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
       if (fs.existsSync(chunkPath)) {
         await fs.promises.unlink(chunkPath).catch(() => {});
+      }
+      if (IS_VERCEL) {
+        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
+        await deleteFromFtp(remoteChunkPath);
       }
     }
 

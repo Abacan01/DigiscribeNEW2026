@@ -1,5 +1,6 @@
 import { Client } from 'basic-ftp';
 import path from 'path';
+import { Readable } from 'stream';
 
 export const FTP_BASE = process.env.FTP_BASE_PATH || 'uploads';
 
@@ -38,6 +39,25 @@ export async function uploadToFtp(localPath, remotePath) {
     // ensureDir changes cwd — reset to root before uploading to use absolute path
     await client.cd('/');
     await client.uploadFrom(localPath, fullRemote);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * Uploads an in-memory Buffer to the FTP server.
+ *
+ * @param {Buffer} buffer     - File content as Buffer
+ * @param {string} remotePath - Path relative to FTP_BASE
+ */
+export async function uploadBufferToFtp(buffer, remotePath) {
+  const client = await createClient();
+  try {
+    const fullRemote = `${FTP_BASE}/${remotePath}`;
+    const remoteDir = path.posix.dirname(fullRemote);
+    await client.ensureDir(remoteDir);
+    await client.cd('/');
+    await client.uploadFrom(Readable.from(buffer), fullRemote);
   } finally {
     client.close();
   }

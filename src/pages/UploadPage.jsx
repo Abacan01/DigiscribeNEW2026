@@ -15,6 +15,8 @@ const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk
 const MAX_PARALLEL_CHUNKS = 3;
 const CHUNK_UPLOAD_RETRIES = 2;
 const CHUNK_RETRY_BASE_DELAY_MS = 400;
+const COMPLETE_RETRIES = 4;
+const EFFECTIVE_MAX_PARALLEL_CHUNKS = import.meta.env.PROD ? 1 : MAX_PARALLEL_CHUNKS;
 const MAX_DESCRIPTION_LENGTH = 2000;
 
 const SERVICE_CATEGORIES = [
@@ -545,6 +547,45 @@ export default function UploadPage() {
       return 0;
     };
 
+    const completeUploadWithRetry = async ({ uploadId, file, fileName, totalChunks, mimeType }) => {
+      for (let attempt = 0; attempt <= COMPLETE_RETRIES; attempt++) {
+        const completeRes = await fetch('/api/upload/complete', {
+          method: 'POST',
+          headers: { ...authHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uploadId,
+            fileName,
+            totalChunks,
+            mimeType,
+            description,
+            serviceCategory,
+          }),
+        });
+
+        const completeData = await completeRes.json().catch(() => ({}));
+        if (completeRes.ok && completeData.success) {
+          return completeData;
+        }
+
+        const message = completeData.error || `Assembly failed for "${fileName}".`;
+        const missingMatch = message.match(/Missing chunk\s+(\d+)/i);
+
+        if (!missingMatch || attempt === COMPLETE_RETRIES) {
+          throw new Error(message);
+        }
+
+        const missingChunkIndex = Number(missingMatch[1]);
+        await uploadChunkWithRetry({
+          file,
+          uploadId,
+          chunkIndex: missingChunkIndex,
+          customName: fileName,
+        });
+      }
+
+      throw new Error(`Assembly failed for "${fileName}".`);
+    };
+
     for (let idx = 0; idx < filesToUpload.length; idx++) {
       const file = filesToUpload[idx];
       const customName = getFileName(idx);
@@ -552,7 +593,7 @@ export default function UploadPage() {
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
 
       let nextChunkIndex = 0;
-      const workerCount = Math.min(MAX_PARALLEL_CHUNKS, totalChunks);
+      const workerCount = Math.min(EFFECTIVE_MAX_PARALLEL_CHUNKS, totalChunks);
       const workers = Array.from({ length: workerCount }, async () => {
         while (nextChunkIndex < totalChunks) {
           const currentIndex = nextChunkIndex;
@@ -572,22 +613,13 @@ export default function UploadPage() {
 
       await Promise.all(workers);
 
-      const completeRes = await fetch('/api/upload/complete', {
-        method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uploadId,
-          fileName: customName,
-          totalChunks,
-          mimeType: file.type,
-          description,
-          serviceCategory,
-        }),
+      const completeData = await completeUploadWithRetry({
+        uploadId,
+        file,
+        fileName: customName,
+        totalChunks,
+        mimeType: file.type,
       });
-      const completeData = await completeRes.json();
-      if (!completeRes.ok || !completeData.success) {
-        throw new Error(completeData.error || `Assembly failed for "${customName}".`);
-      }
       results.push(completeData.file);
     }
 
