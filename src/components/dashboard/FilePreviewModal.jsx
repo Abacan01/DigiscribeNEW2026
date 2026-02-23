@@ -31,7 +31,9 @@ function isEmbeddableUrl(url) {
     'youtube.com', 'youtu.be',
     'vimeo.com',
     'dailymotion.com',
+    'dai.ly',
     'streamable.com',
+    'facebook.com', 'fb.watch',
     'drive.google.com',
   ];
   try {
@@ -39,6 +41,19 @@ function isEmbeddableUrl(url) {
     return embeddable.some((domain) => hostname.includes(domain));
   } catch {
     return false;
+  }
+}
+
+function getFacebookEmbedUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace('www.', '');
+    if (!host.includes('facebook.com') && !host.includes('fb.watch')) return null;
+    const encodedHref = encodeURIComponent(url);
+    return `https://www.facebook.com/plugins/video.php?href=${encodedHref}&show_text=false&width=1280`;
+  } catch {
+    return null;
   }
 }
 
@@ -122,6 +137,11 @@ export default function FilePreviewModal({ file, onClose }) {
       return { type: 'dailymotion', embedUrl: dmUrl };
     }
 
+    const fbUrl = getFacebookEmbedUrl(sourceUrl);
+    if (fbUrl) {
+      return { type: 'facebook', embedUrl: fbUrl };
+    }
+
     if (isEmbeddableUrl(sourceUrl)) {
       return { type: 'iframe', embedUrl: sourceUrl };
     }
@@ -132,6 +152,7 @@ export default function FilePreviewModal({ file, onClose }) {
   const iconInfo = useMemo(() => {
     if (embedInfo?.type === 'youtube') return { icon: 'fa-brands fa-youtube', color: 'text-red-500 bg-red-50' };
     if (embedInfo?.type === 'vimeo') return { icon: 'fa-brands fa-vimeo-v', color: 'text-cyan-600 bg-cyan-50' };
+    if (embedInfo?.type === 'facebook') return { icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' };
     if (mediaType === 'image') return { icon: 'fa-image', color: 'text-violet-600 bg-violet-50' };
     if (mediaType === 'audio') return { icon: 'fa-music', color: 'text-sky-600 bg-sky-50' };
     if (mediaType === 'video') return { icon: 'fa-video', color: 'text-rose-500 bg-rose-50' };

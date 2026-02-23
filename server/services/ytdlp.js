@@ -94,40 +94,29 @@ export function downloadWithYtdlp(url, outputDir) {
       args.push('--cookies', cookiesFile);
     }
 
-    execFile('yt-dlp', args, { timeout: 300_000, maxBuffer: 10 * 1024 * 1024, env: execEnv }, (err, stdout, stderr) => {
-      if (err) {
-        // Extract a user-friendly message from yt-dlp stderr
-        const combined = stderr || err.message;
-        if (combined.includes('Sign in to confirm') || combined.includes('bot')) {
-          const hasCookies = cookiesFile && fs.existsSync(cookiesFile);
-          const msg = hasCookies
-            ? 'YouTube blocked this download despite cookies being provided. The cookies may be expired — re-export them from your browser and replace the cookies file.'
-            : 'YouTube requires authentication from this server. Set the YTDLP_COOKIES_FILE environment variable to a Netscape-format cookies.txt exported from your browser (see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp).';
-          return reject(new Error(msg));
-        }
-        const errorLines = combined.split('\n');
-        const errorLine = errorLines.find((l) => l.startsWith('ERROR:')) || errorLines[errorLines.length - 1];
-        const cleanMsg = errorLine?.replace(/^ERROR:\s*(\[.*?\]\s*)?/, '').trim() || err.message;
-        return reject(new Error(cleanMsg));
-      }
+    const ytdlpBinEnv = process.env.YTDLP_BIN?.trim();
+    const candidates = [
+      ytdlpBinEnv ? { cmd: ytdlpBinEnv, argsPrefix: [] } : null,
+      { cmd: 'yt-dlp', argsPrefix: [] },
+      { cmd: path.join(os.homedir(), '.local', 'bin', 'yt-dlp'), argsPrefix: [] },
+      { cmd: 'python3', argsPrefix: ['-m', 'yt_dlp'] },
+      { cmd: 'python', argsPrefix: ['-m', 'yt_dlp'] },
+    ].filter(Boolean);
 
+    const parseYtdlpOutput = (stdout) => {
       const lines = stdout.trim().split('\n');
-      // yt-dlp prints title first, then filepath (after_move fires after metadata)
       const title = lines.length >= 2 ? lines[lines.length - 2] : null;
       const filePath = lines[lines.length - 1];
 
       if (!filePath || !fs.existsSync(filePath)) {
-        return reject(new Error('yt-dlp did not produce an output file.'));
+        throw new Error('yt-dlp did not produce an output file.');
       }
 
       const fileName = path.basename(filePath);
       const ext = path.extname(fileName).toLowerCase();
-
-      // Build a clean display name from the video title
       const cleanTitle = title ? title.trim() : fileName.replace(/^\d+-/, '');
       const originalName = cleanTitle.endsWith(ext) ? cleanTitle : `${cleanTitle}${ext}`;
 
-      // Map extension to MIME
       const mimeMap = {
         '.mp4': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska',
         '.mov': 'video/quicktime', '.avi': 'video/x-msvideo', '.flv': 'video/x-flv',
@@ -138,7 +127,46 @@ export function downloadWithYtdlp(url, outputDir) {
       };
       const mimeType = mimeMap[ext] || 'video/mp4';
 
-      resolve({ filePath, fileName, originalName, mimeType });
-    });
+      return { filePath, fileName, originalName, mimeType };
+    };
+
+    const tryCandidate = (index = 0) => {
+      if (index >= candidates.length) {
+        return reject(new Error('yt-dlp is not installed on the server (tried binary and python module fallbacks).'));
+      }
+
+      const candidate = candidates[index];
+      const candidateArgs = [...candidate.argsPrefix, ...args];
+
+      execFile(candidate.cmd, candidateArgs, { timeout: 300_000, maxBuffer: 10 * 1024 * 1024, env: execEnv }, (err, stdout, stderr) => {
+        if (err) {
+          if (err.code === 'ENOENT') {
+            return tryCandidate(index + 1);
+          }
+
+          const combined = stderr || err.message;
+          if (combined.includes('Sign in to confirm') || combined.includes('bot')) {
+            const hasCookies = cookiesFile && fs.existsSync(cookiesFile);
+            const msg = hasCookies
+              ? 'YouTube blocked this download despite cookies being provided. The cookies may be expired — re-export them from your browser and replace the cookies file.'
+              : 'YouTube requires authentication from this server. Set the YTDLP_COOKIES_FILE environment variable to a Netscape-format cookies.txt exported from your browser (see https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp).';
+            return reject(new Error(msg));
+          }
+          const errorLines = combined.split('\n');
+          const errorLine = errorLines.find((l) => l.startsWith('ERROR:')) || errorLines[errorLines.length - 1];
+          const cleanMsg = errorLine?.replace(/^ERROR:\s*(\[.*?\]\s*)?/, '').trim() || err.message;
+          return reject(new Error(cleanMsg));
+        }
+
+        try {
+          const parsed = parseYtdlpOutput(stdout);
+          return resolve(parsed);
+        } catch (parseErr) {
+          return reject(parseErr);
+        }
+      });
+    };
+
+    tryCandidate(0);
   });
 }
