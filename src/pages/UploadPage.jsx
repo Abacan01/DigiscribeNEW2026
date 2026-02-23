@@ -17,31 +17,6 @@ const CHUNK_UPLOAD_RETRIES = 2;
 const CHUNK_RETRY_BASE_DELAY_MS = 400;
 const MAX_DESCRIPTION_LENGTH = 2000;
 
-function normalizeBaseUrl(value) {
-  if (!value) return '';
-  let candidate = String(value).trim();
-  if (!candidate) return '';
-
-  candidate = candidate.replace(/^http\/\//i, 'http://').replace(/^https\/\//i, 'https://');
-  if (!/^https?:\/\//i.test(candidate)) {
-    candidate = `https://${candidate}`;
-  }
-
-  try {
-    const url = new URL(candidate);
-    return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
-  } catch {
-    return '';
-  }
-}
-
-const RAW_UPLOAD_API_BASE = (import.meta.env.VITE_UPLOAD_API_BASE || '').trim();
-const UPLOAD_API_BASE = RAW_UPLOAD_API_BASE
-  .split(',')
-  .map((part) => normalizeBaseUrl(part))
-  .find(Boolean) || '';
-const HAS_UPLOAD_BASE_CONFIG_ERROR = Boolean(RAW_UPLOAD_API_BASE) && !UPLOAD_API_BASE;
-
 const SERVICE_CATEGORIES = [
   {
     label: 'Transcription Support',
@@ -132,10 +107,6 @@ function splitFileName(name) {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function buildUploadApiUrl(path) {
-  return UPLOAD_API_BASE ? `${UPLOAD_API_BASE}${path}` : path;
 }
 
 /* ------------------------------------------------------------------ */
@@ -550,7 +521,7 @@ export default function UploadPage() {
         formData.append('uploadId', uploadId);
         formData.append('chunkIndex', String(chunkIndex));
 
-        const chunkRes = await fetch(buildUploadApiUrl('/api/upload/chunk'), {
+        const chunkRes = await fetch('/api/upload/chunk', {
           method: 'POST',
           headers: authHeaders,
           body: formData,
@@ -562,10 +533,6 @@ export default function UploadPage() {
 
         const errData = await chunkRes.json().catch(() => ({}));
         const errMsg = errData.error || `Chunk upload failed for "${customName}".`;
-
-        if (errMsg.includes('ENOSPC') || errMsg.toLowerCase().includes('temporary storage is full')) {
-          throw new Error('Upload failed because server temporary storage is full. Please retry with fewer/smaller files or try again later.');
-        }
 
         if (attempt === CHUNK_UPLOAD_RETRIES) {
           throw new Error(errMsg);
@@ -605,7 +572,7 @@ export default function UploadPage() {
 
       await Promise.all(workers);
 
-      const completeRes = await fetch(buildUploadApiUrl('/api/upload/complete'), {
+      const completeRes = await fetch('/api/upload/complete', {
         method: 'POST',
         headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -641,7 +608,7 @@ export default function UploadPage() {
       setProgress(Math.round(((i) / urls.length) * 100));
 
       try {
-        const res = await fetch(buildUploadApiUrl('/api/upload/url'), {
+        const res = await fetch('/api/upload/url', {
           method: 'POST',
           headers: { ...authHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urls[i], customName: urlNames[i] || '', description, serviceCategory }),
@@ -1401,20 +1368,6 @@ export default function UploadPage() {
 
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
           <div className="p-8 lg:p-12">
-            {HAS_UPLOAD_BASE_CONFIG_ERROR && (
-              <div className="mb-6 p-4 bg-red-50 rounded-xl border border-red-100">
-                <div className="flex items-start gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500 mt-0.5"></i>
-                  <div>
-                    <p className="text-sm font-semibold text-red-700">Upload API configuration is invalid.</p>
-                    <p className="text-xs text-red-600 mt-1 break-all">
-                      Check <span className="font-semibold">VITE_UPLOAD_API_BASE</span>. Current value: {RAW_UPLOAD_API_BASE}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Step Indicator */}
             <StepIndicator steps={stepLabels} currentStep={currentStep} />
 

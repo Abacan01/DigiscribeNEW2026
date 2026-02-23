@@ -23,9 +23,6 @@ const __dirname = path.dirname(__filename);
 const IS_VERCEL = !!process.env.VERCEL;
 const app = express();
 const PORT = process.env.PORT || 3001;
-const TMP_ARTIFACT_TTL_MS = parseInt(process.env.TMP_ARTIFACT_TTL_MS || `${60 * 60 * 1000}`, 10); // 1 hour
-const TMP_CLEANUP_INTERVAL_MS = parseInt(process.env.TMP_CLEANUP_INTERVAL_MS || `${2 * 60 * 1000}`, 10); // 2 minutes
-let lastTmpCleanupAt = 0;
 
 // Email transporter (optional — only active when SMTP_USER/PASS are configured)
 let emailTransporter = null;
@@ -48,71 +45,17 @@ console.log('[startup] adminDb initialized:', !!adminDb);
 const chunksDir = IS_VERCEL ? '/tmp/chunks' : path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
 
-async function cleanupStaleTmpArtifacts({ force = false } = {}) {
-  const now = Date.now();
-  if (!force && (now - lastTmpCleanupAt) < TMP_CLEANUP_INTERVAL_MS) return;
-  lastTmpCleanupAt = now;
-
-  try {
-    const entries = await fs.promises.readdir(chunksDir, { withFileTypes: true });
-
-    await Promise.all(entries.map(async (entry) => {
-      const fullPath = path.join(chunksDir, entry.name);
-      const stats = await fs.promises.stat(fullPath).catch(() => null);
-      if (!stats) return;
-
-      const isExpired = (now - stats.mtimeMs) > TMP_ARTIFACT_TTL_MS;
-      if (!isExpired) return;
-
-      if (entry.isDirectory()) {
-        await fs.promises.rm(fullPath, { recursive: true, force: true }).catch(() => {});
-      } else {
-        await fs.promises.unlink(fullPath).catch(() => {});
-      }
-    }));
-  } catch (err) {
-    console.warn('[tmp-cleanup] warning:', err.message);
-  }
-}
-
-cleanupStaleTmpArtifacts({ force: true }).catch(() => {});
-
 // CORS — allow dev + production origins
 // FRONTEND_URL supports comma-separated values, e.g.:
 //   https://digiscribedev2026.onrender.com,https://devteam.digiscribeasiapacific.com
-const allowedOriginSet = new Set([
+const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   ...(process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map((u) => u.trim())
     : []),
-  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
-  'https://digiscribe.vercel.app',
-  'https://devteam.digiscribeasiapacific.com',
-].filter(Boolean));
-
-app.use(cors({
-  origin(origin, callback) {
-    // Allow non-browser/server-to-server requests.
-    if (!origin) return callback(null, true);
-
-    if (allowedOriginSet.has(origin)) {
-      return callback(null, true);
-    }
-
-    // Allow Vercel preview and production subdomains.
-    try {
-      const { hostname } = new URL(origin);
-      if (hostname.endsWith('.vercel.app')) {
-        return callback(null, true);
-      }
-    } catch {
-      // Fall through to rejection
-    }
-
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
-  },
-}));
+].filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // Accept any image/*, audio/*, video/* MIME type.
@@ -203,32 +146,15 @@ app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), (req, res
   }
 
   const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${chunkIndex}`);
-  cleanupStaleTmpArtifacts().catch(() => {});
-
   fs.promises.writeFile(chunkPath, req.file.buffer)
     .then(() => res.json({ success: true }))
-    .catch((err) => {
-      if (err?.code === 'ENOSPC') {
-        return res.status(507).json({
-          success: false,
-          error: 'Server temporary storage is full (ENOSPC). Please retry shortly or upload fewer/smaller files.',
-        });
-      }
-      return res.status(500).json({ success: false, error: err.message || 'Failed to write chunk.' });
-    });
+    .catch((err) => res.status(500).json({ success: false, error: err.message || 'Failed to write chunk.' }));
 });
 
 // POST /api/upload/complete - assemble chunks into final file (auth required)
 app.post('/api/upload/complete', verifyAuth, async (req, res) => {
-  let uploadId = null;
-  let totalChunks = 0;
-  let finalPath = null;
-
   try {
-    const payload = req.body || {};
-    uploadId = payload.uploadId;
-    totalChunks = parseInt(payload.totalChunks, 10) || 0;
-    const { fileName, mimeType, description, serviceCategory, folderId } = payload;
+    const { uploadId, fileName, totalChunks, mimeType, description, serviceCategory, folderId } = req.body;
 
     console.log('[upload/complete] Received fileName:', fileName);
 
@@ -247,7 +173,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${Date.now()}-${safeName}`;
     const storagePath = `${storageSub}/${finalName}`;
-    finalPath = path.join(storageDir, finalName);
+    const finalPath = path.join(storageDir, finalName);
     const writeStream = fs.createWriteStream(finalPath);
 
     const appendChunkToStream = (chunkPath) => new Promise((resolve, reject) => {
@@ -299,6 +225,14 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
 
     const stats = await fs.promises.stat(finalPath);
 
+    // Clean up chunk files
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
+      if (fs.existsSync(chunkPath)) {
+        await fs.promises.unlink(chunkPath).catch(() => {});
+      }
+    }
+
     // Upload assembled file to FTP, then remove local temp
     await uploadToFtp(finalPath, storagePath);
     await fs.promises.unlink(finalPath).catch(() => {});
@@ -339,21 +273,6 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Assembly failed.' });
-  } finally {
-    if (uploadId && totalChunks > 0) {
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
-        if (fs.existsSync(chunkPath)) {
-          await fs.promises.unlink(chunkPath).catch(() => {});
-        }
-      }
-    }
-
-    if (finalPath && fs.existsSync(finalPath)) {
-      await fs.promises.unlink(finalPath).catch(() => {});
-    }
-
-    cleanupStaleTmpArtifacts().catch(() => {});
   }
 });
 

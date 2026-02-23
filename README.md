@@ -21,7 +21,9 @@ To bypass Vercel serverless limits for large uploads, configure uploads to hit y
 
 ```dotenv
 VITE_UPLOAD_API_BASE=https://devteam.digiscribeasiapacific.com
+VITE_UPLOAD_CHUNK_SIZE_MB=1
 ```
 
 - When set, upload endpoints (`/api/upload/chunk`, `/api/upload/complete`, `/api/upload/url`) are sent to that base URL.
 - When not set, uploads use same-origin `/api/*` routes.
+- `VITE_UPLOAD_CHUNK_SIZE_MB` is optional; useful when uploading through shared-host proxies with low `post_max_size`/`upload_max_filesize` limits.
