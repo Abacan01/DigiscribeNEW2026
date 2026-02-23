@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import { useAuth } from '../contexts/AuthContext';
+import { fileUrl } from '../lib/fileUrl';
 
 export default function UserTranscriptionViewPage() {
   const { transcriptionId } = useParams();
@@ -156,7 +157,7 @@ export default function UserTranscriptionViewPage() {
                 )}
                 {t.deliveryFileUrl && (
                   <a
-                    href={t.deliveryFileUrl}
+                    href={fileUrl(t.deliveryFileUrl)}
                     download={t.deliveryFileName || true}
                     className="inline-flex items-center gap-2 btn-gradient text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all"
                   >

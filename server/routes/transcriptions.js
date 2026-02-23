@@ -9,8 +9,9 @@ import { uploadToFtp, deleteFromFtp } from '../services/ftp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const IS_VERCEL = !!process.env.VERCEL;
 // Temporary staging directory for incoming delivery file uploads
-const deliveryTmpDir = path.join(__dirname, '..', 'chunks', '_deliveries');
+const deliveryTmpDir = IS_VERCEL ? '/tmp/_deliveries' : path.join(__dirname, '..', 'chunks', '_deliveries');
 if (!fs.existsSync(deliveryTmpDir)) fs.mkdirSync(deliveryTmpDir, { recursive: true });
 
 const deliveryUpload = multer({

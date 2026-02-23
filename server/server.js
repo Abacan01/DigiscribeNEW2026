@@ -20,6 +20,7 @@ import { uploadToFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const IS_VERCEL = !!process.env.VERCEL;
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -40,7 +41,8 @@ if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
 console.log('[startup] adminDb initialized:', !!adminDb);
 
 // Temporary directory for chunk uploads and in-flight processing
-const chunksDir = path.join(__dirname, 'chunks');
+// Vercel serverless functions can only write to /tmp
+const chunksDir = IS_VERCEL ? '/tmp/chunks' : path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
 
 // CORS — allow dev + production origins
@@ -728,22 +730,26 @@ app.get('/api/files/*path', async (req, res) => {
   }
 });
 
-// --- Serve React build (production) ---
-const distPath = path.join(__dirname, '..', 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-  // Catch-all: serve index.html for React Router client-side routes
-  app.get('*splat', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+// --- Serve React build (production, non-Vercel only — Vercel serves static files natively) ---
+if (!IS_VERCEL) {
+  const distPath = path.join(__dirname, '..', 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    // Catch-all: serve index.html for React Router client-side routes
+    app.get('*splat', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+}
+
+// --- Start server (used by cPanel Passenger & local dev, skipped on Vercel) ---
+if (!IS_VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`FTP host: ${process.env.FTP_HOST || '(not configured)'}`);
+    console.log(`FTP base path: ${process.env.FTP_BASE_PATH || 'uploads'}`);
   });
 }
 
-// --- Start server (used by cPanel Passenger & local dev) ---
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`FTP host: ${process.env.FTP_HOST || '(not configured)'}`);
-  console.log(`FTP base path: ${process.env.FTP_BASE_PATH || 'uploads'}`);
-});
-
-// Export for Passenger (cPanel Node.js)
+// Export for Vercel serverless functions & Passenger (cPanel Node.js)
 export default app;
