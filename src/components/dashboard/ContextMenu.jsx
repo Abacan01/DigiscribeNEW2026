@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function ContextMenu({ x, y, items, onClose }) {
   const menuRef = useRef(null);
@@ -30,7 +31,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
     }
   }, [x, y]);
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       className="fixed z-[100] bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 min-w-[180px]"
@@ -64,6 +65,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
           </button>
         )
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

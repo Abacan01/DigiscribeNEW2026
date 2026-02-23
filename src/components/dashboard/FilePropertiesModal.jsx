@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+
 const PLATFORM_MAP = [
   { pattern: /youtu\.?be/i, label: 'YouTube' },
   { pattern: /facebook\.com|fb\.com/i, label: 'Facebook' },
@@ -52,7 +54,7 @@ export default function FilePropertiesModal({ file, onClose }) {
     { label: 'File ID', value: file.id },
   ].filter(Boolean);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -93,6 +95,7 @@ export default function FilePropertiesModal({ file, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

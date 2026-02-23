@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { fileUrl } from '../../lib/fileUrl';
 
 function getMediaType(type) {
@@ -383,7 +384,7 @@ export default function FilePreviewModal({ file, onClose }) {
     );
   };
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
@@ -459,6 +460,7 @@ export default function FilePreviewModal({ file, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, parentFolderId }) {
   const [name, setName] = useState('');
@@ -32,7 +33,7 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -101,6 +102,7 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

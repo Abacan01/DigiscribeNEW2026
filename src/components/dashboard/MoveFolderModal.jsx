@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 function buildTree(folders, excludeIds = new Set()) {
   const children = {};
@@ -88,7 +89,7 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -174,6 +175,7 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
