@@ -83,6 +83,26 @@ export async function uploadBufferToFtp(buffer, remotePath) {
 }
 
 /**
+ * Appends an in-memory Buffer to an existing remote file.
+ * Creates target directory if needed.
+ *
+ * @param {Buffer} buffer     - File content as Buffer
+ * @param {string} remotePath - Path relative to FTP_BASE
+ */
+export async function appendBufferToFtp(buffer, remotePath) {
+  const client = await createClient();
+  try {
+    const fullRemote = `${FTP_BASE}/${remotePath}`;
+    const remoteDir = path.posix.dirname(fullRemote);
+    await client.ensureDir(remoteDir);
+    await client.cd('/');
+    await client.appendFrom(Readable.from(buffer), fullRemote);
+  } finally {
+    client.close();
+  }
+}
+
+/**
  * Downloads a file from the FTP server to a local path.
  *
  * @param {string} remotePath - Path relative to FTP_BASE
@@ -163,6 +183,26 @@ export async function deleteFromFtp(remotePath) {
     await client.remove(`${FTP_BASE}/${remotePath}`);
   } catch (err) {
     console.warn('[ftp] delete warning:', err.message);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * Renames/moves a remote file within the FTP base path.
+ *
+ * @param {string} fromRemotePath - Source path relative to FTP_BASE
+ * @param {string} toRemotePath   - Target path relative to FTP_BASE
+ */
+export async function moveOnFtp(fromRemotePath, toRemotePath) {
+  const client = await createClient();
+  try {
+    const fromFull = `${FTP_BASE}/${fromRemotePath}`;
+    const toFull = `${FTP_BASE}/${toRemotePath}`;
+    const toDir = path.posix.dirname(toFull);
+    await client.ensureDir(toDir);
+    await client.cd('/');
+    await client.rename(fromFull, toFull);
   } finally {
     client.close();
   }

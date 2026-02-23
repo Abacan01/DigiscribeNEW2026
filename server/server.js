@@ -4,7 +4,6 @@ import multer from 'multer';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
-import { PassThrough } from 'stream';
 import archiver from 'archiver';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
@@ -16,7 +15,7 @@ import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
-import { uploadToFtp, uploadStreamToFtp, uploadBufferToFtp, downloadFromFtp, downloadBufferFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
+import { uploadToFtp, uploadBufferToFtp, appendBufferToFtp, moveOnFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -111,6 +110,11 @@ function getTempChunkRemotePath(uploadId, chunkIndex) {
   return `_chunks/${safeUploadId}/chunk-${chunkIndex}`;
 }
 
+function getAssemblingRemotePath(uploadId) {
+  const safeUploadId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `_assembling/${safeUploadId}.bin`;
+}
+
 const EXT_TO_MIME = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.jfif': 'image/jpeg',
   '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp',
@@ -154,7 +158,27 @@ app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), async (re
   try {
     if (IS_VERCEL) {
       const remoteChunkPath = getTempChunkRemotePath(uploadId, chunkIndex);
+
+      // Idempotency guard: if this chunk already exists remotely, treat as success.
+      try {
+        await ftpFileSize(remoteChunkPath);
+        return res.json({ success: true, dedup: true });
+      } catch {
+        // chunk not found remotely; continue
+      }
+
+      const assemblingPath = getAssemblingRemotePath(uploadId);
+
+      // Store chunk artifact for validation/retry
       await uploadBufferToFtp(req.file.buffer, remoteChunkPath);
+
+      // Build remote assembled file incrementally to make /complete fast.
+      if (Number(chunkIndex) === 0) {
+        await uploadBufferToFtp(req.file.buffer, assemblingPath);
+      } else {
+        await appendBufferToFtp(req.file.buffer, assemblingPath);
+      }
+
       return res.json({ success: true });
     }
 
@@ -190,34 +214,26 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     let finalSize = 0;
 
     if (IS_VERCEL) {
-      const assembledStream = new PassThrough();
-      const uploadPromise = uploadStreamToFtp(assembledStream, storagePath);
-
-      try {
-        for (let i = 0; i < totalChunks; i++) {
-          const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-          let chunkBuffer;
-          try {
-            chunkBuffer = await downloadBufferFromFtp(remoteChunkPath);
-          } catch {
-            assembledStream.destroy();
-            return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
-          }
-
-          finalSize += chunkBuffer.length;
-          const canContinue = assembledStream.write(chunkBuffer);
-          if (!canContinue) {
-            await new Promise((resolve) => assembledStream.once('drain', resolve));
-          }
-
-          await deleteFromFtp(remoteChunkPath);
+      // Ensure all chunks were received remotely before finalizing.
+      for (let i = 0; i < totalChunks; i++) {
+        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
+        try {
+          await ftpFileSize(remoteChunkPath);
+        } catch {
+          return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
         }
+      }
 
-        assembledStream.end();
-        await uploadPromise;
-      } catch (streamErr) {
-        assembledStream.destroy(streamErr);
-        throw streamErr;
+      const assemblingPath = getAssemblingRemotePath(uploadId);
+      finalSize = await ftpFileSize(assemblingPath);
+
+      // Move assembled temp file into final structured storage path (no re-upload copy).
+      await moveOnFtp(assemblingPath, storagePath);
+
+      // Clean up remote chunk artifacts
+      for (let i = 0; i < totalChunks; i++) {
+        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
+        await deleteFromFtp(remoteChunkPath);
       }
     } else {
       const storageDir = path.join(chunksDir, 'assemble-tmp');
