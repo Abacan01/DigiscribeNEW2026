@@ -576,37 +576,6 @@ footer::after {
   background: linear-gradient(90deg, transparent 0%, rgba(14, 165, 233, 0.15) 20%, rgba(14, 165, 233, 0.15) 80%, transparent 100%);
 }
 
-/* Dashboard entrance animations */
-@keyframes dashboardPageEnter {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.995);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes dashboardTabEnter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dashboard-page-enter {
-  animation: dashboardPageEnter 260ms ease-out;
-}
-
-.dashboard-tab-enter {
-  animation: dashboardTabEnter 220ms ease-out both;
-}
-
 /* Global image loading indicator */
 @keyframes mediaPulse {
   0%,
@@ -632,8 +601,6 @@ img.media-loaded {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-page-enter,
-  .dashboard-tab-enter,
   img.media-loading,
   img.media-loaded {
     animation: none !important;
