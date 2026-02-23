@@ -50,6 +50,13 @@ function getFacebookEmbedUrl(url) {
     const parsed = new URL(url);
     const host = parsed.hostname.replace('www.', '');
     if (!host.includes('facebook.com') && !host.includes('fb.watch')) return null;
+
+    // Facebook share URLs (e.g. /share/r/...) are often redirect wrappers and
+    // can produce unstable iframe behavior; let those open as external links.
+    if (host.includes('facebook.com') && parsed.pathname.startsWith('/share/')) {
+      return null;
+    }
+
     const encodedHref = encodeURIComponent(url);
     return `https://www.facebook.com/plugins/video.php?href=${encodedHref}&show_text=false&width=1280`;
   } catch {

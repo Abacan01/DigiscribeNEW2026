@@ -4,6 +4,7 @@ import multer from 'multer';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import { PassThrough } from 'stream';
 import archiver from 'archiver';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
@@ -15,7 +16,7 @@ import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
-import { uploadToFtp, uploadBufferToFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
+import { uploadToFtp, uploadStreamToFtp, uploadBufferToFtp, downloadFromFtp, downloadBufferFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -150,14 +151,15 @@ app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), async (re
     return res.status(400).json({ success: false, error: 'Missing uploadId or chunkIndex.' });
   }
 
-  const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${chunkIndex}`);
   try {
-    await fs.promises.writeFile(chunkPath, req.file.buffer);
-
     if (IS_VERCEL) {
       const remoteChunkPath = getTempChunkRemotePath(uploadId, chunkIndex);
       await uploadBufferToFtp(req.file.buffer, remoteChunkPath);
+      return res.json({ success: true });
     }
+
+    const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${chunkIndex}`);
+    await fs.promises.writeFile(chunkPath, req.file.buffer);
 
     res.json({ success: true });
   } catch (err) {
@@ -181,90 +183,110 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     }
 
     // Build structured storage path
-    const storageSub = buildStoragePath(serviceCategory, mimeType);    const storageDir = path.join(chunksDir, 'assemble-tmp');
-    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
-
+    const storageSub = buildStoragePath(serviceCategory, mimeType);
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${Date.now()}-${safeName}`;
     const storagePath = `${storageSub}/${finalName}`;
-    const finalPath = path.join(storageDir, finalName);
-    const writeStream = fs.createWriteStream(finalPath);
+    let finalSize = 0;
 
-    const appendChunkToStream = (chunkPath) => new Promise((resolve, reject) => {
-      const readStream = fs.createReadStream(chunkPath);
+    if (IS_VERCEL) {
+      const assembledStream = new PassThrough();
+      const uploadPromise = uploadStreamToFtp(assembledStream, storagePath);
 
-      const onReadError = (err) => {
-        cleanup();
-        reject(err);
-      };
-
-      const onWriteError = (err) => {
-        cleanup();
-        reject(err);
-      };
-
-      const onReadEnd = () => {
-        cleanup();
-        resolve();
-      };
-
-      const cleanup = () => {
-        readStream.off('error', onReadError);
-        readStream.off('end', onReadEnd);
-        writeStream.off('error', onWriteError);
-      };
-
-      readStream.on('error', onReadError);
-      readStream.on('end', onReadEnd);
-      writeStream.on('error', onWriteError);
-      readStream.pipe(writeStream, { end: false });
-    });
-
-    for (let i = 0; i < totalChunks; i++) {
-      const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
-      if (!fs.existsSync(chunkPath)) {
-        if (IS_VERCEL) {
+      try {
+        for (let i = 0; i < totalChunks; i++) {
+          const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
+          let chunkBuffer;
           try {
-            const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-            await downloadFromFtp(remoteChunkPath, chunkPath);
+            chunkBuffer = await downloadBufferFromFtp(remoteChunkPath);
           } catch {
-            writeStream.destroy();
-            if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+            assembledStream.destroy();
             return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
           }
-        } else {
+
+          finalSize += chunkBuffer.length;
+          const canContinue = assembledStream.write(chunkBuffer);
+          if (!canContinue) {
+            await new Promise((resolve) => assembledStream.once('drain', resolve));
+          }
+
+          await deleteFromFtp(remoteChunkPath);
+        }
+
+        assembledStream.end();
+        await uploadPromise;
+      } catch (streamErr) {
+        assembledStream.destroy(streamErr);
+        throw streamErr;
+      }
+    } else {
+      const storageDir = path.join(chunksDir, 'assemble-tmp');
+      if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+
+      const finalPath = path.join(storageDir, finalName);
+      const writeStream = fs.createWriteStream(finalPath);
+
+      const appendChunkToStream = (chunkPath) => new Promise((resolve, reject) => {
+        const readStream = fs.createReadStream(chunkPath);
+
+        const onReadError = (err) => {
+          cleanup();
+          reject(err);
+        };
+
+        const onWriteError = (err) => {
+          cleanup();
+          reject(err);
+        };
+
+        const onReadEnd = () => {
+          cleanup();
+          resolve();
+        };
+
+        const cleanup = () => {
+          readStream.off('error', onReadError);
+          readStream.off('end', onReadEnd);
+          writeStream.off('error', onWriteError);
+        };
+
+        readStream.on('error', onReadError);
+        readStream.on('end', onReadEnd);
+        writeStream.on('error', onWriteError);
+        readStream.pipe(writeStream, { end: false });
+      });
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
+        if (!fs.existsSync(chunkPath)) {
           writeStream.destroy();
           if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
           return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
         }
+
+        await appendChunkToStream(chunkPath);
       }
 
-      await appendChunkToStream(chunkPath);
+      writeStream.end();
+      await new Promise((resolve, reject) => {
+        writeStream.on('finish', resolve);
+        writeStream.on('error', reject);
+      });
+
+      const stats = await fs.promises.stat(finalPath);
+      finalSize = stats.size;
+
+      // Clean up local chunk files
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
+        if (fs.existsSync(chunkPath)) {
+          await fs.promises.unlink(chunkPath).catch(() => {});
+        }
+      }
+
+      await uploadToFtp(finalPath, storagePath);
+      await fs.promises.unlink(finalPath).catch(() => {});
     }
-
-    writeStream.end();
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-
-    const stats = await fs.promises.stat(finalPath);
-
-    // Clean up chunk files
-    for (let i = 0; i < totalChunks; i++) {
-      const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
-      if (fs.existsSync(chunkPath)) {
-        await fs.promises.unlink(chunkPath).catch(() => {});
-      }
-      if (IS_VERCEL) {
-        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-        await deleteFromFtp(remoteChunkPath);
-      }
-    }
-
-    // Upload assembled file to FTP, then remove local temp
-    await uploadToFtp(finalPath, storagePath);
-    await fs.promises.unlink(finalPath).catch(() => {});
 
     // Save metadata to Firestore
     let fileId = null;
@@ -274,7 +296,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
         originalName: fileName,
         savedAs: finalName,
         storagePath,
-        size: stats.size,
+        size: finalSize,
         type: mimeType,
         fileCategory: getFileCategory(mimeType),
         uploadedBy: req.user.uid,
@@ -297,7 +319,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     res.json({
       success: true,
       message: `"${fileName}" uploaded successfully.`,
-      file: { originalName: fileName, savedAs: finalName, size: stats.size, type: mimeType },
+      file: { originalName: fileName, savedAs: finalName, size: finalSize, type: mimeType },
       fileId,
     });
   } catch (err) {

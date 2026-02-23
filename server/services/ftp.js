@@ -1,6 +1,6 @@
 import { Client } from 'basic-ftp';
 import path from 'path';
-import { Readable } from 'stream';
+import { Readable, PassThrough } from 'stream';
 
 export const FTP_BASE = process.env.FTP_BASE_PATH || 'uploads';
 
@@ -39,6 +39,25 @@ export async function uploadToFtp(localPath, remotePath) {
     // ensureDir changes cwd — reset to root before uploading to use absolute path
     await client.cd('/');
     await client.uploadFrom(localPath, fullRemote);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * Uploads a readable stream to the FTP server.
+ *
+ * @param {Readable} readable  - Source readable stream
+ * @param {string} remotePath  - Path relative to FTP_BASE
+ */
+export async function uploadStreamToFtp(readable, remotePath) {
+  const client = await createClient();
+  try {
+    const fullRemote = `${FTP_BASE}/${remotePath}`;
+    const remoteDir = path.posix.dirname(fullRemote);
+    await client.ensureDir(remoteDir);
+    await client.cd('/');
+    await client.uploadFrom(readable, fullRemote);
   } finally {
     client.close();
   }
@@ -89,6 +108,29 @@ export async function streamFromFtp(remotePath, writableStream) {
   const client = await createClient();
   try {
     await client.downloadTo(writableStream, `${FTP_BASE}/${remotePath}`);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * Downloads a remote file into memory as a Buffer.
+ * Intended for small-to-medium chunks (e.g. upload chunk blocks).
+ *
+ * @param {string} remotePath - Path relative to FTP_BASE
+ * @returns {Promise<Buffer>}
+ */
+export async function downloadBufferFromFtp(remotePath) {
+  const client = await createClient();
+  try {
+    const parts = [];
+    const sink = new PassThrough();
+    sink.on('data', (chunk) => {
+      parts.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+
+    await client.downloadTo(sink, `${FTP_BASE}/${remotePath}`);
+    return Buffer.concat(parts);
   } finally {
     client.close();
   }
