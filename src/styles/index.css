@@ -310,6 +310,8 @@ header.nav-scrolled {
   overflow: hidden;
   padding: 0 60px;
   cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
 }
 
 .carousel-container:active {
@@ -337,30 +339,31 @@ header.nav-scrolled {
 
 .carousel-slide.active {
   opacity: 1;
-  transform: scale(1.1);
+  transform: scale(1.06);
   z-index: 3;
   box-shadow: 0 8px 40px rgba(14, 165, 233, 0.15), 0 4px 20px rgba(0, 0, 0, 0.1);
   filter: blur(0);
 }
 
 .carousel-slide.prev {
-  opacity: 0.6;
-  transform: scale(0.65) translateX(-200px);
+  opacity: 0.45;
+  transform: scale(0.6) translateX(-240px);
   z-index: 2;
-  filter: blur(2px);
+  filter: blur(4px);
 }
 
 .carousel-slide.next {
-  opacity: 0.6;
-  transform: scale(0.65) translateX(200px);
+  opacity: 0.45;
+  transform: scale(0.6) translateX(240px);
   z-index: 2;
-  filter: blur(2px);
+  filter: blur(4px);
 }
 
 .carousel-img {
   width: 180px;
   height: 60px;
   object-fit: contain;
+  -webkit-user-drag: none;
 }
 
 @media (min-width: 768px) {
@@ -379,15 +382,17 @@ header.nav-scrolled {
   }
 
   .carousel-slide.active {
-    transform: scale(1.15);
+    transform: scale(1.1);
   }
 
   .carousel-slide.prev {
-    transform: scale(0.7) translateX(-320px);
+    transform: scale(0.62) translateX(-380px);
+    filter: blur(5px);
   }
 
   .carousel-slide.next {
-    transform: scale(0.7) translateX(320px);
+    transform: scale(0.62) translateX(380px);
+    filter: blur(5px);
   }
 }
 

@@ -12,7 +12,12 @@ const ACCEPT_DOCS = 'application/pdf,application/msword,application/vnd.openxmlf
 const ACCEPT_STRING = ACCEPT_MEDIA; // default; admins get ACCEPT_MEDIA + ACCEPT_DOCS
 const MAX_FILES = 10;
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk
+const MAX_PARALLEL_CHUNKS = 3;
+const CHUNK_UPLOAD_RETRIES = 2;
+const CHUNK_RETRY_BASE_DELAY_MS = 400;
 const MAX_DESCRIPTION_LENGTH = 2000;
+const RAW_UPLOAD_API_BASE = (import.meta.env.VITE_UPLOAD_API_BASE || '').trim();
+const UPLOAD_API_BASE = RAW_UPLOAD_API_BASE.replace(/\/+$/, '');
 
 const SERVICE_CATEGORIES = [
   {
@@ -100,6 +105,14 @@ function splitFileName(name) {
   const lastDot = name.lastIndexOf('.');
   if (lastDot <= 0) return { base: name, ext: '' };
   return { base: name.slice(0, lastDot), ext: name.slice(lastDot) };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildUploadApiUrl(path) {
+  return UPLOAD_API_BASE ? `${UPLOAD_API_BASE}${path}` : path;
 }
 
 /* ------------------------------------------------------------------ */
@@ -491,46 +504,85 @@ export default function UploadPage() {
     const results = [];
     const startTime = Date.now();
 
+    const updateProgress = () => {
+      const pct = Math.round((uploadedBytes / totalSize) * 100);
+      setProgress(pct);
+
+      const elapsed = (Date.now() - startTime) / 1000;
+      if (elapsed > 0.5 && uploadedBytes > 0) {
+        const speed = uploadedBytes / elapsed;
+        const remaining = (totalSize - uploadedBytes) / speed;
+        setEta(formatEta(remaining));
+      }
+    };
+
+    const uploadChunkWithRetry = async ({ file, uploadId, chunkIndex, customName }) => {
+      const start = chunkIndex * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const blob = file.slice(start, end);
+
+      for (let attempt = 0; attempt <= CHUNK_UPLOAD_RETRIES; attempt++) {
+        const formData = new FormData();
+        formData.append('chunk', blob);
+        formData.append('uploadId', uploadId);
+        formData.append('chunkIndex', String(chunkIndex));
+
+        const chunkRes = await fetch(buildUploadApiUrl('/api/upload/chunk'), {
+          method: 'POST',
+          headers: authHeaders,
+          body: formData,
+        });
+
+        if (chunkRes.ok) {
+          return end - start;
+        }
+
+        const errData = await chunkRes.json().catch(() => ({}));
+        const errMsg = errData.error || `Chunk upload failed for "${customName}".`;
+
+        if (errMsg.includes('ENOSPC') || errMsg.toLowerCase().includes('temporary storage is full')) {
+          throw new Error('Upload failed because server temporary storage is full. Please retry with fewer/smaller files or try again later.');
+        }
+
+        if (attempt === CHUNK_UPLOAD_RETRIES) {
+          throw new Error(errMsg);
+        }
+
+        const backoff = CHUNK_RETRY_BASE_DELAY_MS * (attempt + 1);
+        await wait(backoff);
+      }
+
+      return 0;
+    };
+
     for (let idx = 0; idx < filesToUpload.length; idx++) {
       const file = filesToUpload[idx];
       const customName = getFileName(idx);
       const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
 
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const blob = file.slice(start, end);
+      let nextChunkIndex = 0;
+      const workerCount = Math.min(MAX_PARALLEL_CHUNKS, totalChunks);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (nextChunkIndex < totalChunks) {
+          const currentIndex = nextChunkIndex;
+          nextChunkIndex += 1;
 
-        const formData = new FormData();
-        formData.append('chunk', blob);
-        formData.append('uploadId', uploadId);
-        formData.append('chunkIndex', String(i));
+          const bytesUploaded = await uploadChunkWithRetry({
+            file,
+            uploadId,
+            chunkIndex: currentIndex,
+            customName,
+          });
 
-        const chunkRes = await fetch('/api/upload/chunk', {
-          method: 'POST',
-          headers: authHeaders,
-          body: formData,
-        });
-        if (!chunkRes.ok) {
-          const errData = await chunkRes.json().catch(() => ({}));
-          throw new Error(errData.error || `Chunk upload failed for "${customName}".`);
+          uploadedBytes += bytesUploaded;
+          updateProgress();
         }
+      });
 
-        uploadedBytes += (end - start);
-        const pct = Math.round((uploadedBytes / totalSize) * 100);
-        setProgress(pct);
+      await Promise.all(workers);
 
-        // Calculate ETA
-        const elapsed = (Date.now() - startTime) / 1000;
-        if (elapsed > 0.5 && uploadedBytes > 0) {
-          const speed = uploadedBytes / elapsed;
-          const remaining = (totalSize - uploadedBytes) / speed;
-          setEta(formatEta(remaining));
-        }
-      }
-
-      const completeRes = await fetch('/api/upload/complete', {
+      const completeRes = await fetch(buildUploadApiUrl('/api/upload/complete'), {
         method: 'POST',
         headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -566,7 +618,7 @@ export default function UploadPage() {
       setProgress(Math.round(((i) / urls.length) * 100));
 
       try {
-        const res = await fetch('/api/upload/url', {
+        const res = await fetch(buildUploadApiUrl('/api/upload/url'), {
           method: 'POST',
           headers: { ...authHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urls[i], customName: urlNames[i] || '', description, serviceCategory }),

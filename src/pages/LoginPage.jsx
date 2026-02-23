@@ -6,6 +6,22 @@ function getDefaultRoute(role) {
   return role === 'admin' ? '/admin/dashboard' : '/dashboard';
 }
 
+function resolvePostLoginRoute(role, fromPath) {
+  const defaultRoute = getDefaultRoute(role);
+  if (!fromPath) return defaultRoute;
+
+  const isAdminRoute = fromPath.startsWith('/admin');
+
+  if (role === 'admin') {
+    if (fromPath === '/dashboard') return defaultRoute;
+    return fromPath;
+  }
+
+  if (isAdminRoute) return defaultRoute;
+
+  return fromPath;
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +38,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (user) {
       const from = location.state?.from?.pathname;
-      const target = from || getDefaultRoute(role);
+      const target = resolvePostLoginRoute(role, from);
       navigate(target, { replace: true });
     }
   }, [user, role, navigate, location.state]);

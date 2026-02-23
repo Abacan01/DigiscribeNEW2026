@@ -1,13 +1,12 @@
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 function getDefaultRoute(role) {
   return role === 'admin' ? '/admin/dashboard' : '/dashboard';
 }
 
-export default function ProtectedRoute({ children, allowedRoles }) {
+export default function HomeRoute({ children }) {
   const { user, loading, role } = useAuth();
-  const location = useLocation();
 
   if (loading) {
     return (
@@ -20,11 +19,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(role)) {
+  if (user) {
     return <Navigate to={getDefaultRoute(role)} replace />;
   }
 

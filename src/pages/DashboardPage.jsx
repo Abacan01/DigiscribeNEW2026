@@ -4,6 +4,7 @@ import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
 import FileCard from '../components/dashboard/FileCard';
 import FolderCard from '../components/dashboard/FolderCard';
+import FolderRow from '../components/dashboard/FolderRow';
 import Breadcrumbs from '../components/dashboard/Breadcrumbs';
 import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
@@ -30,9 +31,72 @@ const SORT_OPTIONS = [
   { value: 'size', label: 'Largest First' },
 ];
 
+function formatRelativeDate(dateString) {
+  if (!dateString) return '--';
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+    });
+  } catch {
+    return '--';
+  }
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '--';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function getFileIcon(type) {
+  if (!type) return 'fa-file';
+  if (type.startsWith('image/')) return 'fa-image';
+  if (type.startsWith('audio/')) return 'fa-music';
+  if (type.startsWith('video/')) return 'fa-video';
+  if (type === 'application/pdf') return 'fa-file-pdf';
+  if (type.includes('word') || type === 'application/msword') return 'fa-file-word';
+  if (type.includes('excel') || type.includes('spreadsheet')) return 'fa-file-excel';
+  if (type.includes('powerpoint') || type.includes('presentation')) return 'fa-file-powerpoint';
+  if (type === 'text/plain' || type === 'text/csv') return 'fa-file-alt';
+  return 'fa-file';
+}
+
+function getFileIconColor(type) {
+  if (!type) return 'text-gray-400 bg-gray-50';
+  if (type.startsWith('image/')) return 'text-violet-600 bg-violet-50';
+  if (type.startsWith('audio/')) return 'text-sky-600 bg-sky-50';
+  if (type.startsWith('video/')) return 'text-rose-500 bg-rose-50';
+  if (type === 'application/pdf') return 'text-red-600 bg-red-50';
+  if (type.includes('word') || type === 'application/msword') return 'text-blue-600 bg-blue-50';
+  if (type.includes('excel') || type.includes('spreadsheet')) return 'text-green-600 bg-green-50';
+  if (type.includes('powerpoint') || type.includes('presentation')) return 'text-orange-600 bg-orange-50';
+  return 'text-gray-400 bg-gray-50';
+}
+
 export default function DashboardPage() {
   const { user, isAdmin, getIdToken } = useAuth();
   const [activeTab, setActiveTab] = useState('files');
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return 'grid';
+    const saved = window.localStorage.getItem('user-dashboard-view-mode');
+    return saved === 'list' ? 'list' : 'grid';
+  });
   const [statusFilter, setStatusFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -73,6 +137,12 @@ export default function DashboardPage() {
       fetchTranscriptions();
     }
   }, [activeTab, fetchTranscriptions]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('user-dashboard-view-mode', viewMode);
+    }
+  }, [viewMode]);
 
   // Compute counts (across ALL files, not just current folder)
   const counts = useMemo(() => {
@@ -628,6 +698,27 @@ export default function DashboardPage() {
                     <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
                   </div>
 
+                  <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 self-start">
+                    <button
+                      onClick={() => setViewMode('grid')}
+                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                        viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+                      }`}
+                    >
+                      <i className="fas fa-th-large text-[10px]"></i>
+                      Grid
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                        viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+                      }`}
+                    >
+                      <i className="fas fa-list text-[10px]"></i>
+                      List
+                    </button>
+                  </div>
+
                   {hasActiveFilters && (
                     <button
                       onClick={clearFilters}
@@ -816,6 +907,183 @@ export default function DashboardPage() {
                     <i className="fas fa-times text-xs"></i>
                     Clear all filters
                   </button>
+                </div>
+              ) : viewMode === 'list' ? (
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px]">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50/50">
+                          <th className="text-center px-3 py-3 w-10">
+                            <input
+                              type="checkbox"
+                              checked={allSelected}
+                              ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                              onChange={toggleSelectAll}
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                            />
+                          </th>
+                          <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">File</th>
+                          <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Type</th>
+                          <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Status</th>
+                          <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Date</th>
+                          <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-36">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {currentSubfolders.map((folder) => {
+                          if (renamingFolder === folder.id) {
+                            return (
+                              <tr key={folder.id} className="bg-primary/[0.03]">
+                                <td colSpan={6} className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500">
+                                      <i className="fas fa-folder text-xs"></i>
+                                    </div>
+                                    <form
+                                      className="flex-1 flex items-center gap-2"
+                                      onSubmit={(e) => {
+                                        e.preventDefault();
+                                        if (renameValue.trim()) handleRenameFolder(folder.id, renameValue.trim());
+                                      }}
+                                    >
+                                      <input
+                                        type="text"
+                                        value={renameValue}
+                                        onChange={(e) => setRenameValue(e.target.value)}
+                                        autoFocus
+                                        className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        onBlur={() => setRenamingFolder(null)}
+                                        onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFolder(null); }}
+                                      />
+                                      <button type="submit" className="text-primary hover:text-primary-dark">
+                                        <i className="fas fa-check text-sm"></i>
+                                      </button>
+                                    </form>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return (
+                            <FolderRow
+                              key={folder.id}
+                              folder={folder}
+                              onOpen={(id) => setCurrentFolderId(id)}
+                              onContextMenu={handleFolderContextMenu}
+                              isSelected={false}
+                              onSelect={() => {}}
+                              isDragOver={dragOverFolder === folder.id}
+                              onDragOver={setDragOverFolder}
+                              onDragLeave={() => setDragOverFolder(null)}
+                              onDrop={handleDrop}
+                              itemCount={folderItemCounts[folder.id] || 0}
+                            />
+                          );
+                        })}
+
+                        {filteredFiles.map((file) => {
+                          const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
+                          const isSelected = selectedIds.has(file.id);
+                          const isUrl = file.sourceType === 'url';
+                          return (
+                            <tr
+                              key={file.id}
+                              className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+                                e.dataTransfer.effectAllowed = 'move';
+                              }}
+                              onContextMenu={(e) => handleFileContextMenu(e, file)}
+                            >
+                              <td className="text-center px-3 py-3.5">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSelect(file.id)}
+                                  className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                                />
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewFile(file)}
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} hover:scale-105 transition-transform cursor-pointer`}
+                                    title="Preview file"
+                                  >
+                                    <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
+                                  </button>
+                                  <div className="min-w-0">
+                                    <span
+                                      className="text-sm font-medium text-dark-text truncate block max-w-[280px] cursor-pointer hover:text-primary transition-colors"
+                                      title={file.originalName}
+                                      onClick={() => setPreviewFile(file)}
+                                    >
+                                      {file.originalName}
+                                    </span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[10px] text-gray-400">{formatSize(file.size)}</span>
+                                      {file.serviceCategory && (
+                                        <span className="text-[10px] text-indigo-500">• {file.serviceCategory}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="text-xs text-gray-text">
+                                  {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
+                                  <i className={`fas ${cfg.icon} text-[9px]`}></i>
+                                  {cfg.label}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="text-sm text-gray-text">{formatRelativeDate(file.uploadedAt)}</span>
+                              </td>
+                              <td className="px-4 py-3.5 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewFile(file)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                                    title="Preview file"
+                                  >
+                                    <i className="fas fa-eye text-[10px]"></i>
+                                    View
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (isUrl) return;
+                                      const a = document.createElement('a');
+                                      a.href = fileUrl(file.url);
+                                      a.download = file.originalName;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      a.remove();
+                                    }}
+                                    disabled={isUrl}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title={isUrl ? 'URL uploads cannot be downloaded from here' : 'Download file'}
+                                  >
+                                    <i className="fas fa-download text-[10px]"></i>
+                                    Download
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <div

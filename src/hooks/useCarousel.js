@@ -7,7 +7,9 @@ export function useCarousel(totalSlides, autoPlayInterval = 2000) {
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const startX = useRef(0);
+  const startY = useRef(0);
   const dragDelta = useRef(0);
+  const swipeAxis = useRef(null);
 
   const goTo = useCallback((index) => {
     if (isAnimating) return;
@@ -54,24 +56,47 @@ export function useCarousel(totalSlides, autoPlayInterval = 2000) {
   const handleMouseDown = useCallback((e) => {
     isDragging.current = true;
     startX.current = e.clientX || e.touches?.[0]?.clientX || 0;
+    startY.current = e.clientY || e.touches?.[0]?.clientY || 0;
     dragDelta.current = 0;
+    swipeAxis.current = null;
     clearInterval(intervalRef.current);
   }, []);
 
   const handleMouseMove = useCallback((e) => {
     if (!isDragging.current) return;
     const currentX = e.clientX || e.touches?.[0]?.clientX || 0;
-    dragDelta.current = currentX - startX.current;
+    const currentY = e.clientY || e.touches?.[0]?.clientY || 0;
+    const deltaX = currentX - startX.current;
+    const deltaY = currentY - startY.current;
+
+    if (!swipeAxis.current && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
+      swipeAxis.current = Math.abs(deltaX) > Math.abs(deltaY) ? 'x' : 'y';
+    }
+
+    if (swipeAxis.current === 'y') return;
+
+    dragDelta.current = deltaX;
+
+    if (e.cancelable) {
+      e.preventDefault();
+    }
   }, []);
 
   const handleMouseUp = useCallback(() => {
     if (!isDragging.current) return;
     isDragging.current = false;
-    if (dragDelta.current > 50) {
+    if (swipeAxis.current !== 'x') {
+      swipeAxis.current = null;
+      resetAutoPlay();
+      return;
+    }
+
+    if (dragDelta.current > 40) {
       prev();
-    } else if (dragDelta.current < -50) {
+    } else if (dragDelta.current < -40) {
       next();
     }
+    swipeAxis.current = null;
     resetAutoPlay();
   }, [prev, next, resetAutoPlay]);
 
@@ -101,6 +126,7 @@ export function useCarousel(totalSlides, autoPlayInterval = 2000) {
       onTouchStart: handleMouseDown,
       onTouchMove: handleMouseMove,
       onTouchEnd: handleMouseUp,
+      onTouchCancel: handleMouseUp,
     },
   };
 }

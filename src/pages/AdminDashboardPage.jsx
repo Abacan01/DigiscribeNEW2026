@@ -4,6 +4,7 @@ import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
 import FolderRow from '../components/dashboard/FolderRow';
 import FolderCard from '../components/dashboard/FolderCard';
+import FileCard from '../components/dashboard/FileCard';
 import Breadcrumbs from '../components/dashboard/Breadcrumbs';
 import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
@@ -153,6 +154,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [serviceFilter, setServiceFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return 'list';
+    const saved = window.localStorage.getItem('admin-dashboard-view-mode');
+    return saved === 'grid' ? 'grid' : 'list';
+  });
   const [message, setMessage] = useState(null);
   const [statusLoading, setStatusLoading] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -586,6 +592,12 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return () => document.removeEventListener('keydown', handler);
   }, [filteredFiles]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('admin-dashboard-view-mode', viewMode);
+    }
+  }, [viewMode]);
+
   // Context menu handlers
   const handleFileContextMenu = useCallback((e, file) => {
     e.preventDefault();
@@ -777,6 +789,27 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               ))}
             </select>
             <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
+          </div>
+
+          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 self-start">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+              }`}
+            >
+              <i className="fas fa-th-large text-[10px]"></i>
+              Grid
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+              }`}
+            >
+              <i className="fas fa-list text-[10px]"></i>
+              List
+            </button>
           </div>
 
           <button
@@ -993,7 +1026,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             Clear all filters
           </button>
         </div>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
           {/* Desktop Table */}
           <div className="hidden lg:block overflow-x-auto">
@@ -1397,6 +1430,120 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               <span className="text-gray-300 font-mono text-[9px]">Ctrl+A</span>
             </button>
           </div>
+        </div>
+      ) : (
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+          onDragOver={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+            }
+          }}
+          onDrop={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+              handleDrop(e, currentFolderId);
+            }
+          }}
+        >
+          {currentSubfolders.map((folder) => {
+            if (renamingFolder === folder.id) {
+              return (
+                <div key={folder.id} className="bg-white rounded-xl border border-primary/30 p-5 ring-2 ring-primary/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500">
+                      <i className="fas fa-folder text-lg"></i>
+                    </div>
+                    <form
+                      className="flex-1 flex items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (renameValue.trim()) handleRenameFolder(folder.id, renameValue.trim());
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        autoFocus
+                        className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        onBlur={() => setRenamingFolder(null)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setRenamingFolder(null); }}
+                      />
+                      <button type="submit" className="text-primary hover:text-primary-dark">
+                        <i className="fas fa-check text-sm"></i>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                onOpen={(id) => setCurrentFolderId(id)}
+                onContextMenu={handleFolderContextMenu}
+                isDragOver={dragOverFolder === folder.id}
+                onDragOver={setDragOverFolder}
+                onDragLeave={() => setDragOverFolder(null)}
+                onDrop={handleDrop}
+                itemCount={folderItemCounts[folder.id] || 0}
+                showOwner
+              />
+            );
+          })}
+
+          {filteredFiles.map((file) => {
+            const isSelected = selectedIds.has(file.id);
+            return (
+              <div
+                key={file.id}
+                className={`relative transition-all ${isSelected ? 'ring-2 ring-primary/30 rounded-xl' : ''}`}
+                draggable={renamingFileId !== file.id}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onContextMenu={(e) => handleFileContextMenu(e, file)}
+              >
+                <div className="absolute top-3 left-3 z-10">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(file.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shadow-sm"
+                  />
+                </div>
+                <FileCard
+                  file={file}
+                  isAdmin
+                  onStatusChange={handleStatusChange}
+                  onPreview={setPreviewFile}
+                />
+              </div>
+            );
+          })}
+
+          {filteredFiles.length > 0 && (
+            <div className="md:col-span-2 xl:col-span-3">
+              <button
+                onClick={toggleSelectAll}
+                className="w-full py-2.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-text hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                  readOnly
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-primary pointer-events-none"
+                />
+                {allSelected ? 'Deselect All' : 'Select All'}
+                <span className="text-gray-300 font-mono text-[9px]">Ctrl+A</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

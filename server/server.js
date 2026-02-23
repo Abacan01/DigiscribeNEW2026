@@ -23,6 +23,9 @@ const __dirname = path.dirname(__filename);
 const IS_VERCEL = !!process.env.VERCEL;
 const app = express();
 const PORT = process.env.PORT || 3001;
+const TMP_ARTIFACT_TTL_MS = parseInt(process.env.TMP_ARTIFACT_TTL_MS || `${60 * 60 * 1000}`, 10); // 1 hour
+const TMP_CLEANUP_INTERVAL_MS = parseInt(process.env.TMP_CLEANUP_INTERVAL_MS || `${2 * 60 * 1000}`, 10); // 2 minutes
+let lastTmpCleanupAt = 0;
 
 // Email transporter (optional — only active when SMTP_USER/PASS are configured)
 let emailTransporter = null;
@@ -45,17 +48,71 @@ console.log('[startup] adminDb initialized:', !!adminDb);
 const chunksDir = IS_VERCEL ? '/tmp/chunks' : path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
 
+async function cleanupStaleTmpArtifacts({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && (now - lastTmpCleanupAt) < TMP_CLEANUP_INTERVAL_MS) return;
+  lastTmpCleanupAt = now;
+
+  try {
+    const entries = await fs.promises.readdir(chunksDir, { withFileTypes: true });
+
+    await Promise.all(entries.map(async (entry) => {
+      const fullPath = path.join(chunksDir, entry.name);
+      const stats = await fs.promises.stat(fullPath).catch(() => null);
+      if (!stats) return;
+
+      const isExpired = (now - stats.mtimeMs) > TMP_ARTIFACT_TTL_MS;
+      if (!isExpired) return;
+
+      if (entry.isDirectory()) {
+        await fs.promises.rm(fullPath, { recursive: true, force: true }).catch(() => {});
+      } else {
+        await fs.promises.unlink(fullPath).catch(() => {});
+      }
+    }));
+  } catch (err) {
+    console.warn('[tmp-cleanup] warning:', err.message);
+  }
+}
+
+cleanupStaleTmpArtifacts({ force: true }).catch(() => {});
+
 // CORS — allow dev + production origins
 // FRONTEND_URL supports comma-separated values, e.g.:
 //   https://digiscribedev2026.onrender.com,https://devteam.digiscribeasiapacific.com
-const allowedOrigins = [
+const allowedOriginSet = new Set([
   'http://localhost:5173',
   'http://localhost:3000',
   ...(process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map((u) => u.trim())
     : []),
-].filter(Boolean);
-app.use(cors({ origin: allowedOrigins }));
+  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+  'https://digiscribe.vercel.app',
+  'https://devteam.digiscribeasiapacific.com',
+].filter(Boolean));
+
+app.use(cors({
+  origin(origin, callback) {
+    // Allow non-browser/server-to-server requests.
+    if (!origin) return callback(null, true);
+
+    if (allowedOriginSet.has(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow Vercel preview and production subdomains.
+    try {
+      const { hostname } = new URL(origin);
+      if (hostname.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+    } catch {
+      // Fall through to rejection
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+}));
 app.use(express.json());
 
 // Accept any image/*, audio/*, video/* MIME type.
@@ -146,15 +203,32 @@ app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), (req, res
   }
 
   const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${chunkIndex}`);
-  fs.writeFileSync(chunkPath, req.file.buffer);
+  cleanupStaleTmpArtifacts().catch(() => {});
 
-  res.json({ success: true });
+  fs.promises.writeFile(chunkPath, req.file.buffer)
+    .then(() => res.json({ success: true }))
+    .catch((err) => {
+      if (err?.code === 'ENOSPC') {
+        return res.status(507).json({
+          success: false,
+          error: 'Server temporary storage is full (ENOSPC). Please retry shortly or upload fewer/smaller files.',
+        });
+      }
+      return res.status(500).json({ success: false, error: err.message || 'Failed to write chunk.' });
+    });
 });
 
 // POST /api/upload/complete - assemble chunks into final file (auth required)
 app.post('/api/upload/complete', verifyAuth, async (req, res) => {
+  let uploadId = null;
+  let totalChunks = 0;
+  let finalPath = null;
+
   try {
-    const { uploadId, fileName, totalChunks, mimeType, description, serviceCategory, folderId } = req.body;
+    const payload = req.body || {};
+    uploadId = payload.uploadId;
+    totalChunks = parseInt(payload.totalChunks, 10) || 0;
+    const { fileName, mimeType, description, serviceCategory, folderId } = payload;
 
     console.log('[upload/complete] Received fileName:', fileName);
 
@@ -173,8 +247,38 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${Date.now()}-${safeName}`;
     const storagePath = `${storageSub}/${finalName}`;
-    const finalPath = path.join(storageDir, finalName);
+    finalPath = path.join(storageDir, finalName);
     const writeStream = fs.createWriteStream(finalPath);
+
+    const appendChunkToStream = (chunkPath) => new Promise((resolve, reject) => {
+      const readStream = fs.createReadStream(chunkPath);
+
+      const onReadError = (err) => {
+        cleanup();
+        reject(err);
+      };
+
+      const onWriteError = (err) => {
+        cleanup();
+        reject(err);
+      };
+
+      const onReadEnd = () => {
+        cleanup();
+        resolve();
+      };
+
+      const cleanup = () => {
+        readStream.off('error', onReadError);
+        readStream.off('end', onReadEnd);
+        writeStream.off('error', onWriteError);
+      };
+
+      readStream.on('error', onReadError);
+      readStream.on('end', onReadEnd);
+      writeStream.on('error', onWriteError);
+      readStream.pipe(writeStream, { end: false });
+    });
 
     for (let i = 0; i < totalChunks; i++) {
       const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
@@ -183,24 +287,21 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
         if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
         return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
       }
-      const chunkData = fs.readFileSync(chunkPath);
-      writeStream.write(chunkData);
+
+      await appendChunkToStream(chunkPath);
     }
 
     writeStream.end();
-    await new Promise((resolve) => writeStream.on('finish', resolve));
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
 
-    const stats = fs.statSync(finalPath);
-
-    // Clean up chunk files
-    for (let i = 0; i < totalChunks; i++) {
-      const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
-      if (fs.existsSync(chunkPath)) fs.unlinkSync(chunkPath);
-    }
+    const stats = await fs.promises.stat(finalPath);
 
     // Upload assembled file to FTP, then remove local temp
     await uploadToFtp(finalPath, storagePath);
-    fs.unlinkSync(finalPath);
+    await fs.promises.unlink(finalPath).catch(() => {});
 
     // Save metadata to Firestore
     let fileId = null;
@@ -238,6 +339,21 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Assembly failed.' });
+  } finally {
+    if (uploadId && totalChunks > 0) {
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(chunksDir, `${uploadId}-chunk-${i}`);
+        if (fs.existsSync(chunkPath)) {
+          await fs.promises.unlink(chunkPath).catch(() => {});
+        }
+      }
+    }
+
+    if (finalPath && fs.existsSync(finalPath)) {
+      await fs.promises.unlink(finalPath).catch(() => {});
+    }
+
+    cleanupStaleTmpArtifacts().catch(() => {});
   }
 });
 
