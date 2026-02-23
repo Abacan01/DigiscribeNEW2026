@@ -786,49 +786,58 @@ app.get('/api/files/*path', async (req, res) => {
   const ext = path.extname(safeName).toLowerCase();
   const mime = EXT_TO_MIME[ext] || 'application/octet-stream';
 
-  // Download from FTP to a temp file, serve it, then clean up
-  const tmpPath = path.join(chunksDir, `serve-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  let fileSize;
   try {
-    await downloadFromFtp(normalized, tmpPath);
-  } catch (err) {
-    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    fileSize = await ftpFileSize(normalized);
+  } catch {
     return res.status(404).json({ success: false, error: 'File not found on FTP.' });
   }
-
-  const stat = fs.statSync(tmpPath);
-  const fileSize = stat.size;
 
   const isDownload = req.query.download === '1';
   res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeName}"`);
   res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', mime);
 
   const rangeHeader = req.headers.range;
   if (rangeHeader) {
     const [startStr, endStr] = rangeHeader.replace(/bytes=/, '').split('-');
-    const start = parseInt(startStr, 10);
-    const end = endStr ? parseInt(endStr, 10) : fileSize - 1;
+    const parsedStart = parseInt(startStr, 10);
+    const start = Number.isFinite(parsedStart) ? parsedStart : 0;
 
-    if (start >= fileSize || end >= fileSize || start > end) {
-      fs.unlinkSync(tmpPath);
+    // We stream to EOF for reliability on large media files. Explicit end ranges
+    // are treated as open-ended ranges to avoid buffering entire files locally.
+    const parsedEnd = endStr ? parseInt(endStr, 10) : fileSize - 1;
+    const end = Number.isFinite(parsedEnd) ? Math.max(parsedEnd, start) : fileSize - 1;
+    const streamEnd = fileSize - 1;
+
+    if (start >= fileSize || start > end) {
       res.setHeader('Content-Range', `bytes */${fileSize}`);
       return res.status(416).end();
     }
 
-    const chunkSize = end - start + 1;
-    res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+    const chunkSize = streamEnd - start + 1;
+    res.setHeader('Content-Range', `bytes ${start}-${streamEnd}/${fileSize}`);
     res.setHeader('Content-Length', chunkSize);
-    res.setHeader('Content-Type', mime);
     res.status(206);
-    const stream = fs.createReadStream(tmpPath, { start, end });
-    stream.pipe(res);
-    stream.on('close', () => { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); });
+
+    try {
+      await streamFromFtp(normalized, res, { startAt: start });
+    } catch (err) {
+      if (!res.headersSent) {
+        return res.status(500).json({ success: false, error: 'Failed to stream file.' });
+      }
+    }
   } else {
     res.setHeader('Content-Length', fileSize);
-    res.setHeader('Content-Type', mime);
     res.status(200);
-    const stream = fs.createReadStream(tmpPath);
-    stream.pipe(res);
-    stream.on('close', () => { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); });
+
+    try {
+      await streamFromFtp(normalized, res, { startAt: 0 });
+    } catch {
+      if (!res.headersSent) {
+        return res.status(500).json({ success: false, error: 'Failed to stream file.' });
+      }
+    }
   }
 });
 

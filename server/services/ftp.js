@@ -123,11 +123,13 @@ export async function downloadFromFtp(remotePath, localPath) {
  *
  * @param {string}   remotePath     - Path relative to FTP_BASE
  * @param {Writable} writableStream - Destination writable stream
+ * @param {{ startAt?: number }} [options] - Optional stream options
  */
-export async function streamFromFtp(remotePath, writableStream) {
+export async function streamFromFtp(remotePath, writableStream, options = {}) {
+  const { startAt = 0 } = options;
   const client = await createClient();
   try {
-    await client.downloadTo(writableStream, `${FTP_BASE}/${remotePath}`);
+    await client.downloadTo(writableStream, `${FTP_BASE}/${remotePath}`, startAt);
   } finally {
     client.close();
   }

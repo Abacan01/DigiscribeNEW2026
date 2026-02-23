@@ -86,6 +86,8 @@ export default function FilePreviewModal({ file, onClose }) {
   const [textContent, setTextContent] = useState(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaError, setMediaError] = useState(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -104,6 +106,11 @@ export default function FilePreviewModal({ file, onClose }) {
   };
 
   const mediaType = getMediaType(file.type);
+
+  useEffect(() => {
+    setMediaError(null);
+    setMediaLoading(mediaType === 'video' || mediaType === 'audio');
+  }, [file.id, mediaType]);
 
   // Fetch text file content for preview
   useEffect(() => {
@@ -250,15 +257,71 @@ export default function FilePreviewModal({ file, onClose }) {
     }
 
     if (mediaType === 'video') {
+      if (mediaError) {
+        return (
+          <div className="text-center py-12">
+            <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3">
+              <i className="fas fa-exclamation-triangle text-amber-500 text-xl"></i>
+            </div>
+            <p className="text-sm font-medium text-dark-text mb-1">Unable to preview this video in-browser</p>
+            <p className="text-xs text-gray-text mb-5">
+              The file may be very large, still processing, or not supported by this browser codec.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {file.url && (
+                <a
+                  href={fileUrl(file.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-medium text-dark-text rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <i className="fas fa-up-right-from-square text-xs"></i>
+                  Open Direct
+                </a>
+              )}
+              {file.url && (
+                <a
+                  href={fileUrl(file.url) + '?download=1'}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
+                >
+                  <i className="fas fa-download text-xs"></i>
+                  Download Video
+                </a>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       return (
-        <video
-          controls
-          className="max-w-full max-h-[70vh] rounded-lg shadow-sm"
-          preload="metadata"
-        >
-          <source src={fileUrl(file.url)} type={file.type} />
-          Your browser does not support the video element.
-        </video>
+        <div className="relative">
+          <video
+            controls
+            className="max-w-full max-h-[70vh] rounded-lg shadow-sm"
+            preload="metadata"
+            playsInline
+            onLoadedData={() => setMediaLoading(false)}
+            onCanPlay={() => setMediaLoading(false)}
+            onWaiting={() => setMediaLoading(true)}
+            onPlaying={() => setMediaLoading(false)}
+            onError={() => {
+              setMediaLoading(false);
+              setMediaError('Video failed to load.');
+            }}
+          >
+            <source src={fileUrl(file.url)} type={file.type} />
+            Your browser does not support the video element.
+          </video>
+
+          {mediaLoading && (
+            <div className="absolute inset-0 rounded-lg bg-black/25 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/90 text-xs font-medium text-gray-700 shadow">
+                <i className="fas fa-spinner fa-spin text-primary"></i>
+                Loading video preview...
+              </div>
+            </div>
+          )}
+        </div>
       );
     }
 
