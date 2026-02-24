@@ -1,6 +1,6 @@
 import { Client } from 'basic-ftp';
 import path from 'path';
-import { Readable, PassThrough } from 'stream';
+import { Readable, PassThrough, Writable } from 'stream';
 
 export const FTP_BASE = process.env.FTP_BASE_PATH || 'uploads';
 
@@ -123,13 +123,62 @@ export async function downloadFromFtp(remotePath, localPath) {
  *
  * @param {string}   remotePath     - Path relative to FTP_BASE
  * @param {Writable} writableStream - Destination writable stream
- * @param {{ startAt?: number }} [options] - Optional stream options
+ * @param {{ startAt?: number, maxBytes?: number }} [options] - Optional stream options
  */
 export async function streamFromFtp(remotePath, writableStream, options = {}) {
-  const { startAt = 0 } = options;
+  const { startAt = 0, maxBytes } = options;
   const client = await createClient();
   try {
-    await client.downloadTo(writableStream, `${FTP_BASE}/${remotePath}`, startAt);
+    if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+      await client.downloadTo(writableStream, `${FTP_BASE}/${remotePath}`, startAt);
+      return;
+    }
+
+    let forwarded = 0;
+    let completedEarly = false;
+
+    const limiter = new Writable({
+      write(chunk, encoding, callback) {
+        if (completedEarly) return callback();
+
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
+        const remaining = maxBytes - forwarded;
+
+        if (remaining <= 0) {
+          completedEarly = true;
+          writableStream.end();
+          client.close();
+          return callback();
+        }
+
+        const slice = buffer.length <= remaining ? buffer : buffer.subarray(0, remaining);
+        forwarded += slice.length;
+
+        const finalize = () => {
+          if (forwarded >= maxBytes) {
+            completedEarly = true;
+            writableStream.end();
+            client.close();
+          }
+          callback();
+        };
+
+        if (!writableStream.write(slice)) {
+          writableStream.once('drain', finalize);
+        } else {
+          finalize();
+        }
+      },
+      final(callback) {
+        if (!completedEarly) writableStream.end();
+        callback();
+      },
+    });
+
+    await client.downloadTo(limiter, `${FTP_BASE}/${remotePath}`, startAt).catch((err) => {
+      if (completedEarly) return;
+      throw err;
+    });
   } finally {
     client.close();
   }

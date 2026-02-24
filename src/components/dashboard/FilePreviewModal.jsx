@@ -31,10 +31,7 @@ function isEmbeddableUrl(url) {
   const embeddable = [
     'youtube.com', 'youtu.be',
     'vimeo.com',
-    'dailymotion.com',
-    'dai.ly',
     'streamable.com',
-    'facebook.com', 'fb.watch',
     'drive.google.com',
   ];
   try {
@@ -45,34 +42,9 @@ function isEmbeddableUrl(url) {
   }
 }
 
-function getFacebookEmbedUrl(url) {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.replace('www.', '');
-    if (!host.includes('facebook.com') && !host.includes('fb.watch')) return null;
-
-    // Facebook share URLs (e.g. /share/r/...) are often redirect wrappers and
-    // can produce unstable iframe behavior; let those open as external links.
-    if (host.includes('facebook.com') && parsed.pathname.startsWith('/share/')) {
-      return null;
-    }
-
-    const encodedHref = encodeURIComponent(url);
-    return `https://www.facebook.com/plugins/video.php?href=${encodedHref}&show_text=false&width=1280`;
-  } catch {
-    return null;
-  }
-}
-
 function getVimeoEmbedUrl(url) {
   const match = url.match(/vimeo\.com\/(\d+)/);
   return match ? `https://player.vimeo.com/video/${match[1]}` : null;
-}
-
-function getDailymotionEmbedUrl(url) {
-  const match = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/);
-  return match ? `https://www.dailymotion.com/embed/video/${match[1]}` : null;
 }
 
 function formatSize(bytes) {
@@ -147,15 +119,8 @@ export default function FilePreviewModal({ file, onClose }) {
       return { type: 'vimeo', embedUrl: vimeoUrl };
     }
 
-    const dmUrl = getDailymotionEmbedUrl(sourceUrl);
-    if (dmUrl) {
-      return { type: 'dailymotion', embedUrl: dmUrl };
-    }
-
-    const fbUrl = getFacebookEmbedUrl(sourceUrl);
-    if (fbUrl) {
-      return { type: 'facebook', embedUrl: fbUrl };
-    }
+    // Dailymotion/Facebook embeds are intentionally opened externally to avoid
+    // browser policy and monetization/player-id warnings in iframe previews.
 
     if (isEmbeddableUrl(sourceUrl)) {
       return { type: 'iframe', embedUrl: sourceUrl };

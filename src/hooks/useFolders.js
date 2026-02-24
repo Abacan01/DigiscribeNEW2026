@@ -3,6 +3,38 @@ import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestor
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 
+const FOLDERS_CACHE_PREFIX = 'digiscribe-folders-cache-v1';
+
+function getFoldersCacheKey(userId, role) {
+  return `${FOLDERS_CACHE_PREFIX}:${role || 'user'}:${userId}`;
+}
+
+function readFoldersCache(userId, role) {
+  if (typeof window === 'undefined' || !userId) return null;
+  try {
+    const raw = window.localStorage.getItem(getFoldersCacheKey(userId, role));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.folders)) return null;
+    return parsed.folders;
+  } catch {
+    return null;
+  }
+}
+
+function writeFoldersCache(userId, role, folders) {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const payload = {
+      updatedAt: Date.now(),
+      folders: Array.isArray(folders) ? folders : [],
+    };
+    window.localStorage.setItem(getFoldersCacheKey(userId, role), JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota/private mode errors
+  }
+}
+
 export function useFolders() {
   const { user, role } = useAuth();
   const [folders, setFolders] = useState([]);
@@ -16,7 +48,13 @@ export function useFolders() {
       return;
     }
 
-    setLoading(true);
+    const cachedFolders = readFoldersCache(user.uid, role);
+    if (cachedFolders) {
+      setFolders(cachedFolders);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -60,6 +98,7 @@ export function useFolders() {
           }
 
           setFolders(docs);
+          writeFoldersCache(user.uid, role, docs);
           setLoading(false);
           setError(null);
         },

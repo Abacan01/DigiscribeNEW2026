@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
@@ -30,6 +30,13 @@ const SORT_OPTIONS = [
   { value: 'name-desc', label: 'Name Z-A' },
   { value: 'size', label: 'Largest First' },
 ];
+
+const USER_DASHBOARD_STATE_PREFIX = 'user-dashboard-state-v1';
+const DASHBOARD_PAGE_SIZE = 18;
+
+function getUserDashboardStateKey(userId) {
+  return `${USER_DASHBOARD_STATE_PREFIX}:${userId}`;
+}
 
 function formatRelativeDate(dateString) {
   if (!dateString) return '--';
@@ -105,6 +112,8 @@ export default function DashboardPage() {
   const [previewFile, setPreviewFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [message, setMessage] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const dashboardStateHydratedRef = useRef(false);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -143,6 +152,51 @@ export default function DashboardPage() {
       window.localStorage.setItem('user-dashboard-view-mode', viewMode);
     }
   }, [viewMode]);
+
+  useEffect(() => {
+    dashboardStateHydratedRef.current = false;
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user?.uid || dashboardStateHydratedRef.current) return;
+    dashboardStateHydratedRef.current = true;
+
+    try {
+      const raw = window.localStorage.getItem(getUserDashboardStateKey(user.uid));
+      if (!raw) return;
+      const state = JSON.parse(raw);
+      if (!state || typeof state !== 'object') return;
+
+      if (state.viewMode === 'grid' || state.viewMode === 'list') setViewMode(state.viewMode);
+      if (typeof state.statusFilter === 'string') setStatusFilter(state.statusFilter);
+      if (typeof state.serviceFilter === 'string') setServiceFilter(state.serviceFilter);
+      if (typeof state.sortBy === 'string') setSortBy(state.sortBy);
+      if (typeof state.searchQuery === 'string') setSearchQuery(state.searchQuery);
+      if (typeof state.currentFolderId === 'string' || state.currentFolderId === null) setCurrentFolderId(state.currentFolderId ?? null);
+      if (Number.isInteger(state.currentPage) && state.currentPage > 0) setCurrentPage(state.currentPage);
+    } catch {
+      // Ignore malformed cache entries
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user?.uid || !dashboardStateHydratedRef.current) return;
+    const state = {
+      viewMode,
+      statusFilter,
+      serviceFilter,
+      sortBy,
+      searchQuery,
+      currentFolderId,
+      currentPage,
+      updatedAt: Date.now(),
+    };
+    try {
+      window.localStorage.setItem(getUserDashboardStateKey(user.uid), JSON.stringify(state));
+    } catch {
+      // Ignore storage quota/private mode errors
+    }
+  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, currentPage]);
 
   // Compute counts (across ALL files, not just current folder)
   const counts = useMemo(() => {
@@ -213,6 +267,24 @@ export default function DashboardPage() {
     return result;
   }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy]);
 
+  const totalFilePages = Math.max(1, Math.ceil(filteredFiles.length / DASHBOARD_PAGE_SIZE));
+  const paginatedFiles = useMemo(() => {
+    const startIndex = (currentPage - 1) * DASHBOARD_PAGE_SIZE;
+    return filteredFiles.slice(startIndex, startIndex + DASHBOARD_PAGE_SIZE);
+  }, [filteredFiles, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage((prev) => {
+      if (prev < 1) return 1;
+      if (prev > totalFilePages) return totalFilePages;
+      return prev;
+    });
+  }, [totalFilePages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId]);
+
   const handleStatusChange = useCallback(async (fileId, newStatus) => {
     setStatusError(null);
     try {
@@ -237,16 +309,21 @@ export default function DashboardPage() {
 
   // Selection helpers
   const filteredIds = useMemo(() => new Set(filteredFiles.map((f) => f.id)), [filteredFiles]);
-  const allSelected = filteredFiles.length > 0 && filteredFiles.every((f) => selectedIds.has(f.id));
-  const someSelected = filteredFiles.some((f) => selectedIds.has(f.id));
+  const pageFileIds = useMemo(() => new Set(paginatedFiles.map((f) => f.id)), [paginatedFiles]);
+  const allSelected = paginatedFiles.length > 0 && paginatedFiles.every((f) => selectedIds.has(f.id));
+  const someSelected = paginatedFiles.some((f) => selectedIds.has(f.id));
   const selectedCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
 
   const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredFiles.map((f) => f.id)));
-    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of pageFileIds) next.delete(id);
+      } else {
+        for (const id of pageFileIds) next.add(id);
+      }
+      return next;
+    });
   };
 
   const toggleSelect = (id) => {
@@ -265,14 +342,18 @@ export default function DashboardPage() {
         // Only intercept when not typing in an input
         if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
         e.preventDefault();
-        if (filteredFiles.length > 0) {
-          setSelectedIds(new Set(filteredFiles.map((f) => f.id)));
+        if (paginatedFiles.length > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const id of pageFileIds) next.add(id);
+            return next;
+          });
         }
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [activeTab, filteredFiles]);
+  }, [activeTab, paginatedFiles, pageFileIds]);
 
   // Bulk move to folder
   const handleBulkMove = useCallback(async (targetFolderId) => {
@@ -983,7 +1064,7 @@ export default function DashboardPage() {
                           );
                         })}
 
-                        {filteredFiles.map((file) => {
+                        {paginatedFiles.map((file) => {
                           const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                           const isSelected = selectedIds.has(file.id);
                           const isUrl = file.sourceType === 'url';
@@ -1152,7 +1233,7 @@ export default function DashboardPage() {
                   })}
 
                   {/* Then files */}
-                  {filteredFiles.map((file) => {
+                  {paginatedFiles.map((file) => {
                     const isSelected = selectedIds.has(file.id);
                     return (
                       <div
@@ -1182,6 +1263,34 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {filteredFiles.length > 0 && totalFilePages > 1 && (
+                <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 p-3">
+                  <p className="text-xs text-gray-500">
+                    Page {currentPage} of {totalFilePages} &middot; Showing {paginatedFiles.length} of {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="inline-flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <i className="fas fa-chevron-left text-[10px]"></i>
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((p) => Math.min(totalFilePages, p + 1))}
+                      disabled={currentPage >= totalFilePages}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next
+                      <i className="fas fa-chevron-right text-[10px]"></i>
+                    </button>
+                  </div>
                 </div>
               )}
             </>

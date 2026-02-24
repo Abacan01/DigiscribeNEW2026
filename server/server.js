@@ -773,8 +773,13 @@ app.put('/api/admin/settings', verifyAdmin, async (req, res) => {
 app.get('/api/files/*path', async (req, res) => {
   // req.params.path is an array of decoded segments in this Express version
   const segments = Array.isArray(req.params.path) ? req.params.path : [req.params.path];
-  // decodeURIComponent handles old Firestore records that stored %2F-encoded paths
-  const requestPath = decodeURIComponent(segments.join('/'));
+  let requestPath;
+  try {
+    // decodeURIComponent handles old Firestore records that stored %2F-encoded paths
+    requestPath = decodeURIComponent(segments.join('/'));
+  } catch {
+    return res.status(400).json({ success: false, error: 'Invalid file path encoding.' });
+  }
 
   // Skip metadata routes
   if (requestPath.startsWith('metadata')) return res.status(404).json({ success: false, error: 'Not found.' });
@@ -803,25 +808,24 @@ app.get('/api/files/*path', async (req, res) => {
     const [startStr, endStr] = rangeHeader.replace(/bytes=/, '').split('-');
     const parsedStart = parseInt(startStr, 10);
     const start = Number.isFinite(parsedStart) ? parsedStart : 0;
-
-    // We stream to EOF for reliability on large media files. Explicit end ranges
-    // are treated as open-ended ranges to avoid buffering entire files locally.
-    const parsedEnd = endStr ? parseInt(endStr, 10) : fileSize - 1;
-    const end = Number.isFinite(parsedEnd) ? Math.max(parsedEnd, start) : fileSize - 1;
-    const streamEnd = fileSize - 1;
+    const parsedEnd = endStr ? parseInt(endStr, 10) : NaN;
+    const fallbackEnd = Math.min(start + (4 * 1024 * 1024) - 1, fileSize - 1);
+    const end = Number.isFinite(parsedEnd)
+      ? Math.min(Math.max(parsedEnd, start), fileSize - 1)
+      : fallbackEnd;
 
     if (start >= fileSize || start > end) {
       res.setHeader('Content-Range', `bytes */${fileSize}`);
       return res.status(416).end();
     }
 
-    const chunkSize = streamEnd - start + 1;
-    res.setHeader('Content-Range', `bytes ${start}-${streamEnd}/${fileSize}`);
+    const chunkSize = end - start + 1;
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
     res.setHeader('Content-Length', chunkSize);
     res.status(206);
 
     try {
-      await streamFromFtp(normalized, res, { startAt: start });
+      await streamFromFtp(normalized, res, { startAt: start, maxBytes: chunkSize });
     } catch (err) {
       if (!res.headersSent) {
         return res.status(500).json({ success: false, error: 'Failed to stream file.' });
