@@ -361,11 +361,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   // Selection helpers
   const filteredIds = useMemo(() => new Set(filteredFiles.map((f) => f.id)), [filteredFiles]);
+  const folderIds = useMemo(() => new Set(allFolders.map((f) => f.id)), [allFolders]);
   const pageFileIds = useMemo(() => new Set(paginatedFiles.map((f) => f.id)), [paginatedFiles]);
   const pageFolderIds = useMemo(() => new Set(paginatedFolders.map((f) => f.id)), [paginatedFolders]);
   const allPageIds = useMemo(() => new Set([...pageFileIds, ...pageFolderIds]), [pageFileIds, pageFolderIds]);
   const allSelected = allPageIds.size > 0 && [...allPageIds].every((id) => selectedIds.has(id));
   const someSelected = [...allPageIds].some((id) => selectedIds.has(id));
+  const selectedFileIds = useMemo(() => [...selectedIds].filter((id) => filteredIds.has(id)), [selectedIds, filteredIds]);
+  const selectedFolderIds = useMemo(() => [...selectedIds].filter((id) => folderIds.has(id)), [selectedIds, folderIds]);
+  const selectedFileCount = selectedFileIds.length;
+  const selectedFolderCount = selectedFolderIds.length;
 
   const toggleSelectAll = () => {
     setSelectedIds((prev) => {
@@ -432,8 +437,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   }, [getIdToken]);
 
   const handleBulkDownload = useCallback(async () => {
-    const ids = [...selectedIds].filter((id) => filteredIds.has(id));
-    if (ids.length === 0) return;
+    if (selectedFileIds.length === 0) return;
     setBulkLoading(true);
     setMessage(null);
     try {
@@ -441,7 +445,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       const res = await fetch('/api/files/bulk-download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fileIds: ids }),
+        body: JSON.stringify({ fileIds: selectedFileIds }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -456,30 +460,50 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setMessage({ type: 'success', text: `Downloaded ${ids.length} file(s).` });
+      setMessage({ type: 'success', text: `Downloaded ${selectedFileIds.length} file(s).` });
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
       setBulkLoading(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [selectedIds, filteredIds, getIdToken]);
+  }, [selectedFileIds, getIdToken]);
 
   const handleBulkDelete = useCallback(async () => {
-    const ids = [...selectedIds].filter((id) => filteredIds.has(id));
-    if (ids.length === 0) return;
+    if (selectedFileIds.length === 0 && selectedFolderIds.length === 0) return;
     setBulkLoading(true);
     setMessage(null);
     try {
-      const token = await getIdToken();
-      const res = await fetch('/api/files/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fileIds: ids }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Bulk delete failed.');
-      setMessage({ type: 'success', text: `Deleted ${data.deleted} file(s).` });
+      let deletedFiles = 0;
+      let deletedFolders = 0;
+      let skippedFolders = 0;
+
+      if (selectedFileIds.length > 0) {
+        const token = await getIdToken();
+        const res = await fetch('/api/files/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ fileIds: selectedFileIds }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Bulk delete failed.');
+        deletedFiles = Number(data.deleted || 0);
+      }
+
+      for (const folderId of selectedFolderIds) {
+        try {
+          await deleteFolder(folderId);
+          deletedFolders++;
+        } catch {
+          skippedFolders++;
+        }
+      }
+
+      const parts = [];
+      if (deletedFiles > 0) parts.push(`${deletedFiles} file${deletedFiles !== 1 ? 's' : ''}`);
+      if (deletedFolders > 0) parts.push(`${deletedFolders} folder${deletedFolders !== 1 ? 's' : ''}`);
+      if (skippedFolders > 0) parts.push(`${skippedFolders} skipped`);
+      setMessage({ type: 'success', text: `Deleted ${parts.join(', ')}.` });
       setSelectedIds(new Set());
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -488,7 +512,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setBulkDeleteConfirm(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [selectedIds, filteredIds, getIdToken]);
+  }, [selectedFileIds, selectedFolderIds, getIdToken, deleteFolder]);
 
   const copyFileUrl = useCallback((file) => {
     const url = fileUrl(file.url);
@@ -602,20 +626,48 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   // Bulk move to folder
   const handleBulkMove = useCallback(async (targetFolderId) => {
-    const ids = [...selectedIds].filter((id) => filteredIds.has(id));
-    if (ids.length === 0) return;
+    if (selectedFileIds.length === 0 && selectedFolderIds.length === 0) return;
     setBulkLoading(true);
     setMessage(null);
     try {
-      const token = await getIdToken();
-      const res = await fetch('/api/files/bulk-move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fileIds: ids, folderId: targetFolderId || null }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Move failed.');
-      setMessage({ type: 'success', text: `Moved ${data.moved} file(s).` });
+      let movedFiles = 0;
+      let movedFolders = 0;
+      let skippedFolders = 0;
+
+      if (selectedFileIds.length > 0) {
+        const token = await getIdToken();
+        const res = await fetch('/api/files/bulk-move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ fileIds: selectedFileIds, folderId: targetFolderId || null }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Move failed.');
+        movedFiles = Number(data.moved || 0);
+      }
+
+      for (const folderId of selectedFolderIds) {
+        if (folderId === targetFolderId) {
+          skippedFolders++;
+          continue;
+        }
+        if (targetFolderId && getDescendantIds(folderId).includes(targetFolderId)) {
+          skippedFolders++;
+          continue;
+        }
+        try {
+          await moveFolder(folderId, targetFolderId || null);
+          movedFolders++;
+        } catch {
+          skippedFolders++;
+        }
+      }
+
+      const parts = [];
+      if (movedFiles > 0) parts.push(`${movedFiles} file${movedFiles !== 1 ? 's' : ''}`);
+      if (movedFolders > 0) parts.push(`${movedFolders} folder${movedFolders !== 1 ? 's' : ''}`);
+      if (skippedFolders > 0) parts.push(`${skippedFolders} skipped`);
+      setMessage({ type: 'success', text: `Moved ${parts.join(', ')}.` });
       setSelectedIds(new Set());
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -624,12 +676,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setBulkMoveActive(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [selectedIds, filteredIds, getIdToken]);
+  }, [selectedFileIds, selectedFolderIds, getIdToken, getDescendantIds, moveFolder]);
 
   // Bulk status change
   const handleBulkStatus = useCallback(async (newStatus) => {
-    const ids = [...selectedIds].filter((id) => filteredIds.has(id));
-    if (ids.length === 0) return;
+    if (selectedFileIds.length === 0) return;
     setBulkLoading(true);
     setMessage(null);
     try {
@@ -637,7 +688,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       const res = await fetch('/api/files/bulk-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fileIds: ids, status: newStatus }),
+        body: JSON.stringify({ fileIds: selectedFileIds, status: newStatus }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Status change failed.');
@@ -650,7 +701,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setBulkStatusTarget(null);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [selectedIds, filteredIds, getIdToken]);
+  }, [selectedFileIds, getIdToken]);
 
   // Folder download as ZIP
   const handleFolderDownload = useCallback(async (folder) => {
@@ -784,7 +835,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   const hasActiveFilters = statusFilter || serviceFilter || searchQuery;
   const isSearching = searchQuery.trim().length > 0;
-  const selectedCount = [...selectedIds].filter((id) => filteredIds.has(id) || pageFolderIds.has(id)).length;
+  const selectedCount = selectedFileCount + selectedFolderCount;
   const totalItems = currentSubfolders.length + filteredFiles.length;
   const isLoading = filesLoading || foldersLoading;
 
@@ -977,13 +1028,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               <i className="fas fa-check-double text-primary text-xs"></i>
             </div>
             <span className="text-sm font-medium text-dark-text">
-              {selectedCount} file{selectedCount !== 1 ? 's' : ''} selected
+              {selectedCount} item{selectedCount !== 1 ? 's' : ''} selected
             </span>
           </div>
           <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={handleBulkDownload}
-              disabled={bulkLoading}
+              disabled={bulkLoading || selectedFileCount === 0}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50"
             >
               {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-download text-[10px]"></i>}
@@ -997,7 +1048,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               <i className="fas fa-folder-open text-[10px]"></i>
               Move to Folder
             </button>
-            {bulkStatusTarget ? (
+            {selectedFileCount > 0 && bulkStatusTarget ? (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-gray-500 font-medium">Set status:</span>
                 {STATUS_OPTIONS.map((s) => (
@@ -1014,7 +1065,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   <i className="fas fa-times text-xs"></i>
                 </button>
               </div>
-            ) : (
+            ) : selectedFileCount > 0 ? (
               <button
                 onClick={() => setBulkStatusTarget(true)}
                 disabled={bulkLoading}
@@ -1023,10 +1074,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 <i className="fas fa-exchange-alt text-[10px]"></i>
                 Change Status
               </button>
-            )}
+            ) : null}
             {bulkDeleteConfirm ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-red-600 font-medium">Delete {selectedCount} files?</span>
+                <span className="text-xs text-red-600 font-medium">Delete {selectedCount} items?</span>
                 <button
                   onClick={handleBulkDelete}
                   disabled={bulkLoading}
@@ -1752,7 +1803,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           onSelect={handleBulkMove}
           folders={allFolders}
           excludeIds={[]}
-          title={`Move ${selectedCount} selected file${selectedCount !== 1 ? 's' : ''} to folder`}
+          title={`Move ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''} to folder`}
         />
       )}
     </div>

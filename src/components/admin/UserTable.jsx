@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmRoleChange, setConfirmRoleChange] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
   const handleDelete = async (uid) => {
@@ -24,6 +25,7 @@ export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading 
       // Error handled by parent
     } finally {
       setActionLoading(null);
+      setConfirmRoleChange(null);
     }
   };
 
@@ -124,23 +126,42 @@ export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading 
                 </td>
                 <td className="px-8 py-4">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => handleToggleAdmin(user.uid, user.role === 'admin')}
-                      disabled={actionLoading === user.uid}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                        user.role === 'admin'
-                          ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                          : 'bg-primary/10 text-primary hover:bg-primary/20'
-                      }`}
-                      title={user.role === 'admin' ? 'Remove admin' : 'Make admin'}
-                    >
-                      {actionLoading === user.uid ? (
-                        <i className="fas fa-spinner fa-spin"></i>
-                      ) : (
+                    {confirmRoleChange === user.uid ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleToggleAdmin(user.uid, user.role === 'admin')}
+                          disabled={actionLoading === user.uid}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary-dark transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {actionLoading === user.uid ? (
+                            <i className="fas fa-spinner fa-spin"></i>
+                          ) : (
+                            <i className="fas fa-check"></i>
+                          )}
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => setConfirmRoleChange(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-text hover:bg-gray-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmRoleChange(user.uid)}
+                        disabled={actionLoading === user.uid}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          user.role === 'admin'
+                            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'bg-primary/10 text-primary hover:bg-primary/20'
+                        }`}
+                        title={user.role === 'admin' ? 'Remove admin' : 'Make admin'}
+                      >
                         <i className={`fas ${user.role === 'admin' ? 'fa-user-minus' : 'fa-user-shield'}`}></i>
-                      )}
-                      {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
-                    </button>
+                        {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                      </button>
+                    )}
 
                     {confirmDelete === user.uid ? (
                       <div className="flex items-center gap-1">
@@ -215,22 +236,41 @@ export default function UserTable({ users, onDeleteUser, onToggleAdmin, loading 
             </p>
 
             <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-              <button
-                onClick={() => handleToggleAdmin(user.uid, user.role === 'admin')}
-                disabled={actionLoading === user.uid}
-                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  user.role === 'admin'
-                    ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                    : 'bg-primary/10 text-primary hover:bg-primary/20'
-                }`}
-              >
-                {actionLoading === user.uid ? (
-                  <i className="fas fa-spinner fa-spin"></i>
-                ) : (
+              {confirmRoleChange === user.uid ? (
+                <>
+                  <button
+                    onClick={() => handleToggleAdmin(user.uid, user.role === 'admin')}
+                    disabled={actionLoading === user.uid}
+                    className="flex-1 px-3 py-2 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary-dark transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {actionLoading === user.uid ? (
+                      <i className="fas fa-spinner fa-spin"></i>
+                    ) : (
+                      <i className="fas fa-check"></i>
+                    )}
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setConfirmRoleChange(null)}
+                    className="px-3 py-2 rounded-lg text-xs font-medium bg-gray-100 text-gray-text hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setConfirmRoleChange(user.uid)}
+                  disabled={actionLoading === user.uid}
+                  className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    user.role === 'admin'
+                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                      : 'bg-primary/10 text-primary hover:bg-primary/20'
+                  }`}
+                >
                   <i className={`fas ${user.role === 'admin' ? 'fa-user-minus' : 'fa-user-shield'}`}></i>
-                )}
-                {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
-              </button>
+                  {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                </button>
+              )}
 
               {confirmDelete === user.uid ? (
                 <>
