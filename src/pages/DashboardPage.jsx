@@ -1444,7 +1444,7 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={file.id}
-                        className={`relative transition-all ${isSelected ? 'ring-2 ring-primary/30 rounded-xl' : ''}`}
+                        className="transition-all"
                         draggable
                         onDragStart={(e) => {
                           e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
@@ -1452,36 +1452,15 @@ export default function DashboardPage() {
                         }}
                         onContextMenu={(e) => handleFileContextMenu(e, file)}
                       >
-                        <div className="absolute top-3 left-3 z-10">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelect(file.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shadow-sm"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDeleteConfirm(file.id);
-                          }}
-                          disabled={deleteLoading === file.id}
-                          className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-red-100 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                          title="Delete file"
-                        >
-                          {deleteLoading === file.id ? (
-                            <i className="fas fa-spinner fa-spin text-[11px]"></i>
-                          ) : (
-                            <i className="fas fa-trash-alt text-[11px]"></i>
-                          )}
-                        </button>
                         <FileCard
                           file={file}
                           isAdmin={isAdmin}
                           onStatusChange={handleStatusChange}
                           onPreview={setPreviewFile}
+                          isSelected={isSelected}
+                          onSelect={toggleSelect}
+                          onDelete={(id) => setDeleteConfirm(id)}
+                          deleteLoading={deleteLoading === file.id}
                         />
                       </div>
                     );

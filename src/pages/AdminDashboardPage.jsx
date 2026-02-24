@@ -1664,7 +1664,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             return (
               <div
                 key={file.id}
-                className={`relative transition-all ${isSelected ? 'ring-2 ring-primary/30 rounded-xl' : ''}`}
+                className="transition-all"
                 draggable={renamingFileId !== file.id}
                 onDragStart={(e) => {
                   e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
@@ -1672,19 +1672,15 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 }}
                 onContextMenu={(e) => handleFileContextMenu(e, file)}
               >
-                <div className="absolute top-3 left-3 z-10">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleSelect(file.id)}
-                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shadow-sm"
-                  />
-                </div>
                 <FileCard
                   file={file}
                   isAdmin
                   onStatusChange={handleStatusChange}
                   onPreview={setPreviewFile}
+                  isSelected={isSelected}
+                  onSelect={toggleSelect}
+                  onDelete={(id) => setDeleteConfirm(id)}
+                  deleteLoading={deleteLoading === file.id}
                 />
               </div>
             );

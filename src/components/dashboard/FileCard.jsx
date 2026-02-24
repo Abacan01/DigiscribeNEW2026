@@ -97,7 +97,7 @@ const statusOptions = [
   { value: 'transcribed', label: 'Transcribed' },
 ];
 
-export default function FileCard({ file, isAdmin, onStatusChange, onPreview }) {
+export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -129,13 +129,35 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview }) {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:border-gray-200 hover:shadow-md transition-all duration-200 group">
+    <div className={`bg-white rounded-xl border overflow-hidden hover:shadow-md transition-all duration-200 group ${
+      isSelected ? 'border-primary/40' : 'border-gray-100 hover:border-gray-200'
+    }`}>
       {/* Top accent bar */}
       <div className={`h-0.5 ${status.dot}`} />
 
       <div className="p-5">
-        {/* Header row: icon + name + status */}
+        {/* Header row: [checkbox] icon + name + status */}
         <div className="flex items-start gap-3 mb-3">
+          {/* Inline checkbox — fades in on hover, always visible when selected */}
+          {onSelect && (
+            <label
+              className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded border flex items-center justify-center cursor-pointer transition-all duration-150 ${
+                isSelected
+                  ? 'bg-primary border-primary'
+                  : 'bg-white border-gray-300 opacity-0 group-hover:opacity-100'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={!!isSelected}
+                onChange={() => onSelect(file.id)}
+                className="sr-only"
+              />
+              {isSelected && <i className="fas fa-check text-white text-[7px]"></i>}
+            </label>
+          )}
+
           <button
             type="button"
             onClick={handlePreview}
@@ -244,12 +266,26 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview }) {
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {isUrl && (
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-gray-50 text-gray-400 border border-gray-200" title="Downloaded from URL — cannot be re-downloaded">
                 <i className="fas fa-ban text-[9px]"></i>
                 No download
               </span>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(file.id); }}
+                disabled={!!deleteLoading}
+                className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-150 disabled:opacity-30"
+                title="Delete file"
+              >
+                {deleteLoading
+                  ? <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                  : <i className="fas fa-trash-alt text-[10px]"></i>
+                }
+              </button>
             )}
             <button
               type="button"
