@@ -69,7 +69,7 @@ const SORT_OPTIONS = [
 ];
 
 const ADMIN_DASHBOARD_STATE_PREFIX = 'admin-dashboard-files-state-v1';
-const ADMIN_DASHBOARD_PAGE_SIZE = 20;
+const ADMIN_DASHBOARD_PAGE_SIZE = 15;
 
 function getAdminDashboardStateKey(userId) {
   return `${ADMIN_DASHBOARD_STATE_PREFIX}:${userId || 'admin'}`;
@@ -108,6 +108,19 @@ function formatRelativeDate(dateString) {
   } catch {
     return '--';
   }
+}
+
+function getPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [];
+  pages.push(1);
+  const left = Math.max(2, current - 1);
+  const right = Math.min(total - 1, current + 1);
+  if (left > 2) pages.push('...');
+  for (let i = left; i <= right; i++) pages.push(i);
+  if (right < total - 1) pages.push('...');
+  pages.push(total);
+  return pages;
 }
 
 function getFileIcon(type) {
@@ -244,14 +257,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, currentPage]);
 
-  // Compute counts (across ALL files)
+  // Compute counts (across ALL files + folders)
   const counts = useMemo(() => {
-    const result = { total: allFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
+    const result = { total: allFiles.length + allFolders.length, pending: 0, 'in-progress': 0, transcribed: 0 };
     for (const file of allFiles) {
       if (result[file.status] !== undefined) result[file.status]++;
     }
     return result;
-  }, [allFiles]);
+  }, [allFiles, allFolders]);
 
   // Unique service categories
   const serviceCategories = useMemo(() => {
@@ -268,13 +281,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter]);
 
-  // Subfolders
+  // Subfolders – always show; filter by name when searching
   const currentSubfolders = useMemo(() => {
-    if (searchQuery.trim() || statusFilter || serviceFilter) return [];
-    return allFolders
+    let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [allFolders, currentFolderId, searchQuery, statusFilter, serviceFilter]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      folders = folders.filter((f) => f.name && f.name.toLowerCase().includes(q));
+    }
+    // status/service filters don't apply to folders – always show them
+    return folders;
+  }, [allFolders, currentFolderId, searchQuery]);
 
   // Item counts per folder
   const folderItemCounts = useMemo(() => {
@@ -313,11 +331,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return result;
   }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy]);
 
-  const totalFilePages = Math.max(1, Math.ceil(filteredFiles.length / ADMIN_DASHBOARD_PAGE_SIZE));
-  const paginatedFiles = useMemo(() => {
+  // Combined items for pagination: folders first, then files
+  const allPageItems = useMemo(() => [...currentSubfolders, ...filteredFiles], [currentSubfolders, filteredFiles]);
+  const totalFilePages = Math.max(1, Math.ceil(allPageItems.length / ADMIN_DASHBOARD_PAGE_SIZE));
+  const paginatedItems = useMemo(() => {
     const startIndex = (currentPage - 1) * ADMIN_DASHBOARD_PAGE_SIZE;
-    return filteredFiles.slice(startIndex, startIndex + ADMIN_DASHBOARD_PAGE_SIZE);
-  }, [filteredFiles, currentPage]);
+    return allPageItems.slice(startIndex, startIndex + ADMIN_DASHBOARD_PAGE_SIZE);
+  }, [allPageItems, currentPage]);
+  const folderIdSet = useMemo(() => new Set(currentSubfolders.map((f) => f.id)), [currentSubfolders]);
+  const paginatedFolders = useMemo(() => paginatedItems.filter((item) => folderIdSet.has(item.id)), [paginatedItems, folderIdSet]);
+  const paginatedFiles = useMemo(() => paginatedItems.filter((item) => !folderIdSet.has(item.id)), [paginatedItems, folderIdSet]);
 
   useEffect(() => {
     setCurrentPage((prev) => {
@@ -339,16 +362,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Selection helpers
   const filteredIds = useMemo(() => new Set(filteredFiles.map((f) => f.id)), [filteredFiles]);
   const pageFileIds = useMemo(() => new Set(paginatedFiles.map((f) => f.id)), [paginatedFiles]);
-  const allSelected = paginatedFiles.length > 0 && paginatedFiles.every((f) => selectedIds.has(f.id));
-  const someSelected = paginatedFiles.some((f) => selectedIds.has(f.id));
+  const pageFolderIds = useMemo(() => new Set(paginatedFolders.map((f) => f.id)), [paginatedFolders]);
+  const allPageIds = useMemo(() => new Set([...pageFileIds, ...pageFolderIds]), [pageFileIds, pageFolderIds]);
+  const allSelected = allPageIds.size > 0 && [...allPageIds].every((id) => selectedIds.has(id));
+  const someSelected = [...allPageIds].some((id) => selectedIds.has(id));
 
   const toggleSelectAll = () => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allSelected) {
-        for (const id of pageFileIds) next.delete(id);
+        for (const id of allPageIds) next.delete(id);
       } else {
-        for (const id of pageFileIds) next.add(id);
+        for (const id of allPageIds) next.add(id);
       }
       return next;
     });
@@ -657,16 +682,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [getIdToken]);
 
-  // Ctrl+A → select all files in current view
+  // Ctrl+A → select all files + folders in current view
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
         e.preventDefault();
-        if (paginatedFiles.length > 0) {
+        if (allPageIds.size > 0) {
           setSelectedIds((prev) => {
             const next = new Set(prev);
-            for (const id of pageFileIds) next.add(id);
+            for (const id of allPageIds) next.add(id);
             return next;
           });
         }
@@ -674,7 +699,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [paginatedFiles, pageFileIds]);
+  }, [allPageIds]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -759,7 +784,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   const hasActiveFilters = statusFilter || serviceFilter || searchQuery;
   const isSearching = searchQuery.trim().length > 0;
-  const selectedCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
+  const selectedCount = [...selectedIds].filter((id) => filteredIds.has(id) || pageFolderIds.has(id)).length;
   const totalItems = currentSubfolders.length + filteredFiles.length;
   const isLoading = filesLoading || foldersLoading;
 
@@ -1136,7 +1161,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {/* Folder rows first */}
-                {currentSubfolders.map((folder) => {
+                {paginatedFolders.map((folder) => {
                   if (renamingFolder === folder.id) {
                     return (
                       <tr key={folder.id} className="bg-primary/[0.03]">
@@ -1176,8 +1201,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       folder={folder}
                       onOpen={(id) => setCurrentFolderId(id)}
                       onContextMenu={handleFolderContextMenu}
-                      isSelected={false}
-                      onSelect={() => {}}
+                      isSelected={selectedIds.has(folder.id)}
+                      onSelect={toggleSelect}
                       isDragOver={dragOverFolder === folder.id}
                       onDragOver={setDragOverFolder}
                       onDragLeave={() => setDragOverFolder(null)}
@@ -1355,12 +1380,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           {/* Mobile Cards */}
           <div className="lg:hidden p-4 space-y-3">
             {/* Mobile folder cards */}
-            {currentSubfolders.map((folder) => (
+            {paginatedFolders.map((folder) => (
               <FolderCard
                 key={folder.id}
                 folder={folder}
                 onOpen={(id) => setCurrentFolderId(id)}
                 onContextMenu={handleFolderContextMenu}
+                isSelected={selectedIds.has(folder.id)}
+                onSelect={toggleSelect}
                 isDragOver={dragOverFolder === folder.id}
                 onDragOver={setDragOverFolder}
                 onDragLeave={() => setDragOverFolder(null)}
@@ -1530,7 +1557,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             }
           }}
         >
-          {currentSubfolders.map((folder) => {
+          {paginatedFolders.map((folder) => {
             if (renamingFolder === folder.id) {
               return (
                 <div key={folder.id} className="bg-white rounded-xl border border-primary/30 p-5 ring-2 ring-primary/20">
@@ -1569,6 +1596,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 folder={folder}
                 onOpen={(id) => setCurrentFolderId(id)}
                 onContextMenu={handleFolderContextMenu}
+                isSelected={selectedIds.has(folder.id)}
+                onSelect={toggleSelect}
                 isDragOver={dragOverFolder === folder.id}
                 onDragOver={setDragOverFolder}
                 onDragLeave={() => setDragOverFolder(null)}
@@ -1610,7 +1639,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             );
           })}
 
-          {filteredFiles.length > 0 && (
+          {(filteredFiles.length > 0 || currentSubfolders.length > 0) && (
             <div className="md:col-span-2 xl:col-span-3">
               <button
                 onClick={toggleSelectAll}
@@ -1631,26 +1660,46 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         </div>
       )}
 
-      {filteredFiles.length > 0 && totalFilePages > 1 && (
-        <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 p-3">
+      {allPageItems.length > 0 && (
+        <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
           <p className="text-xs text-gray-500">
-            Page {currentPage} of {totalFilePages} &middot; Showing {paginatedFiles.length} of {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''}
+            Page <span className="font-semibold text-dark-text">{currentPage}</span> of <span className="font-semibold text-dark-text">{totalFilePages}</span>
+            <span className="mx-1.5 text-gray-300">·</span>
+            Showing {paginatedItems.length} of {allPageItems.length} files &amp; folders
           </p>
-          <div className="inline-flex items-center gap-2">
+          <div className="inline-flex items-center gap-1">
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <i className="fas fa-chevron-left text-[10px]"></i>
-              Previous
+              Prev
             </button>
+            {getPageNumbers(currentPage, totalFilePages).map((p, idx) =>
+              p === '...' ? (
+                <span key={`ellipsis-${idx}`} className="px-2 py-1.5 text-xs text-gray-400 select-none">…</span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setCurrentPage(p)}
+                  className={`min-w-[32px] h-[30px] px-2 rounded-lg border text-xs font-medium transition-colors ${
+                    p === currentPage
+                      ? 'bg-primary text-white border-primary shadow-sm'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            )}
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalFilePages, p + 1))}
               disabled={currentPage >= totalFilePages}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next
               <i className="fas fa-chevron-right text-[10px]"></i>
