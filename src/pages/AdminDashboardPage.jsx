@@ -1681,6 +1681,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   onSelect={toggleSelect}
                   onDelete={(id) => setDeleteConfirm(id)}
                   deleteLoading={deleteLoading === file.id}
+                  isDeleteConfirm={deleteConfirm === file.id}
+                  onDeleteConfirm={handleDeleteFile}
+                  onDeleteCancel={() => setDeleteConfirm(null)}
                 />
               </div>
             );

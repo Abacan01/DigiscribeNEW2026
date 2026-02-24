@@ -97,7 +97,7 @@ const statusOptions = [
   { value: 'transcribed', label: 'Transcribed' },
 ];
 
-export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading }) {
+export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -130,7 +130,9 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
 
   return (
     <div className={`bg-white rounded-xl border overflow-hidden hover:shadow-md transition-all duration-200 group ${
-      isSelected ? 'border-primary/40' : 'border-gray-100 hover:border-gray-200'
+      isDeleteConfirm ? 'border-red-300 shadow-sm shadow-red-100'
+      : isSelected ? 'border-primary/40'
+      : 'border-gray-100 hover:border-gray-200'
     }`}>
       {/* Top accent bar */}
       <div className={`h-0.5 ${status.dot}`} />
@@ -252,6 +254,31 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
 
         {/* Footer: uploader info + action */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-50">
+          {isDeleteConfirm ? (
+            /* Inline delete confirmation */
+            <div className="flex items-center gap-2 w-full">
+              <i className="fas fa-exclamation-triangle text-red-400 text-xs flex-shrink-0"></i>
+              <span className="text-xs font-medium text-red-600 flex-1">Delete this file?</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDeleteConfirm && onDeleteConfirm(file.id); }}
+                disabled={!!deleteLoading}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deleteLoading
+                  ? <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                  : <><i className="fas fa-trash-alt text-[9px]"></i> Delete</>}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDeleteCancel && onDeleteCancel(); }}
+                className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <>
           <div className="flex items-center gap-2 text-[11px] text-gray-400 min-w-0">
             {isAdmin && file.uploadedByEmail ? (
               <span className="flex items-center gap-1.5 truncate" title={file.uploadedByEmail}>
@@ -296,6 +323,8 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
               Preview
             </button>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

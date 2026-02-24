@@ -1075,8 +1075,8 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Delete folder confirmation */}
-              {deleteConfirm && (
+              {/* Delete file confirmation — only shown in list mode; grid uses inline card confirmation */}
+              {viewMode === 'list' && deleteConfirm && (
                 <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
                   <i className="fas fa-exclamation-triangle text-red-500"></i>
                   <span className="text-sm font-medium text-red-700">
@@ -1461,6 +1461,9 @@ export default function DashboardPage() {
                           onSelect={toggleSelect}
                           onDelete={(id) => setDeleteConfirm(id)}
                           deleteLoading={deleteLoading === file.id}
+                          isDeleteConfirm={deleteConfirm === file.id}
+                          onDeleteConfirm={handleDeleteFile}
+                          onDeleteCancel={() => setDeleteConfirm(null)}
                         />
                       </div>
                     );
