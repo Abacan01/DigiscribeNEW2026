@@ -582,6 +582,12 @@ export default function DashboardPage() {
     );
   }, []);
 
+  const getDownloadUrl = useCallback((url) => {
+    const resolved = fileUrl(url);
+    if (!resolved) return resolved;
+    return resolved.includes('?') ? `${resolved}&download=1` : `${resolved}?download=1`;
+  }, []);
+
   // Folder actions
   const handleCreateFolder = useCallback(async (name, parentId) => {
     await createFolder(name, parentId);
@@ -709,7 +715,7 @@ export default function DashboardPage() {
         disabled: isUrl,
         onClick: isUrl ? () => {} : () => {
           const a = document.createElement('a');
-          a.href = fileUrl(file.url);
+          a.href = getDownloadUrl(file.url);
           a.download = file.originalName;
           document.body.appendChild(a);
           a.click();
@@ -734,7 +740,7 @@ export default function DashboardPage() {
     }
 
     return items;
-  }, [contextMenu, selectedIds, filteredIds, copyFileUrl, handleFolderDownload]);
+  }, [contextMenu, selectedIds, filteredIds, copyFileUrl, handleFolderDownload, getDownloadUrl]);
 
   const clearFilters = () => {
     setStatusFilter('');
@@ -1328,7 +1334,7 @@ export default function DashboardPage() {
                                     onClick={() => {
                                       if (isUrl) return;
                                       const a = document.createElement('a');
-                                      a.href = fileUrl(file.url);
+                                      a.href = getDownloadUrl(file.url);
                                       a.download = file.originalName;
                                       document.body.appendChild(a);
                                       a.click();
