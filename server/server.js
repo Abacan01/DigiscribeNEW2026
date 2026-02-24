@@ -2,6 +2,9 @@ import 'dotenv/config';
 import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
@@ -56,7 +59,43 @@ const allowedOrigins = [
     : []),
 ].filter(Boolean);
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json());
+
+// ── Security headers ───────────────────────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: false,   // CSP handled by frontend meta tags / Vercel headers
+  crossOriginEmbedderPolicy: false, // Allow embedding media from FTP proxy
+}));
+
+// ── Rate limiting ──────────────────────────────────────────────────────────
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,                 // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later.' },
+});
+
+const quoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,                  // strict limit on public quote form
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many quote submissions. Please try again later.' },
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,                 // uploads send many chunk requests
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Upload rate limit exceeded. Please try again later.' },
+});
+
+app.use('/api/quote', quoteLimiter);
+app.use('/api/upload', uploadLimiter);
+app.use('/api/', apiLimiter);
+
+app.use(express.json({ limit: '1mb' }));
 
 // Accept any image/*, audio/*, video/* MIME type.
 // Admins can also upload document types (PDF, Word, etc.)
@@ -136,8 +175,71 @@ const EXT_TO_MIME = {
   '.txt': 'text/plain', '.csv': 'text/csv',
 };
 
-// Multer for chunk uploads
-const chunkUpload = multer({ storage: multer.memoryStorage() });
+// Multer for chunk uploads — enforce 10 MB per-chunk limit to prevent memory exhaustion
+const MAX_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
+const chunkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_CHUNK_SIZE },
+});
+
+// ── SSRF protection for URL uploads ────────────────────────────────────────
+// Block internal/private IP ranges and cloud metadata endpoints
+function isPrivateOrReservedHost(hostname) {
+  // Block cloud metadata endpoints
+  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return true;
+  // Block localhost variants
+  if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname)) return true;
+  // Block private RFC-1918 ranges
+  const ipParts = hostname.split('.').map(Number);
+  if (ipParts.length === 4 && ipParts.every(p => !isNaN(p))) {
+    if (ipParts[0] === 10) return true;
+    if (ipParts[0] === 172 && ipParts[1] >= 16 && ipParts[1] <= 31) return true;
+    if (ipParts[0] === 192 && ipParts[1] === 168) return true;
+    if (ipParts[0] === 0) return true;
+  }
+  return false;
+}
+
+function validateExternalUrl(urlStr) {
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    throw new Error('Invalid URL.');
+  }
+  // Only allow http/https
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only HTTP and HTTPS URLs are allowed.');
+  }
+  if (isPrivateOrReservedHost(parsed.hostname)) {
+    throw new Error('URLs pointing to internal or private networks are not allowed.');
+  }
+  return parsed;
+}
+
+// ── Timing-safe string comparison ──────────────────────────────────────────
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against itself to burn the same time, then return false
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// ── HTML escaping for email templates ──────────────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // Mount API routes
 app.use('/api/admin', usersRouter);
@@ -353,6 +455,13 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
     return res.status(400).json({ success: false, error: 'URL is required.' });
   }
 
+  // SSRF protection: validate the URL before fetching
+  try {
+    validateExternalUrl(url);
+  } catch (valErr) {
+    return res.status(400).json({ success: false, error: valErr.message });
+  }
+
   try {
     let finalName, finalPath, contentType, originalName;
 
@@ -458,7 +567,20 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
 
 // Helper: direct HTTP fetch for non-platform URLs
 async function fetchUrlDirect(url, destDir) {
-  const response = await fetch(url);
+  // Re-validate to ensure SSRF protection even if called from another path
+  validateExternalUrl(url);
+
+  const response = await fetch(url, { redirect: 'manual' });
+  // Block redirects to prevent SSRF bypass via open redirects
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get('location');
+    if (location) {
+      try { validateExternalUrl(location); } catch {
+        throw new Error('URL redirects to a disallowed destination.');
+      }
+    }
+    throw new Error('URL responded with redirect. Please use the direct file URL.');
+  }
   if (!response.ok) {
     throw new Error(`Failed to download: ${response.statusText}`);
   }
@@ -685,6 +807,19 @@ app.post('/api/quote', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and message are required.' });
     }
 
+    // Input length validation to prevent abuse
+    if (String(email).length > 254 || String(message).length > 10000 ||
+        String(firstName || '').length > 100 || String(lastName || '').length > 100 ||
+        String(phone || '').length > 30) {
+      return res.status(400).json({ success: false, error: 'Input exceeds maximum allowed length.' });
+    }
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email format.' });
+    }
+
     // Store in Firestore
     await adminDb.collection('quotes').add({
       firstName: firstName || '',
@@ -718,8 +853,15 @@ app.post('/api/quote', async (req, res) => {
           'general-inquiry': 'General Inquiry',
           'transcription': 'Transcription',
         };
-        const subjectLabel = subjectLabels[subject] || subject || 'General';
+        const subjectLabel = subjectLabels[subject] || 'General';
         const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+
+        // Escape ALL user-supplied values before interpolating into HTML
+        const safeFullName = escapeHtml(fullName);
+        const safeEmail = escapeHtml(email);
+        const safePhone = escapeHtml(phone || 'N/A');
+        const safeSubjectLabel = escapeHtml(subjectLabel);
+        const safeMessage = escapeHtml(message);
 
         emailTransporter.sendMail({
           from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
@@ -729,13 +871,13 @@ app.post('/api/quote', async (req, res) => {
           text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
           html: `<h2 style="color:#0284c7">New Quote Request</h2>
 <table style="border-collapse:collapse;width:100%;max-width:600px;font-family:sans-serif;font-size:14px">
-<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${fullName}</td></tr>
-<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${email}" style="color:#0284c7">${email}</a></td></tr>
-<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${phone || 'N/A'}</td></tr>
-<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Subject</td><td style="padding:10px 14px;color:#111">${subjectLabel}</td></tr>
+<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${safeFullName}</td></tr>
+<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${safeEmail}" style="color:#0284c7">${safeEmail}</a></td></tr>
+<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${safePhone}</td></tr>
+<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Subject</td><td style="padding:10px 14px;color:#111">${safeSubjectLabel}</td></tr>
 </table>
 <h3 style="color:#374151;font-family:sans-serif;margin-top:20px">Message</h3>
-<p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
+<p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${safeMessage}</p>`,
         })
           .then(() => console.log('[quote] Email sent to', notificationEmail))
           .catch(emailErr => console.error('[quote] Email send failed:', emailErr.message));
@@ -770,7 +912,8 @@ app.put('/api/admin/settings', verifyAdmin, async (req, res) => {
 });
 
 // GET /api/files/* - Serve uploaded files via FTP proxy with range request support
-app.get('/api/files/*path', async (req, res) => {
+// Requires authentication to prevent unauthorized file access
+app.get('/api/files/*path', verifyAuth, async (req, res) => {
   // req.params.path is an array of decoded segments in this Express version
   const segments = Array.isArray(req.params.path) ? req.params.path : [req.params.path];
   let requestPath;
