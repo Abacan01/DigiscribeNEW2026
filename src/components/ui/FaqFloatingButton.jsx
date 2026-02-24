@@ -160,6 +160,7 @@ function FaqItem({ q, a }) {
 export default function FaqFloatingButton() {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const isHidden = HIDDEN_PATHS.has(location.pathname);
 
   useEffect(() => { setIsOpen(false); }, [location.pathname]);
@@ -170,6 +171,15 @@ export default function FaqFloatingButton() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 280);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (isHidden) return null;
 
@@ -422,6 +432,48 @@ export default function FaqFloatingButton() {
         >
           <i className="fa-solid fa-xmark" style={{ fontSize: '22px' }} />
         </span>
+      </button>
+
+      {/* ── Scroll-to-top button ── */}
+      <button
+        type="button"
+        onClick={scrollToTop}
+        aria-label="Scroll to top"
+        style={{
+          marginTop: '10px',
+          position: 'relative',
+          width: '44px',
+          height: '44px',
+          borderRadius: '50%',
+          border: '1.5px solid rgba(186,230,253,0.7)',
+          background: 'rgba(255,255,255,0.92)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          boxShadow: '0 4px 16px rgba(2,132,199,0.18), 0 1px 6px rgba(15,23,42,0.08)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#0ea5e9',
+          outline: 'none',
+          transition:
+            'opacity 240ms cubic-bezier(0.22,1,0.36,1), transform 240ms cubic-bezier(0.22,1,0.36,1), box-shadow 200ms ease, background 150ms ease',
+          opacity: scrolled ? 1 : 0,
+          transform: scrolled ? 'scale(1) translateY(0px)' : 'scale(0.8) translateY(8px)',
+          pointerEvents: scrolled ? 'auto' : 'none',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(240,249,255,0.98)';
+          e.currentTarget.style.boxShadow = '0 8px 24px rgba(2,132,199,0.28), 0 2px 8px rgba(15,23,42,0.1)';
+          e.currentTarget.style.transform = 'scale(1.1) translateY(-2px)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255,255,255,0.92)';
+          e.currentTarget.style.boxShadow = '0 4px 16px rgba(2,132,199,0.18), 0 1px 6px rgba(15,23,42,0.08)';
+          e.currentTarget.style.transform = 'scale(1) translateY(0px)';
+        }}
+      >
+        <i className="fa-solid fa-chevron-up" style={{ fontSize: '14px' }} />
       </button>
     </div>,
     document.body,
