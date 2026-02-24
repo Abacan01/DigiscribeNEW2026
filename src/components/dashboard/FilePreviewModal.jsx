@@ -208,7 +208,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <img
           src={fileUrl(file.url)}
           alt={file.originalName}
-          className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+          className="max-w-full max-h-[58vh] object-contain rounded-lg shadow-sm"
         />
       );
     }
@@ -271,7 +271,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <div className="relative">
           <video
             controls
-            className="max-w-full max-h-full rounded-lg shadow-sm"
+            className="max-w-full max-h-[58vh] rounded-lg shadow-sm"
             preload="metadata"
             playsInline
             onLoadedData={() => setMediaLoading(false)}
