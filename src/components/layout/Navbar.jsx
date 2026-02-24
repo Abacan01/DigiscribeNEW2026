@@ -350,6 +350,7 @@ function MobileMenu({ isOpen, onClose }) {
             ) : (
               <Link
                 to="/login"
+                replace
                 onClick={onClose}
                 className="block text-center text-primary border border-primary px-5 py-3 rounded-full text-sm font-medium hover:bg-primary hover:text-white transition-colors"
               >
@@ -479,6 +480,7 @@ export default function Navbar() {
               ) : (
                 <Link
                   to="/login"
+                  replace
                   className="text-primary border border-primary px-5 py-2 rounded-full text-sm font-medium transition-all hover:bg-primary hover:text-white"
                 >
                   Login
