@@ -605,20 +605,12 @@ footer::after {
   }
 }
 
-.faq-fab {
-  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 .faq-fab-ring {
   position: absolute;
-  inset: -2px;
+  inset: -3px;
   border-radius: 9999px;
-  border: 2px solid rgba(14, 165, 233, 0.35);
-  animation: faqRingPulse 2.2s ease-out infinite;
-}
-
-.faq-panel {
-  box-shadow: 0 16px 38px rgba(2, 132, 199, 0.16), 0 5px 15px rgba(15, 23, 42, 0.08);
+  border: 2px solid rgba(14, 165, 233, 0.38);
+  animation: faqRingPulse 2.4s ease-out infinite;
 }
 
 @keyframes mediaPulse {
@@ -650,11 +642,6 @@ iframe.media-loaded {
 @media (prefers-reduced-motion: reduce) {
   #root.page-enter-active {
     animation: none;
-  }
-
-  .faq-fab,
-  .faq-panel {
-    transition: none !important;
   }
 
   .faq-fab-ring {
