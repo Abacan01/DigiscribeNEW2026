@@ -98,6 +98,37 @@ router.put('/metadata/:fileId/status', verifyAuth, async (req, res) => {
   }
 });
 
+// PUT /api/files/metadata/:fileId/description - Update file description/note
+router.put('/metadata/:fileId/description', verifyAuth, async (req, res) => {
+  const { description } = req.body;
+  const nextDescription = typeof description === 'string' ? description.trim() : '';
+
+  if (nextDescription.length > 2000) {
+    return res.status(400).json({ success: false, error: 'Description must be 2000 characters or less.' });
+  }
+
+  try {
+    const docRef = adminDb.collection('files').doc(req.params.fileId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'File not found.' });
+    }
+
+    const fileData = doc.data();
+
+    // Users can update only their own files; admins can update any file.
+    if (req.user.role !== 'admin' && fileData.uploadedBy !== req.user.uid) {
+      return res.status(403).json({ success: false, error: 'Access denied.' });
+    }
+
+    await docRef.update({ description: nextDescription, updatedAt: new Date() });
+    res.json({ success: true, description: nextDescription });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // PUT /api/files/metadata/:fileId/folder - Move file to folder
 router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
   const { folderId } = req.body;

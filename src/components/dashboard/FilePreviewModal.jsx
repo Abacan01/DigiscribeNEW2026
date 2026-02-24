@@ -54,13 +54,21 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function FilePreviewModal({ file, onClose }) {
+export default function FilePreviewModal({ file, onClose, canEditDescription = false, onSaveDescription }) {
   const overlayRef = useRef(null);
   const [textContent, setTextContent] = useState(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState(null);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaError, setMediaError] = useState(null);
+  const [descriptionValue, setDescriptionValue] = useState(file.description || '');
+  const [descriptionSaving, setDescriptionSaving] = useState(false);
+  const [descriptionMessage, setDescriptionMessage] = useState(null);
+
+  useEffect(() => {
+    setDescriptionValue(file.description || '');
+    setDescriptionMessage(null);
+  }, [file.id, file.description]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -349,6 +357,20 @@ export default function FilePreviewModal({ file, onClose }) {
     );
   };
 
+  const handleSaveDescription = async () => {
+    if (!onSaveDescription) return;
+    setDescriptionSaving(true);
+    setDescriptionMessage(null);
+    try {
+      await onSaveDescription(file.id, descriptionValue);
+      setDescriptionMessage({ type: 'success', text: 'Note saved.' });
+    } catch (err) {
+      setDescriptionMessage({ type: 'error', text: err.message || 'Failed to save note.' });
+    } finally {
+      setDescriptionSaving(false);
+    }
+  };
+
   return createPortal(
     <div
       ref={overlayRef}
@@ -388,6 +410,56 @@ export default function FilePreviewModal({ file, onClose }) {
         {/* Content */}
         <div className={`flex-1 overflow-auto bg-gray-50/50 ${mediaType === 'pdf' ? '' : 'p-6 flex items-center justify-center'}`}>
           {renderContent()}
+        </div>
+
+        {/* Description / Notes */}
+        <div className="px-6 py-4 border-t border-gray-100 bg-white">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <h4 className="text-xs font-semibold text-gray-text uppercase tracking-wider">Description / Note</h4>
+            {canEditDescription && (
+              <button
+                type="button"
+                onClick={handleSaveDescription}
+                disabled={descriptionSaving || descriptionValue.trim() === (file.description || '').trim()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white bg-primary hover:bg-primary-dark transition-colors disabled:opacity-50"
+              >
+                {descriptionSaving ? (
+                  <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                ) : (
+                  <i className="fas fa-save text-[10px]"></i>
+                )}
+                Save
+              </button>
+            )}
+          </div>
+
+          {canEditDescription ? (
+            <>
+              <textarea
+                value={descriptionValue}
+                onChange={(e) => setDescriptionValue(e.target.value)}
+                placeholder="Add note/details for this file..."
+                maxLength={2000}
+                className="w-full min-h-[92px] resize-y rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[11px] text-gray-400">{descriptionValue.length}/2000</span>
+                {descriptionMessage && (
+                  <span className={`text-[11px] ${descriptionMessage.type === 'success' ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {descriptionMessage.text}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+              {file.description ? (
+                <p className="text-sm text-dark-text whitespace-pre-wrap break-words leading-relaxed">{file.description}</p>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No note provided.</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

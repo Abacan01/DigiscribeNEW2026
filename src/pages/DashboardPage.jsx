@@ -354,6 +354,20 @@ export default function DashboardPage() {
     }
   }, [getIdToken]);
 
+  const handleUpdateDescription = useCallback(async (fileId, description) => {
+    const token = await getIdToken();
+    const res = await fetch(`/api/files/metadata/${fileId}/description`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ description }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to update note.');
+    }
+    setPreviewFile((prev) => (prev && prev.id === fileId ? { ...prev, description: data.description ?? description } : prev));
+  }, [getIdToken]);
+
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
@@ -1606,7 +1620,12 @@ export default function DashboardPage() {
 
       {/* Preview Modal */}
       {previewFile && (
-        <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+        <FilePreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+          canEditDescription={!isAdmin}
+          onSaveDescription={handleUpdateDescription}
+        />
       )}
 
       {/* Properties Modal */}

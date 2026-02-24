@@ -1769,7 +1769,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       )}
 
       {/* Preview Modal */}
-      {previewFile && <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />}
+      {previewFile && (
+        <FilePreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+          canEditDescription={false}
+        />
+      )}
 
       {/* Properties Modal */}
       {propertiesFile && <FilePropertiesModal file={propertiesFile} onClose={() => setPropertiesFile(null)} />}

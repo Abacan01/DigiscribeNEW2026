@@ -603,7 +603,11 @@ export default function TranscriptionDetailPage() {
 
       {/* File Preview Modal */}
       {previewFile && (
-        <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+        <FilePreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+          canEditDescription={false}
+        />
       )}
     </Layout>
   );
