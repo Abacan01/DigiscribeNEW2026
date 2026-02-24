@@ -87,7 +87,7 @@ const faqSections = [
   },
 ];
 
-const HIDDEN_PATHS = new Set(['/login', '/dashboard', '/admin/dashboard']);
+const HIDDEN_PATHS = new Set(['/login', '/dashboard', '/admin/dashboard', '/upload']);
 
 function FaqItem({ q, a }) {
   const [open, setOpen] = useState(false);
