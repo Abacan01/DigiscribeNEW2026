@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/layout/ScrollToTop';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -20,50 +20,112 @@ import LguTranscriptionsPage from './pages/LguTranscriptionsPage';
 import TranscriptionDetailPage from './pages/TranscriptionDetailPage';
 import UserTranscriptionViewPage from './pages/UserTranscriptionViewPage';
 
-function App() {
+function GlobalUiEffects() {
+  const location = useLocation();
+
   useEffect(() => {
-    const bindImage = (img) => {
-      if (!(img instanceof HTMLImageElement)) return;
-      if (img.dataset.mediaBound === 'true') return;
+    const bindMedia = (node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (!node.matches('img, video, iframe')) return;
 
-      img.dataset.mediaBound = 'true';
-      img.classList.add('media-loading');
+      const source = node.getAttribute('src') || node.getAttribute('data-src') || '';
+      if (!source) return;
 
-      const finalize = () => {
-        img.classList.remove('media-loading');
-        img.classList.add('media-loaded');
-      };
-
-      if (img.complete) {
-        finalize();
+      const mediaStateKey = `${node.tagName}:${source}`;
+      if (node.dataset.mediaStateKey === mediaStateKey && node.dataset.mediaState === 'loaded') {
         return;
       }
 
-      img.addEventListener('load', finalize, { once: true });
-      img.addEventListener('error', finalize, { once: true });
+      node.dataset.mediaStateKey = mediaStateKey;
+      node.dataset.mediaState = 'loading';
+      node.classList.add('media-loading');
+      node.classList.remove('media-loaded');
+
+      const finalize = () => {
+        node.dataset.mediaState = 'loaded';
+        node.classList.remove('media-loading');
+        node.classList.add('media-loaded');
+      };
+
+      if (node instanceof HTMLImageElement) {
+        if (node.complete) {
+          finalize();
+          return;
+        }
+        node.addEventListener('load', finalize, { once: true });
+        node.addEventListener('error', finalize, { once: true });
+        return;
+      }
+
+      if (node instanceof HTMLVideoElement) {
+        if (node.readyState >= 2) {
+          finalize();
+          return;
+        }
+        node.addEventListener('loadeddata', finalize, { once: true });
+        node.addEventListener('canplay', finalize, { once: true });
+        node.addEventListener('error', finalize, { once: true });
+        return;
+      }
+
+      node.addEventListener('load', finalize, { once: true });
+      node.addEventListener('error', finalize, { once: true });
     };
 
-    document.querySelectorAll('img').forEach(bindImage);
+    const scanWithin = (root) => {
+      if (!(root instanceof Element)) return;
+      bindMedia(root);
+      root.querySelectorAll('img, video, iframe').forEach(bindMedia);
+    };
+
+    scanWithin(document.body);
 
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (!(node instanceof Element)) continue;
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach((node) => {
+            if (node instanceof Element) scanWithin(node);
+          });
+        }
 
-          if (node.tagName === 'IMG') bindImage(node);
-          node.querySelectorAll?.('img').forEach(bindImage);
+        if (mutation.type === 'attributes' && mutation.target instanceof Element) {
+          bindMedia(mutation.target);
         }
       }
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src', 'data-src'],
+    });
 
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    const noAnimation = location.pathname === '/dashboard' || location.pathname === '/admin/dashboard';
+    root.classList.remove('page-enter-active');
+
+    if (noAnimation) return;
+
+    requestAnimationFrame(() => {
+      root.classList.add('page-enter-active');
+    });
+  }, [location.pathname]);
+
+  return null;
+}
+
+function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <GlobalUiEffects />
         <ScrollToTop />
         <Routes>
           {/* Public routes */}

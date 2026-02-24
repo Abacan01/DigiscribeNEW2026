@@ -23,30 +23,30 @@ export default function ServicesPage() {
       <Link
         key={serviceKey}
         to={service.link}
-        className="service-card group relative rounded-2xl overflow-hidden shadow-lg block h-64 transition-all duration-500 hover:shadow-xl hover:-translate-y-1"
+        className="service-card group relative rounded-2xl overflow-hidden shadow-lg block h-64 transition-[transform,box-shadow] duration-700 ease-out hover:shadow-xl hover:-translate-y-1"
       >
         {/* Background Image */}
         <div className="absolute inset-0">
           <img
             src={service.cardImage}
             alt={service.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
         </div>
 
         {/* Dark gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20 group-hover:from-black/90 group-hover:via-black/50 transition-all duration-500"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20 group-hover:from-black/90 group-hover:via-black/50 transition-all duration-700 ease-out"></div>
 
         {/* Content */}
         <div className="relative z-10 h-full flex flex-col justify-end p-6">
           <div className="mb-3">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4 group-hover:bg-white/30 transition-all duration-300">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4 group-hover:bg-white/30 transition-all duration-500 ease-out">
               <i className={`${service.icon} text-white text-xl`}></i>
             </div>
             <h3 className="text-lg font-bold text-white mb-2">{service.title}</h3>
             <p className="text-sm text-gray-200 leading-relaxed line-clamp-2">{service.shortDescription}</p>
           </div>
-          <div className="flex items-center gap-2 text-cyan-300 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+          <div className="flex items-center gap-2 text-cyan-300 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-500 ease-out transform translate-y-1 group-hover:translate-y-0">
             <span>Learn More</span>
             <i className="fas fa-arrow-right text-xs"></i>
           </div>

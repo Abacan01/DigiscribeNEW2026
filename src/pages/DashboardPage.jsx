@@ -859,22 +859,9 @@ export default function DashboardPage() {
 
               {/* Content */}
               {loading || foldersLoading ? (
-                <div className="py-8">
-                  <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                    <i className="fas fa-spinner fa-spin text-[11px]"></i>
-                    Loading files and folders...
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {[...Array(6)].map((_, idx) => (
-                      <div key={idx} className="bg-white rounded-xl border border-gray-100 p-4 animate-pulse">
-                        <div className="h-2 w-20 rounded bg-sky-100 mb-4"></div>
-                        <div className="h-4 w-3/4 rounded bg-gray-200 mb-2"></div>
-                        <div className="h-3 w-1/2 rounded bg-gray-100 mb-4"></div>
-                        <div className="h-3 w-full rounded bg-gray-100 mb-2"></div>
-                        <div className="h-3 w-2/3 rounded bg-gray-100"></div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="text-center py-24">
+                  <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
+                  <p className="text-sm text-gray-text">Loading your files...</p>
                 </div>
               ) : totalItems === 0 && !hasActiveFilters ? (
                 <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
