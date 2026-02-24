@@ -19,6 +19,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import LguTranscriptionsPage from './pages/LguTranscriptionsPage';
 import TranscriptionDetailPage from './pages/TranscriptionDetailPage';
 import UserTranscriptionViewPage from './pages/UserTranscriptionViewPage';
+import FaqFloatingButton from './components/ui/FaqFloatingButton';
 
 function GlobalUiEffects() {
   const location = useLocation();
@@ -162,6 +163,7 @@ function App() {
 
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        <FaqFloatingButton />
       </AuthProvider>
     </BrowserRouter>
   );
