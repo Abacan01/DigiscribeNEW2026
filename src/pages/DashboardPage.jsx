@@ -125,6 +125,8 @@ export default function DashboardPage() {
   const [previewFile, setPreviewFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [message, setMessage] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const dashboardStateHydratedRef = useRef(false);
 
@@ -323,6 +325,32 @@ export default function DashboardPage() {
     } catch (err) {
       setStatusError(err.message);
       setTimeout(() => setStatusError(null), 4000);
+    }
+  }, [getIdToken]);
+
+  const handleDeleteFile = useCallback(async (fileId) => {
+    setDeleteLoading(fileId);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/files/metadata/${fileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete file.');
+      setMessage({ type: 'success', text: 'File deleted.' });
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(fileId);
+        return next;
+      });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setDeleteLoading(null);
+      setDeleteConfirm(null);
+      setTimeout(() => setMessage(null), 3000);
     }
   }, [getIdToken]);
 
@@ -694,6 +722,7 @@ export default function DashboardPage() {
       { icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) },
       { divider: true },
       { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) },
+      { icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => setDeleteConfirm(file.id) },
     ];
 
     // When multiple files are selected, add bulk actions
@@ -1041,6 +1070,35 @@ export default function DashboardPage() {
               )}
 
               {/* Delete folder confirmation */}
+              {deleteConfirm && (
+                <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
+                  <i className="fas fa-exclamation-triangle text-red-500"></i>
+                  <span className="text-sm font-medium text-red-700">
+                    Delete this file?
+                  </span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      onClick={() => handleDeleteFile(deleteConfirm)}
+                      disabled={deleteLoading === deleteConfirm}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
+                    >
+                      {deleteLoading === deleteConfirm ? (
+                        <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                      ) : (
+                        'Delete'
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(null)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Delete folder confirmation */}
               {deleteFolderConfirm && (
                 <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
                   <i className="fas fa-exclamation-triangle text-red-500"></i>
@@ -1283,6 +1341,20 @@ export default function DashboardPage() {
                                     <i className="fas fa-download text-[10px]"></i>
                                     Download
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirm(file.id)}
+                                    disabled={deleteLoading === file.id}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title="Delete file"
+                                  >
+                                    {deleteLoading === file.id ? (
+                                      <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                                    ) : (
+                                      <i className="fas fa-trash-alt text-[10px]"></i>
+                                    )}
+                                    Delete
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -1382,6 +1454,23 @@ export default function DashboardPage() {
                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer shadow-sm"
                           />
                         </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDeleteConfirm(file.id);
+                          }}
+                          disabled={deleteLoading === file.id}
+                          className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/95 border border-red-100 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                          title="Delete file"
+                        >
+                          {deleteLoading === file.id ? (
+                            <i className="fas fa-spinner fa-spin text-[11px]"></i>
+                          ) : (
+                            <i className="fas fa-trash-alt text-[11px]"></i>
+                          )}
+                        </button>
                         <FileCard
                           file={file}
                           isAdmin={isAdmin}
