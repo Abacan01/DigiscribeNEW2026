@@ -1,27 +1,14 @@
 import { Router } from 'express';
-import crypto from 'crypto';
 import { adminDb } from '../firebaseAdmin.js';
 
 const router = Router();
-
-// Timing-safe string comparison to prevent timing attacks on API key
-function timingSafeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) {
-    crypto.timingSafeEqual(bufA, bufA);
-    return false;
-  }
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 // Verify pipeline access (admin token or pipeline API key)
 function verifyPipelineAccess(req, res, next) {
   const pipelineKey = req.headers['x-pipeline-key'];
   const expectedKey = process.env.PIPELINE_API_KEY;
 
-  if (pipelineKey && expectedKey && timingSafeEqual(pipelineKey, expectedKey)) {
+  if (pipelineKey && expectedKey && pipelineKey === expectedKey) {
     return next();
   }
 
@@ -59,8 +46,7 @@ router.post('/status', verifyPipelineAccess, async (req, res) => {
     await batch.commit();
     res.json({ success: true, updated: fileIds.length });
   } catch (err) {
-    console.error('[pipeline/status] Error:', err.message);
-    res.status(500).json({ success: false, error: 'Failed to update status.' });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -84,8 +70,7 @@ router.post('/webhook', verifyPipelineAccess, async (req, res) => {
     await adminDb.collection('files').doc(fileId).update(updateData);
     res.json({ success: true });
   } catch (err) {
-    console.error('[pipeline/webhook] Error:', err.message);
-    res.status(500).json({ success: false, error: 'Failed to process webhook.' });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

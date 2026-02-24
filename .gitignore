@@ -26,12 +26,6 @@ dist-ssr
 # Firebase
 .env
 .env.local
-.env.production
 server/serviceAccountKey.json
 server/uploads/
 server/chunks/
-
-# Sensitive files — NEVER commit cookies or credentials
-server/cookies.txt
-server/www.youtube.com_cookies.txt
-server/*.cookies.txt

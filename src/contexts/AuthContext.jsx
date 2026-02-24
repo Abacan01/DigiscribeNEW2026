@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import {
   onAuthStateChanged,
-  onIdTokenChanged,
   signInWithEmailAndPassword,
   signOut,
   setPersistence,
@@ -9,7 +8,6 @@ import {
   browserSessionPersistence,
 } from 'firebase/auth';
 import { auth } from '../firebase';
-import { setFileToken } from '../lib/fileUrl';
 
 const AuthContext = createContext(null);
 
@@ -31,8 +29,6 @@ export function AuthProvider({ children }) {
         try {
           const tokenResult = await firebaseUser.getIdTokenResult();
           const claims = tokenResult.claims;
-          // Push token to fileUrl helper so <img>/<video> tags can authenticate
-          setFileToken(tokenResult.token);
           // Support legacy admin boolean and old role names
           let userRole = claims.role || (claims.admin ? 'admin' : 'user');
           if (userRole === 'superAdmin' || userRole === 'lguAdmin') {
@@ -45,27 +41,11 @@ export function AuthProvider({ children }) {
       } else {
         setUser(null);
         setRole('user');
-        setFileToken(null);
       }
       setLoading(false);
     });
 
     return unsubscribe;
-  }, []);
-
-  // Keep the file-URL token fresh when Firebase silently refreshes the ID token (~every hour)
-  useEffect(() => {
-    const unsubToken = onIdTokenChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const token = await firebaseUser.getIdToken();
-          setFileToken(token);
-        } catch { /* ignore */ }
-      } else {
-        setFileToken(null);
-      }
-    });
-    return unsubToken;
   }, []);
 
   const login = async (email, password, options = {}) => {

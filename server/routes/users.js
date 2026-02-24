@@ -30,8 +30,7 @@ router.get('/users', verifyAdmin, async (req, res) => {
     });
     res.json({ success: true, users });
   } catch (err) {
-    console.error('[admin/users] List error:', err.message);
-    res.status(500).json({ success: false, error: 'Failed to list users.' });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -41,11 +40,6 @@ router.post('/users', verifyAdmin, async (req, res) => {
 
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'Email and password are required.' });
-  }
-
-  // Enforce minimum password strength
-  if (password.length < 8) {
-    return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
   }
 
   const userRole = VALID_ROLES.includes(role) ? role : 'user';
@@ -76,10 +70,6 @@ router.post('/users', verifyAdmin, async (req, res) => {
 
 // DELETE /api/admin/users/:uid - Delete a user (admin only)
 router.delete('/users/:uid', verifyAdmin, async (req, res) => {
-  // Prevent admin from deleting their own account
-  if (req.params.uid === req.user.uid) {
-    return res.status(400).json({ success: false, error: 'Cannot delete your own account.' });
-  }
   try {
     await adminAuth.deleteUser(req.params.uid);
     res.json({ success: true });

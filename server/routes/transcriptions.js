@@ -22,7 +22,6 @@ const deliveryUpload = multer({
       cb(null, `${Date.now()}-${safeName}`);
     },
   }),
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB max delivery file
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/') || file.mimetype.startsWith('image/')) {
       cb(null, true);
