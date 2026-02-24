@@ -208,7 +208,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <img
           src={fileUrl(file.url)}
           alt={file.originalName}
-          className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
+          className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
         />
       );
     }
@@ -271,7 +271,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <div className="relative">
           <video
             controls
-            className="max-w-full max-h-[70vh] rounded-lg shadow-sm"
+            className="max-w-full max-h-full rounded-lg shadow-sm"
             preload="metadata"
             playsInline
             onLoadedData={() => setMediaLoading(false)}
@@ -408,7 +408,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         </div>
 
         {/* Content */}
-        <div className={`flex-1 overflow-auto bg-gray-50/50 ${mediaType === 'pdf' ? '' : 'p-6 flex items-center justify-center'}`}>
+        <div className={`flex-1 min-h-0 bg-gray-50/50 ${mediaType === 'pdf' ? 'overflow-auto' : 'overflow-hidden p-6 flex items-center justify-center'}`}>
           {renderContent()}
         </div>
 
@@ -440,7 +440,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
                 onChange={(e) => setDescriptionValue(e.target.value)}
                 placeholder="Add note/details for this file..."
                 maxLength={2000}
-                className="w-full min-h-[92px] resize-y rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
+                className="w-full h-28 max-h-40 overflow-y-auto resize-none rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
               />
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-[11px] text-gray-400">{descriptionValue.length}/2000</span>
@@ -452,7 +452,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
               </div>
             </>
           ) : (
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5 max-h-28 overflow-y-auto">
               {file.description ? (
                 <p className="text-sm text-dark-text whitespace-pre-wrap break-words leading-relaxed">{file.description}</p>
               ) : (
