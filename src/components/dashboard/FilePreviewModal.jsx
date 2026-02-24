@@ -208,7 +208,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <img
           src={fileUrl(file.url)}
           alt={file.originalName}
-          className="max-w-full max-h-[58vh] object-contain rounded-lg shadow-sm"
+          className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
         />
       );
     }
@@ -271,7 +271,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <div className="relative">
           <video
             controls
-            className="max-w-full max-h-[58vh] rounded-lg shadow-sm"
+            className="max-w-full max-h-[70vh] rounded-lg shadow-sm"
             preload="metadata"
             playsInline
             onLoadedData={() => setMediaLoading(false)}
@@ -377,7 +377,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
     >
-      <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[96vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3 min-w-0">
@@ -413,7 +413,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         </div>
 
         {/* Description / Notes */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-white">
+        <div className="px-6 py-2.5 border-t border-gray-100 bg-white">
           <div className="flex items-center justify-between gap-3 mb-2">
             <h4 className="text-xs font-semibold text-gray-text uppercase tracking-wider">Description / Note</h4>
             {canEditDescription && (
@@ -440,7 +440,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
                 onChange={(e) => setDescriptionValue(e.target.value)}
                 placeholder="Add note/details for this file..."
                 maxLength={2000}
-                className="w-full h-28 max-h-40 overflow-y-auto resize-none rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
+                className="w-full h-20 max-h-28 overflow-y-auto resize-none rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
               />
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-[11px] text-gray-400">{descriptionValue.length}/2000</span>
@@ -452,7 +452,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
               </div>
             </>
           ) : (
-            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5 max-h-28 overflow-y-auto">
+            <div className="rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5 max-h-20 overflow-y-auto">
               {file.description ? (
                 <p className="text-sm text-dark-text whitespace-pre-wrap break-words leading-relaxed">{file.description}</p>
               ) : (
