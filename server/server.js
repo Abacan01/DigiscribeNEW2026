@@ -10,7 +10,7 @@ import fs from 'fs';
 import archiver from 'archiver';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
-import { adminDb } from './firebaseAdmin.js';
+import { adminDb, adminAuth } from './firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from './middleware/authMiddleware.js';
 import usersRouter from './routes/users.js';
 import filesRouter from './routes/files.js';
@@ -912,8 +912,28 @@ app.put('/api/admin/settings', verifyAdmin, async (req, res) => {
 });
 
 // GET /api/files/* - Serve uploaded files via FTP proxy with range request support
-// Requires authentication to prevent unauthorized file access
-app.get('/api/files/*path', verifyAuth, async (req, res) => {
+// Accepts auth via Bearer header OR ?token= query parameter (for <img>/<video>/<audio> tags)
+app.get('/api/files/*path', async (req, res) => {
+  // --- Authenticate: Bearer header or ?token query param ---
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token;
+  const bearerToken = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.split('Bearer ')[1] : null;
+  const token = bearerToken || queryToken;
+
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Authentication required.' });
+  }
+  if (!adminAuth) {
+    return res.status(503).json({ success: false, error: 'Auth service unavailable.' });
+  }
+  try {
+    await adminAuth.verifyIdToken(token);
+  } catch {
+    return res.status(401).json({ success: false, error: 'Invalid or expired token.' });
+  }
+
+  // Allow cross-origin embedding (frontend on different domain)
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   // req.params.path is an array of decoded segments in this Express version
   const segments = Array.isArray(req.params.path) ? req.params.path : [req.params.path];
   let requestPath;
