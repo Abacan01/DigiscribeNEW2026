@@ -265,14 +265,58 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, currentPage]);
 
-  // Compute counts (across ALL files + folders)
+  const applyNonStatusFilters = useCallback((files, { scopedToCurrentFolder }) => {
+    let result = [...files];
+
+    const mapTypeToLabel = (t) => {
+      if (!t) return '';
+      if (t.startsWith('image/')) return 'Image';
+      if (t.startsWith('audio/')) return 'Audio';
+      if (t.startsWith('video/')) return 'Video';
+      if (t === 'application/pdf') return 'PDF';
+      if (t.includes('word') || t === 'application/msword') return 'Word';
+      if (t.includes('excel') || t.includes('spreadsheet')) return 'Excel';
+      if (t.includes('powerpoint') || t.includes('presentation')) return 'PowerPoint';
+      if (t === 'text/plain' || t === 'text/csv') return 'Text';
+      return 'Other';
+    };
+
+    if (scopedToCurrentFolder) {
+      if (dateFrom && dateTo) {
+        result = result.filter((f) => {
+          if (!f.uploadedAt) return false;
+          const d = new Date(f.uploadedAt);
+          return d >= dateFrom && d <= dateTo;
+        });
+      }
+      if (typeFilter) {
+        result = result.filter((f) => mapTypeToLabel(f.type) === typeFilter);
+      }
+    }
+
+    if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((f) => f.originalName && f.originalName.toLowerCase().includes(q));
+    }
+
+    return result;
+  }, [dateFrom, dateTo, typeFilter, serviceFilter, searchQuery]);
+
+  // Compute counts for top status cards
   const counts = useMemo(() => {
-    const result = { total: allFiles.length + allFolders.length, pending: 0, 'in-progress': 0, transcribed: 0 };
-    for (const file of allFiles) {
+    const insideFolder = currentFolderId !== null;
+    const scopedFiles = insideFolder
+      ? allFiles.filter((f) => (f.folderId || null) === currentFolderId)
+      : allFiles;
+    const filesForStatusCounts = applyNonStatusFilters(scopedFiles, { scopedToCurrentFolder: insideFolder });
+
+    const result = { total: allFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
+    for (const file of filesForStatusCounts) {
       if (result[file.status] !== undefined) result[file.status]++;
     }
     return result;
-  }, [allFiles, allFolders]);
+  }, [allFiles, currentFolderId, applyNonStatusFilters]);
 
   // Unique service categories
   const serviceCategories = useMemo(() => {
@@ -331,8 +375,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder]);
 
-  // Subfolders – filter by name when searching, and by date range when inside a folder
+  // Subfolders – hidden while a status tab is active (status view is file-only)
   const currentSubfolders = useMemo(() => {
+    if (statusFilter) return [];
+
     let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -348,7 +394,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       });
     }
     return folders;
-  }, [allFolders, currentFolderId, searchQuery, isInsideFolder, dateFrom, dateTo]);
+  }, [allFolders, currentFolderId, searchQuery, isInsideFolder, dateFrom, dateTo, statusFilter]);
 
   // Item counts per folder
   const folderItemCounts = useMemo(() => {
@@ -392,41 +438,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   // Filter + sort
   const filteredFiles = useMemo(() => {
-    let result = [...currentFolderFiles];
+    let result = applyNonStatusFilters(currentFolderFiles, { scopedToCurrentFolder: isInsideFolder });
 
-    if (isInsideFolder) {
-      // Inside a folder: apply ALL active filters together
-      if (statusFilter) result = result.filter((f) => f.status === statusFilter);
-      if (dateFrom && dateTo) {
-        result = result.filter((f) => {
-          if (!f.uploadedAt) return false;
-          const d = new Date(f.uploadedAt);
-          return d >= dateFrom && d <= dateTo;
-        });
-      }
-      if (typeFilter) {
-        result = result.filter((f) => getFileTypeLabel(f.type) === typeFilter);
-      }
-      if (serviceFilter) {
-        result = result.filter((f) => f.serviceCategory === serviceFilter);
-      }
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        result = result.filter(
-          (f) => f.originalName && f.originalName.toLowerCase().includes(q)
-        );
-      }
-    } else {
-      // Root: apply root-level filters (status, service, search)
-      if (statusFilter) result = result.filter((f) => f.status === statusFilter);
-      if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        result = result.filter(
-          (f) => f.originalName && f.originalName.toLowerCase().includes(q)
-        );
-      }
-    }
+    if (statusFilter) result = result.filter((f) => f.status === statusFilter);
 
     switch (sortBy) {
       case 'oldest': result.sort((a, b) => new Date(a.uploadedAt || 0) - new Date(b.uploadedAt || 0)); break;
@@ -436,7 +450,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       default: result.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0)); break;
     }
     return result;
-  }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy, isInsideFolder, dateFrom, dateTo, typeFilter, getFileTypeLabel]);
+  }, [currentFolderFiles, statusFilter, sortBy, isInsideFolder, applyNonStatusFilters]);
 
   // Combined items for pagination: folders first, then files
   const allPageItems = useMemo(() => [...currentSubfolders, ...filteredFiles], [currentSubfolders, filteredFiles]);
