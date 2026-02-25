@@ -137,21 +137,22 @@ export default function LoginPage() {
 
   return (
     <div
-      className={`relative min-h-dvh overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-indigo-50 p-2 sm:p-3 lg:p-4 transition-all duration-500 ease-out ${
+      className={`relative h-dvh overflow-hidden bg-gradient-to-br from-sky-50 via-white to-indigo-50 p-2 sm:p-3 lg:p-4 transition-all duration-500 ease-out ${
         isEntering && !isLeaving ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.985]'
       }`}
     >
-      <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
+      <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 -left-20 h-80 w-80 rounded-full bg-primary/20 blur-3xl" />
         <div className="absolute -bottom-20 -right-24 h-[26rem] w-[26rem] rounded-full bg-sky-200/30 blur-3xl" />
+        <div className="absolute inset-0 backdrop-blur-[5px]" />
       </div>
 
       <div
-        className={`relative w-full min-h-full max-w-6xl mx-auto rounded-2xl lg:rounded-[2rem] overflow-visible border border-sky-100/80 bg-white/80 shadow-2xl shadow-sky-100/60 backdrop-blur-xl grid lg:grid-cols-[1.1fr_0.9fr] transition-all duration-500 ease-out ${
+        className={`relative w-full h-full max-w-6xl mx-auto rounded-2xl lg:rounded-[2rem] overflow-hidden border border-sky-100/80 bg-white/80 shadow-2xl shadow-sky-100/60 backdrop-blur-xl grid lg:grid-cols-[1.1fr_0.9fr] transition-all duration-500 ease-out ${
           isEntering && !isLeaving ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
         }`}
       >
-        <section className="relative hidden lg:block h-full overflow-hidden rounded-l-2xl lg:rounded-l-[2rem]">
+        <section className="relative hidden lg:block h-full">
           <img
             src="/images/manilacityhall.png"
             alt="DigiScribe"
@@ -170,8 +171,8 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="p-4 sm:p-6 lg:p-10 flex flex-col justify-center overflow-y-auto">
-          <div className="w-full max-w-md mx-auto my-auto">
+        <section className="p-4 sm:p-6 lg:p-10 flex items-center justify-center h-full">
+          <div className="w-full max-w-md mx-auto">
             <div className="text-center mb-6 sm:mb-7">
               <img
                 src="/images/favicon.png"
