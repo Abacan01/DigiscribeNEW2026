@@ -234,10 +234,15 @@ export default function DashboardPage() {
     return Array.from(cats).sort();
   }, [allFiles]);
 
-  // Files in current folder (or all files when searching/filtering)
+  // Files in current folder (or all files when searching/filtering at root)
   const currentFolderFiles = useMemo(() => {
-    if (searchQuery.trim() || statusFilter || serviceFilter) return allFiles; // flatten when searching or any filter active
-    return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
+    // When inside a folder, always scope – never expand regardless of active filters
+    if (currentFolderId !== null) {
+      return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
+    }
+    // At root: expand to all files when searching/filtering so results cross folders
+    if (searchQuery.trim() || statusFilter || serviceFilter) return allFiles;
+    return allFiles.filter((f) => (f.folderId || null) === null);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter]);
 
   // Subfolders of current folder – always show; filter by name when searching

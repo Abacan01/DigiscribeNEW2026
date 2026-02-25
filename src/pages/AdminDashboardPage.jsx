@@ -395,7 +395,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     let result = [...currentFolderFiles];
 
     if (isInsideFolder) {
-      // Inside a folder: only apply folder-level filters (date range, type, service/category)
+      // Inside a folder: apply ALL active filters together
+      if (statusFilter) result = result.filter((f) => f.status === statusFilter);
       if (dateFrom && dateTo) {
         result = result.filter((f) => {
           if (!f.uploadedAt) return false;
