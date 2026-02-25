@@ -1,7 +1,19 @@
 import { useState, useEffect } from 'react';
+import emailjs from '@emailjs/browser';
 import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { config } from '../data/config';
+
+const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_84hpy43';
+const EMAILJS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+
+const SUBJECT_LABELS = {
+  'service-details': 'Service Details',
+  'service-status': 'Service Status',
+  'general-inquiry': 'General Inquiry',
+  transcription: 'Transcription',
+};
 
 export default function QuotePage() {
   const animationRef = useScrollAnimation();
@@ -33,20 +45,37 @@ export default function QuotePage() {
       setError('Email and message are required.');
       return;
     }
+
+    if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
+      setError('Quote form is not configured yet. Please set EmailJS environment variables.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
+
+    const templateParams = {
+      first_name: form.firstName,
+      last_name: form.lastName,
+      from_name: `${form.firstName} ${form.lastName}`.trim() || form.email,
+      email: form.email,
+      from_email: form.email,
+      phone: form.phone,
+      subject: SUBJECT_LABELS[form.subject] || form.subject,
+      message: form.message,
+      contact_number: form.phone,
+      reply_to: form.email,
+    };
+
     try {
-      const res = await fetch('/api/quote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams, {
+        publicKey: EMAILJS_PUBLIC_KEY,
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Submission failed.');
+
       setSuccess(true);
       setForm({ firstName: '', lastName: '', email: '', phone: '', subject: 'service-details', message: '' });
     } catch (err) {
-      setError(err.message);
+      setError(err?.text || err?.message || 'Unable to send message right now. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -64,7 +93,7 @@ export default function QuotePage() {
             {/* Left Side - Contact Information Card */}
             <div className="lg:w-2/5 relative overflow-hidden min-h-[520px]" style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)' }}>
               {/* Decorative wave pattern overlay */}
-              <div className="absolute inset-0 opacity-10">
+              <div className="absolute inset-0 opacity-10 pointer-events-none" aria-hidden="true">
                 <svg className="w-full h-full" viewBox="0 0 400 600" preserveAspectRatio="none">
                   <path d="M0,100 Q100,150 200,100 T400,100 L400,600 L0,600 Z" fill="white" />
                   <path d="M0,200 Q100,250 200,200 T400,200 L400,600 L0,600 Z" fill="white" opacity="0.5" />
@@ -130,13 +159,13 @@ export default function QuotePage() {
               </div>
 
               {/* Decorative circles */}
-              <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-white/10 rounded-full"></div>
-              <div className="absolute bottom-24 right-8 w-24 h-24 bg-cyan-300/20 rounded-full blur-xl"></div>
-              <div className="absolute top-20 -left-10 w-32 h-32 bg-cyan-400/10 rounded-full blur-2xl"></div>
+              <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-white/10 rounded-full pointer-events-none" aria-hidden="true"></div>
+              <div className="absolute bottom-24 right-8 w-24 h-24 bg-cyan-300/20 rounded-full blur-xl pointer-events-none" aria-hidden="true"></div>
+              <div className="absolute top-20 -left-10 w-32 h-32 bg-cyan-400/10 rounded-full blur-2xl pointer-events-none" aria-hidden="true"></div>
             </div>
 
             {/* Right Side - Form */}
-            <div className="lg:w-3/5 p-8 lg:p-12 bg-gradient-to-br from-white to-sky-50/30">
+            <div className="lg:w-3/5 p-8 lg:p-12 bg-gradient-to-br from-white to-sky-50/30 relative z-10">
               <div className="mb-8">
                 <h3 className="text-xl font-semibold text-dark-text mb-2">Send us a Message</h3>
                 <p className="text-sm text-gray-text">Fill out the form below and we'll get back to you shortly.</p>

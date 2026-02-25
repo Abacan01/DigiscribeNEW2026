@@ -27,3 +27,15 @@ VITE_UPLOAD_CHUNK_SIZE_MB=1
 - When set, upload endpoints (`/api/upload/chunk`, `/api/upload/complete`, `/api/upload/url`) are sent to that base URL.
 - When not set, uploads use same-origin `/api/*` routes.
 - `VITE_UPLOAD_CHUNK_SIZE_MB` is optional; useful when uploading through shared-host proxies with low `post_max_size`/`upload_max_filesize` limits.
+
+## Quote Page (EmailJS)
+
+The `/quote` page sends form submissions through EmailJS from the frontend.
+
+Required environment variables:
+
+```dotenv
+VITE_EMAILJS_SERVICE_ID=service_84hpy43
+VITE_EMAILJS_TEMPLATE_ID=your-emailjs-template-id
+VITE_EMAILJS_PUBLIC_KEY=your-emailjs-public-key
+```
