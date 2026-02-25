@@ -4,7 +4,7 @@ import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { config } from '../data/config';
 
-const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_84hpy43';
+const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
 const EMAILJS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
 const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
 
@@ -46,8 +46,14 @@ export default function QuotePage() {
       return;
     }
 
-    if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_PUBLIC_KEY) {
-      setError('Quote form is not configured yet. Please set EmailJS environment variables.');
+    const missingEnv = [
+      !EMAILJS_SERVICE_ID ? 'VITE_EMAILJS_SERVICE_ID' : null,
+      !EMAILJS_TEMPLATE_ID ? 'VITE_EMAILJS_TEMPLATE_ID' : null,
+      !EMAILJS_PUBLIC_KEY ? 'VITE_EMAILJS_PUBLIC_KEY' : null,
+    ].filter(Boolean);
+
+    if (missingEnv.length > 0) {
+      setError(`Quote form is not configured. Missing: ${missingEnv.join(', ')}.`);
       return;
     }
 
@@ -75,7 +81,13 @@ export default function QuotePage() {
       setSuccess(true);
       setForm({ firstName: '', lastName: '', email: '', phone: '', subject: 'service-details', message: '' });
     } catch (err) {
-      setError(err?.text || err?.message || 'Unable to send message right now. Please try again.');
+      const rawError = err?.text || err?.message || 'Unable to send message right now. Please try again.';
+      const hasTemplateError = /template id not found/i.test(String(rawError));
+      if (hasTemplateError) {
+        setError(`EmailJS template mismatch. Check VITE_EMAILJS_TEMPLATE_ID (current: ${EMAILJS_TEMPLATE_ID}) and VITE_EMAILJS_SERVICE_ID (current: ${EMAILJS_SERVICE_ID}), then restart the dev server.`);
+      } else {
+        setError(rawError);
+      }
     } finally {
       setLoading(false);
     }

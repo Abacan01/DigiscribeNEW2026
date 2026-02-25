@@ -696,38 +696,35 @@ app.post('/api/quote', async (req, res) => {
       submittedAt: new Date().toISOString(),
     });
 
-    res.json({ success: true });
+    if (!emailTransporter) {
+      return res.status(500).json({ success: false, error: 'Email service is not configured. Please try again later.' });
+    }
 
-    // Send email notification if SMTP is configured (fire-and-forget)
-    if (emailTransporter) {
-      (async () => {
-        // Read notification email from Firestore settings, fallback to env var
-        let notificationEmail = process.env.QUOTE_EMAIL || '';
-        try {
-          const settingsDoc = await adminDb.collection('settings').doc('notifications').get();
-          if (settingsDoc.exists && settingsDoc.data().quoteEmail) {
-            notificationEmail = settingsDoc.data().quoteEmail;
-          }
-        } catch {}
+    // Read notification email from Firestore settings (no fallback)
+    const settingsDoc = await adminDb.collection('settings').doc('notifications').get();
+    const notificationEmail = settingsDoc.exists ? (settingsDoc.data().quoteEmail || '') : '';
 
-        if (!notificationEmail) return;
+    if (!notificationEmail) {
+      return res.status(500).json({ success: false, error: 'Notification email is not configured.' });
+    }
 
-        const subjectLabels = {
-          'service-details': 'Service Details',
-          'service-status': 'Service Status',
-          'general-inquiry': 'General Inquiry',
-          'transcription': 'Transcription',
-        };
-        const subjectLabel = subjectLabels[subject] || subject || 'General';
-        const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+    const subjectLabels = {
+      'service-details': 'Service Details',
+      'service-status': 'Service Status',
+      'general-inquiry': 'General Inquiry',
+      'transcription': 'Transcription',
+    };
+    const subjectLabel = subjectLabels[subject] || subject || 'General';
+    const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
 
-        emailTransporter.sendMail({
-          from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
-          to: notificationEmail,
-          replyTo: email,
-          subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
-          text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
-          html: `<h2 style="color:#0284c7">New Quote Request</h2>
+    try {
+      await emailTransporter.sendMail({
+        from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
+        to: notificationEmail,
+        replyTo: email,
+        subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
+        text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
+        html: `<h2 style="color:#0284c7">New Quote Request</h2>
 <table style="border-collapse:collapse;width:100%;max-width:600px;font-family:sans-serif;font-size:14px">
 <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${fullName}</td></tr>
 <tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${email}" style="color:#0284c7">${email}</a></td></tr>
@@ -736,11 +733,14 @@ app.post('/api/quote', async (req, res) => {
 </table>
 <h3 style="color:#374151;font-family:sans-serif;margin-top:20px">Message</h3>
 <p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
-        })
-          .then(() => console.log('[quote] Email sent to', notificationEmail))
-          .catch(emailErr => console.error('[quote] Email send failed:', emailErr.message));
-      })();
+      });
+      console.log('[quote] Email sent to', notificationEmail);
+    } catch (emailErr) {
+      console.error('[quote] Email send failed:', emailErr.message);
+      return res.status(500).json({ success: false, error: 'Failed to send email notification. Please try again.' });
     }
+
+    res.json({ success: true });
   } catch (err) {
     console.error('[quote] Error:', err.message);
     res.status(500).json({ success: false, error: 'Failed to submit. Please try again.' });
@@ -752,7 +752,7 @@ app.get('/api/admin/settings', verifyAdmin, async (req, res) => {
   try {
     const doc = await adminDb.collection('settings').doc('notifications').get();
     const data = doc.exists ? doc.data() : {};
-    res.json({ success: true, settings: { quoteEmail: data.quoteEmail || process.env.QUOTE_EMAIL || '' } });
+    res.json({ success: true, settings: { quoteEmail: data.quoteEmail || '' } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
