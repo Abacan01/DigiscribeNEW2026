@@ -10,7 +10,9 @@ import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
+import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
+import FolderFilterToolbar from '../components/dashboard/FolderFilterToolbar';
 import CreateUserForm from '../components/admin/CreateUserForm';
 import UserTable from '../components/admin/UserTable';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
@@ -174,6 +176,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [serviceFilter, setServiceFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Folder-level filters (only active when inside a folder)
+  const [dateFrom, setDateFrom] = useState(null);
+  const [dateTo, setDateTo] = useState(null);
+  const [typeFilter, setTypeFilter] = useState('');
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window === 'undefined') return 'list';
     const saved = window.localStorage.getItem('admin-dashboard-view-mode');
@@ -185,6 +192,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
+  const [propertiesFolder, setPropertiesFolder] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const dashboardStateHydratedRef = useRef(false);
 
@@ -275,13 +283,55 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return Array.from(cats).sort();
   }, [allFiles]);
 
-  // Files in current folder (or all files when searching/filtering)
+  // Unique service categories in current folder (for folder-level filter)
+  const folderServiceCategories = useMemo(() => {
+    if (!currentFolderId) return [];
+    const cats = new Set();
+    for (const file of allFiles) {
+      if ((file.folderId || null) === currentFolderId && file.serviceCategory) {
+        cats.add(file.serviceCategory);
+      }
+    }
+    return Array.from(cats).sort();
+  }, [allFiles, currentFolderId]);
+
+  // Unique file types in current folder (for folder-level filter)
+  const folderFileTypes = useMemo(() => {
+    if (!currentFolderId) return [];
+    const types = new Set();
+    for (const file of allFiles) {
+      if ((file.folderId || null) === currentFolderId && file.type) {
+        // Group by main category (e.g. "image", "audio", "video", "pdf", "document")
+        const t = file.type;
+        if (t.startsWith('image/')) types.add('Image');
+        else if (t.startsWith('audio/')) types.add('Audio');
+        else if (t.startsWith('video/')) types.add('Video');
+        else if (t === 'application/pdf') types.add('PDF');
+        else if (t.includes('word') || t === 'application/msword') types.add('Word');
+        else if (t.includes('excel') || t.includes('spreadsheet')) types.add('Excel');
+        else if (t.includes('powerpoint') || t.includes('presentation')) types.add('PowerPoint');
+        else if (t === 'text/plain' || t === 'text/csv') types.add('Text');
+        else types.add('Other');
+      }
+    }
+    return Array.from(types).sort();
+  }, [allFiles, currentFolderId]);
+
+  // Whether admin is inside a subfolder
+  const isInsideFolder = currentFolderId !== null;
+
+  // Files in current folder (or all files when searching/filtering at root)
   const currentFolderFiles = useMemo(() => {
+    if (isInsideFolder) {
+      // Inside a folder: always scope to this folder only
+      return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
+    }
+    // Root: expand to all files when searching/filtering
     if (searchQuery.trim() || statusFilter || serviceFilter) return allFiles;
     return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
-  }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter]);
+  }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder]);
 
-  // Subfolders – always show; filter by name when searching
+  // Subfolders – filter by name when searching, and by date range when inside a folder
   const currentSubfolders = useMemo(() => {
     let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
@@ -290,9 +340,15 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       const q = searchQuery.toLowerCase().trim();
       folders = folders.filter((f) => f.name && f.name.toLowerCase().includes(q));
     }
-    // status/service filters don't apply to folders – always show them
+    // When inside a folder with date range active, filter folders by createdAt
+    if (isInsideFolder && dateFrom && dateTo) {
+      folders = folders.filter((f) => {
+        const d = f.createdAt ? new Date(f.createdAt) : null;
+        return d && d >= dateFrom && d <= dateTo;
+      });
+    }
     return folders;
-  }, [allFolders, currentFolderId, searchQuery]);
+  }, [allFolders, currentFolderId, searchQuery, isInsideFolder, dateFrom, dateTo]);
 
   // Item counts per folder
   const folderItemCounts = useMemo(() => {
@@ -308,17 +364,67 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return c;
   }, [allFiles, allFolders]);
 
+  // Total file sizes per folder (direct files only)
+  const folderSizes = useMemo(() => {
+    const sizes = {};
+    for (const f of allFiles) {
+      const fid = f.folderId || null;
+      if (fid && f.size > 0) {
+        sizes[fid] = (sizes[fid] || 0) + f.size;
+      }
+    }
+    return sizes;
+  }, [allFiles]);
+
+  // Helper: match file type to grouped label
+  const getFileTypeLabel = useCallback((t) => {
+    if (!t) return '';
+    if (t.startsWith('image/')) return 'Image';
+    if (t.startsWith('audio/')) return 'Audio';
+    if (t.startsWith('video/')) return 'Video';
+    if (t === 'application/pdf') return 'PDF';
+    if (t.includes('word') || t === 'application/msword') return 'Word';
+    if (t.includes('excel') || t.includes('spreadsheet')) return 'Excel';
+    if (t.includes('powerpoint') || t.includes('presentation')) return 'PowerPoint';
+    if (t === 'text/plain' || t === 'text/csv') return 'Text';
+    return 'Other';
+  }, []);
+
   // Filter + sort
   const filteredFiles = useMemo(() => {
     let result = [...currentFolderFiles];
 
-    if (statusFilter) result = result.filter((f) => f.status === statusFilter);
-    if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        (f) => f.originalName && f.originalName.toLowerCase().includes(q)
-      );
+    if (isInsideFolder) {
+      // Inside a folder: only apply folder-level filters (date range, type, service/category)
+      if (dateFrom && dateTo) {
+        result = result.filter((f) => {
+          if (!f.uploadedAt) return false;
+          const d = new Date(f.uploadedAt);
+          return d >= dateFrom && d <= dateTo;
+        });
+      }
+      if (typeFilter) {
+        result = result.filter((f) => getFileTypeLabel(f.type) === typeFilter);
+      }
+      if (serviceFilter) {
+        result = result.filter((f) => f.serviceCategory === serviceFilter);
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        result = result.filter(
+          (f) => f.originalName && f.originalName.toLowerCase().includes(q)
+        );
+      }
+    } else {
+      // Root: apply root-level filters (status, service, search)
+      if (statusFilter) result = result.filter((f) => f.status === statusFilter);
+      if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        result = result.filter(
+          (f) => f.originalName && f.originalName.toLowerCase().includes(q)
+        );
+      }
     }
 
     switch (sortBy) {
@@ -329,7 +435,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       default: result.sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0)); break;
     }
     return result;
-  }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy]);
+  }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy, isInsideFolder, dateFrom, dateTo, typeFilter, getFileTypeLabel]);
 
   // Combined items for pagination: folders first, then files
   const allPageItems = useMemo(() => [...currentSubfolders, ...filteredFiles], [currentSubfolders, filteredFiles]);
@@ -352,12 +458,25 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, dateFrom, dateTo, typeFilter]);
 
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, dateFrom, dateTo, typeFilter]);
+
+  // Reset filters when switching between root and folder views
+  useEffect(() => {
+    if (!currentFolderId) {
+      // Going to root: clear folder-level filters
+      setDateFrom(null);
+      setDateTo(null);
+      setTypeFilter('');
+    } else {
+      // Entering a folder: clear root-level filters
+      setStatusFilter('');
+    }
+  }, [currentFolderId]);
 
   // Selection helpers
   const filteredIds = useMemo(() => new Set(filteredFiles.map((f) => f.id)), [filteredFiles]);
@@ -782,6 +901,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         }},
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
         { icon: 'fa-file-archive', label: 'Download as ZIP', onClick: () => handleFolderDownload(folder) },
+        { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
         { divider: true },
         { icon: 'fa-trash-alt', label: 'Delete Folder', danger: true, onClick: () => setDeleteFolderConfirm(folder.id) },
       ];
@@ -789,35 +909,37 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
-    const items = [
-      { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
-      { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
+    const items = [];
+
+    const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
+
+    if (selCount <= 1) {
+      items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      items.push({ icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
         const name = file.originalName || '';
         const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
         const base = ext ? name.slice(0, -ext.length) : name;
         setRenamingFileId(file.id);
         setRenameFileExt(ext);
         setRenameFileValue(base);
-      } },
-      { icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
+      } });
+      items.push({ icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
         const a = document.createElement('a');
         a.href = fileUrl(file.url) + '?download=1';
         document.body.appendChild(a);
         a.click();
         a.remove();
-      }},
-      { icon: 'fa-copy', label: 'Copy URL', shortcut: 'Ctrl+C', onClick: () => copyFileUrl(file) },
-      { divider: true },
-      { icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) },
-      { icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) },
-      { divider: true },
-      { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) },
-      { icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => { setDeleteConfirm(file.id); }},
-    ];
+      }});
+      items.push({ divider: true });
+      items.push({ icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) });
+      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ divider: true });
+      items.push({ icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) });
+      items.push({ icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => { setDeleteConfirm(file.id); } });
+    }
 
-    // When multiple files are selected, add bulk actions
-    const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
     if (selCount > 1) {
+      items.push({ icon: 'fa-download', label: `Download ${selCount} Selected as ZIP`, onClick: () => handleBulkDownload() });
       items.push({ divider: true });
       items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
@@ -825,15 +947,24 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
 
     return items;
-  }, [contextMenu, selectedIds, filteredIds, copyFileUrl, handleFolderDownload]);
+  }, [contextMenu, selectedIds, filteredIds, handleBulkDownload, handleFolderDownload]);
 
   const clearFilters = () => {
     setStatusFilter('');
     setServiceFilter('');
     setSearchQuery('');
+    setDateFrom(null);
+    setDateTo(null);
+    setTypeFilter('');
   };
 
-  const hasActiveFilters = statusFilter || serviceFilter || searchQuery;
+  const hasActiveFilters = statusFilter || serviceFilter || searchQuery || (isInsideFolder && (dateFrom || dateTo || typeFilter));
+
+  // Folder-level date change handler
+  const handleDateRangeChange = useCallback((from, to) => {
+    setDateFrom(from);
+    setDateTo(to);
+  }, []);
   const isSearching = searchQuery.trim().length > 0;
   const selectedCount = selectedFileCount + selectedFolderCount;
   const totalItems = currentSubfolders.length + filteredFiles.length;
@@ -903,122 +1034,180 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         onNavigate={setCurrentFolderId}
       />
 
-      {/* Filter Bar */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-3">
-          <div className="relative flex-1">
-            <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by file name..."
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <i className="fas fa-times text-xs"></i>
+      {/* Filter Bar – conditionally render based on root vs inside folder */}
+      {isInsideFolder ? (
+        /* ── Inside-folder filter: date range + type + category ── */
+        <div className="space-y-3">
+          <FolderFilterToolbar
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateChange={handleDateRangeChange}
+            typeFilter={typeFilter}
+            onTypeChange={setTypeFilter}
+            serviceFilter={serviceFilter}
+            onServiceChange={setServiceFilter}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            fileTypes={folderFileTypes}
+            serviceCategories={folderServiceCategories}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onClear={clearFilters}
+            hasActiveFilters={hasActiveFilters}
+          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                  viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+                }`}
+              >
+                <i className="fas fa-th-large text-[10px]"></i>
+                Grid
               </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                  viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+                }`}
+              >
+                <i className="fas fa-list text-[10px]"></i>
+                List
+              </button>
+            </div>
+            <button
+              onClick={() => setShowCreateFolder(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors whitespace-nowrap border border-indigo-200"
+            >
+              <i className="fas fa-folder-plus text-xs"></i>
+              New Folder
+            </button>
+            {hasActiveFilters && (
+              <span className="text-xs text-gray-400 ml-auto">
+                {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
+              </span>
             )}
           </div>
+        </div>
+      ) : (
+        /* ── Root (My Files) filter: original A-Z / status / service bar ── */
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
+              <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by file name..."
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times text-xs"></i>
+                </button>
+              )}
+            </div>
 
-          {serviceCategories.length > 0 && (
+            {serviceCategories.length > 0 && (
+              <div className="relative">
+                <select
+                  value={serviceFilter}
+                  onChange={(e) => setServiceFilter(e.target.value)}
+                  className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
+                >
+                  <option value="">All Services</option>
+                  {serviceCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
+              </div>
+            )}
+
             <div className="relative">
               <select
-                value={serviceFilter}
-                onChange={(e) => setServiceFilter(e.target.value)}
-                className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[150px]"
               >
-                <option value="">All Services</option>
-                {serviceCategories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
               <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
             </div>
-          )}
 
-          <div className="relative">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[150px]"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
-          </div>
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 self-start">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                  viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+                }`}
+              >
+                <i className="fas fa-th-large text-[10px]"></i>
+                Grid
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
+                  viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
+                }`}
+              >
+                <i className="fas fa-list text-[10px]"></i>
+                List
+              </button>
+            </div>
 
-          <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 self-start">
             <button
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
-                viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
-              }`}
+              onClick={() => setShowCreateFolder(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors whitespace-nowrap border border-indigo-200"
             >
-              <i className="fas fa-th-large text-[10px]"></i>
-              Grid
+              <i className="fas fa-folder-plus text-xs"></i>
+              New Folder
             </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-2 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${
-                viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-text hover:text-dark-text'
-              }`}
-            >
-              <i className="fas fa-list text-[10px]"></i>
-              List
-            </button>
-          </div>
 
-          <button
-            onClick={() => setShowCreateFolder(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors whitespace-nowrap border border-indigo-200"
-          >
-            <i className="fas fa-folder-plus text-xs"></i>
-            New Folder
-          </button>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-gray-text hover:text-dark-text hover:bg-gray-50 rounded-lg transition-colors whitespace-nowrap"
+              >
+                <i className="fas fa-times text-xs"></i>
+                Clear
+              </button>
+            )}
+          </div>
 
           {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-gray-text hover:text-dark-text hover:bg-gray-50 rounded-lg transition-colors whitespace-nowrap"
-            >
-              <i className="fas fa-times text-xs"></i>
-              Clear
-            </button>
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+              <span className="text-xs text-gray-400">Showing:</span>
+              {statusFilter && (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${STATUS_CONFIG[statusFilter].bg} ${STATUS_CONFIG[statusFilter].text}`}>
+                  {STATUS_CONFIG[statusFilter].label}
+                  <button onClick={() => setStatusFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
+                </span>
+              )}
+              {serviceFilter && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600">
+                  {serviceFilter}
+                  <button onClick={() => setServiceFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
+                </span>
+              )}
+              {searchQuery && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
+                  &quot;{searchQuery}&quot;
+                  <button onClick={() => setSearchQuery('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
+                </span>
+              )}
+              <span className="text-xs text-gray-400 ml-1">
+                {(isSearching || statusFilter || serviceFilter) ? 'Across all folders \u00b7 ' : ''}
+                {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           )}
         </div>
-
-        {hasActiveFilters && (
-          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-            <span className="text-xs text-gray-400">Showing:</span>
-            {statusFilter && (
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${STATUS_CONFIG[statusFilter].bg} ${STATUS_CONFIG[statusFilter].text}`}>
-                {STATUS_CONFIG[statusFilter].label}
-                <button onClick={() => setStatusFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
-              </span>
-            )}
-            {serviceFilter && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600">
-                {serviceFilter}
-                <button onClick={() => setServiceFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
-              </span>
-            )}
-            {searchQuery && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
-                &quot;{searchQuery}&quot;
-                <button onClick={() => setSearchQuery('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
-              </span>
-            )}
-            <span className="text-xs text-gray-400 ml-1">
-              {(isSearching || statusFilter || serviceFilter) ? 'Across all folders \u00b7 ' : ''}
-              {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Bulk action bar */}
       {selectedCount > 0 && (
@@ -1207,6 +1396,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Status</th>
                   <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Uploaded By</th>
                   <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Date</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Size</th>
                   <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-28">Actions</th>
                 </tr>
               </thead>
@@ -1216,7 +1406,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   if (renamingFolder === folder.id) {
                     return (
                       <tr key={folder.id} className="bg-primary/[0.03]">
-                        <td colSpan={7} className="px-4 py-3">
+                        <td colSpan={8} className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500">
                               <i className="fas fa-folder text-xs"></i>
@@ -1259,6 +1449,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       onDragLeave={() => setDragOverFolder(null)}
                       onDrop={handleDrop}
                       itemCount={folderItemCounts[folder.id] || 0}
+                      totalSize={folderSizes[folder.id] || 0}
                     />
                   );
                 })}
@@ -1333,11 +1524,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                                 {file.description}
                               </p>
                             )}
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              {file.size > 0 && (
-                                <span className="text-[10px] text-gray-400">{formatSize(file.size)}</span>
-                              )}
-                            </div>
                           </div>
                         </div>
                       </td>
@@ -1375,6 +1561,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       </td>
                       <td className="px-4 py-3.5">
                         <span className="text-sm text-gray-text">{formatRelativeDate(file.uploadedAt)}</span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="text-sm text-gray-text">{file.size > 0 ? formatSize(file.size) : '--'}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -1444,6 +1633,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 onDragLeave={() => setDragOverFolder(null)}
                 onDrop={handleDrop}
                 itemCount={folderItemCounts[folder.id] || 0}
+                totalSize={folderSizes[folder.id] || 0}
                 showOwner
               />
             ))}
@@ -1654,6 +1844,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 onDragLeave={() => setDragOverFolder(null)}
                 onDrop={handleDrop}
                 itemCount={folderItemCounts[folder.id] || 0}
+                totalSize={folderSizes[folder.id] || 0}
                 showOwner
               />
             );
@@ -1777,8 +1968,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         />
       )}
 
-      {/* Properties Modal */}
+      {/* Properties Modals */}
       {propertiesFile && <FilePropertiesModal file={propertiesFile} onClose={() => setPropertiesFile(null)} />}
+      {propertiesFolder && (
+        <FolderPropertiesModal
+          folder={propertiesFolder}
+          itemCount={folderItemCounts[propertiesFolder.id] || 0}
+          totalSize={folderSizes[propertiesFolder.id] || 0}
+          onClose={() => setPropertiesFolder(null)}
+        />
+      )}
 
       {/* Create Folder Modal */}
       <CreateFolderModal

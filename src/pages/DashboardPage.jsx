@@ -10,6 +10,7 @@ import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
+import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
 import { useFolders } from '../hooks/useFolders';
@@ -124,6 +125,7 @@ export default function DashboardPage() {
   const [statusError, setStatusError] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
+  const [propertiesFolder, setPropertiesFolder] = useState(null);
   const [message, setMessage] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(null);
@@ -264,6 +266,16 @@ export default function DashboardPage() {
     }
     return counts;
   }, [allFiles, allFolders]);
+
+  // Total file sizes per folder (direct files)
+  const folderSizes = useMemo(() => {
+    const sizes = {};
+    for (const f of allFiles) {
+      const fid = f.folderId || null;
+      if (fid && f.size > 0) sizes[fid] = (sizes[fid] || 0) + f.size;
+    }
+    return sizes;
+  }, [allFiles]);
 
   // Filter + sort (applies on current folder files)
   const filteredFiles = useMemo(() => {
@@ -714,6 +726,7 @@ export default function DashboardPage() {
         }},
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
         { icon: 'fa-file-archive', label: 'Download as ZIP', onClick: () => handleFolderDownload(folder) },
+        { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
         { divider: true },
         { icon: 'fa-trash-alt', label: 'Delete Folder', danger: true, onClick: () => setDeleteFolderConfirm(folder.id) },
       ];
@@ -721,9 +734,13 @@ export default function DashboardPage() {
 
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
-    const items = [
-      { icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) },
-      {
+    const items = [];
+
+    const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
+
+    if (selCount <= 1) {
+      items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      items.push({
         icon: 'fa-download',
         label: 'Download',
         disabled: isUrl,
@@ -735,26 +752,25 @@ export default function DashboardPage() {
           a.click();
           a.remove();
         },
-      },
-      { icon: 'fa-copy', label: 'Copy URL', shortcut: 'Ctrl+C', onClick: () => copyFileUrl(file) },
-      { divider: true },
-      { icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) },
-      { icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) },
-      { divider: true },
-      { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) },
-      { icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => setDeleteConfirm(file.id) },
-    ];
+      });
+      items.push({ divider: true });
+      items.push({ icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) });
+      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ divider: true });
+      items.push({ icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) });
+      items.push({ icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => setDeleteConfirm(file.id) });
+    }
 
-    // When multiple files are selected, add bulk actions
-    const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
     if (selCount > 1) {
+      items.push({ icon: 'fa-download', label: `Download ${selCount} Selected as ZIP`, onClick: () => handleBulkDownload() });
       items.push({ divider: true });
       items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
+      items.push({ icon: 'fa-trash-alt', label: `Delete ${selCount} Selected`, danger: true, onClick: () => setBulkDeleteConfirm(true) });
     }
 
     return items;
-  }, [contextMenu, selectedIds, filteredIds, copyFileUrl, handleFolderDownload, getDownloadUrl]);
+  }, [contextMenu, selectedIds, filteredIds, handleBulkDownload, handleFolderDownload, getDownloadUrl]);
 
   const clearFilters = () => {
     setStatusFilter('');
@@ -1212,6 +1228,7 @@ export default function DashboardPage() {
                           <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Type</th>
                           <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Status</th>
                           <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Date</th>
+                          <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider">Size</th>
                           <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-text uppercase tracking-wider w-36">Actions</th>
                         </tr>
                       </thead>
@@ -1220,7 +1237,7 @@ export default function DashboardPage() {
                           if (renamingFolder === folder.id) {
                             return (
                               <tr key={folder.id} className="bg-primary/[0.03]">
-                                <td colSpan={6} className="px-4 py-3">
+                                <td colSpan={7} className="px-4 py-3">
                                   <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500">
                                       <i className="fas fa-folder text-xs"></i>
@@ -1264,6 +1281,8 @@ export default function DashboardPage() {
                               onDragLeave={() => setDragOverFolder(null)}
                               onDrop={handleDrop}
                               itemCount={folderItemCounts[folder.id] || 0}
+                              totalSize={folderSizes[folder.id] || 0}
+                              showUploadedBy={false}
                             />
                           );
                         })}
@@ -1309,12 +1328,9 @@ export default function DashboardPage() {
                                     >
                                       {file.originalName}
                                     </span>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <span className="text-[10px] text-gray-400">{formatSize(file.size)}</span>
-                                      {file.serviceCategory && (
-                                        <span className="text-[10px] text-indigo-500">• {file.serviceCategory}</span>
-                                      )}
-                                    </div>
+                                    {file.serviceCategory && (
+                                      <span className="text-[10px] text-indigo-500">{file.serviceCategory}</span>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -1331,6 +1347,9 @@ export default function DashboardPage() {
                               </td>
                               <td className="px-4 py-3.5">
                                 <span className="text-sm text-gray-text">{formatRelativeDate(file.uploadedAt)}</span>
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="text-sm text-gray-text">{file.size > 0 ? formatSize(file.size) : '--'}</span>
                               </td>
                               <td className="px-4 py-3.5 text-center">
                                 <div className="flex items-center justify-center gap-1">
@@ -1448,6 +1467,7 @@ export default function DashboardPage() {
                         onDragLeave={() => setDragOverFolder(null)}
                         onDrop={handleDrop}
                         itemCount={folderItemCounts[folder.id] || 0}
+                        totalSize={folderSizes[folder.id] || 0}
                       />
                     );
                   })}
@@ -1628,9 +1648,17 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Properties Modal */}
+      {/* Properties Modals */}
       {propertiesFile && (
         <FilePropertiesModal file={propertiesFile} onClose={() => setPropertiesFile(null)} />
+      )}
+      {propertiesFolder && (
+        <FolderPropertiesModal
+          folder={propertiesFolder}
+          itemCount={folderItemCounts[propertiesFolder.id] || 0}
+          totalSize={folderSizes[propertiesFolder.id] || 0}
+          onClose={() => setPropertiesFolder(null)}
+        />
       )}
 
       {/* Context Menu */}

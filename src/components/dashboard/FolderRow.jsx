@@ -23,6 +23,14 @@ function formatRelativeDate(dateString) {
   }
 }
 
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '--';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 export default function FolderRow({
   folder,
   onOpen,
@@ -34,6 +42,8 @@ export default function FolderRow({
   onDragLeave,
   onDrop,
   itemCount,
+  totalSize,
+  showUploadedBy = true,
 }) {
   return (
     <tr
@@ -101,25 +111,32 @@ export default function FolderRow({
           Folder
         </span>
       </td>
-      <td className="px-4 py-3.5">
-        <span className="text-sm text-gray-text">{folder.createdByEmail || '--'}</span>
-      </td>
+      {showUploadedBy && (
+        <td className="px-4 py-3.5">
+          <span className="text-sm text-gray-text">{folder.createdByEmail || '--'}</span>
+        </td>
+      )}
       <td className="px-4 py-3.5">
         <span className="text-sm text-gray-text">{formatRelativeDate(folder.createdAt)}</span>
       </td>
-      <td className="px-4 py-3.5 text-center">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen(folder.id);
-          }}
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
-          title="Open folder"
-        >
-          <i className="fas fa-folder-open text-[10px]"></i>
-          Open
-        </button>
+      <td className="px-4 py-3.5">
+        <span className="text-sm text-gray-text">{totalSize > 0 ? formatSize(totalSize) : '--'}</span>
+      </td>
+      <td className="px-4 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(folder.id);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+            title="Open folder"
+          >
+            <i className="fas fa-folder-open text-[10px]"></i>
+            Open
+          </button>
+        </div>
       </td>
     </tr>
   );

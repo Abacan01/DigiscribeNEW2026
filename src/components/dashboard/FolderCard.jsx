@@ -25,6 +25,14 @@ function formatDate(dateString) {
   }
 }
 
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 export default function FolderCard({
   folder,
   onOpen,
@@ -36,6 +44,7 @@ export default function FolderCard({
   onDragLeave,
   onDrop,
   itemCount,
+  totalSize,
   showOwner,
 }) {
   const [hovered, setHovered] = useState(false);
@@ -106,6 +115,12 @@ export default function FolderCard({
                   <span className="text-[11px] text-gray-400">
                     {itemCount} item{itemCount !== 1 ? 's' : ''}
                   </span>
+                  <span className="text-gray-200">&middot;</span>
+                </>
+              )}
+              {totalSize > 0 && (
+                <>
+                  <span className="text-[11px] text-gray-400">{formatSize(totalSize)}</span>
                   <span className="text-gray-200">&middot;</span>
                 </>
               )}
