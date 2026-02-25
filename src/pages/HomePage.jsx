@@ -202,13 +202,13 @@ export default function HomePage() {
                 <span className="gradient-text">Core Services</span>
               </h2>
               <p className="text-gray-text text-sm max-w-2xl mx-auto">
-                Comprehensive transcription, data processing, and documentation solutions for your business
+                Professional business support services to streamline your operations
               </p>
             </div>
 
             {/* Services Grid - Top Row (2 cards) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-6">
-              {/* Service 1: Medical Transcription */}
+              {/* Service 1: Transcription Support */}
               <Link to="/services/transcription" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
                 {/* Hover gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -217,10 +217,10 @@ export default function HomePage() {
 
                 <div className="relative z-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-cyan-200/50 group-hover:shadow-cyan-300/60 transition-all duration-300 group-hover:scale-110">
-                    <i className="fas fa-file-medical text-white text-xl"></i>
+                    <i className="fas fa-headset text-white text-xl"></i>
                   </div>
-                  <h3 className="text-lg font-bold text-dark-text mb-3 group-hover:text-cyan-600 transition-colors">Medical Transcription &amp; Documentation</h3>
-                  <p className="text-sm text-gray-text leading-relaxed">Offers reliable medical transcription services designed to support patients and healthcare professionals alike. Our company prioritizes secure transfers and ensures peace of mind for our clients.</p>
+                  <h3 className="text-lg font-bold text-dark-text mb-3 group-hover:text-cyan-600 transition-colors">Transcription Support</h3>
+                  <p className="text-sm text-gray-text leading-relaxed">Converting audio and video files into accurate text documents with fast turnaround and quality assurance.</p>
                   <div className="mt-4 flex items-center gap-2 text-cyan-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
                     <span>Learn More</span>
                     <i className="fas fa-arrow-right text-xs"></i>
@@ -228,7 +228,7 @@ export default function HomePage() {
                 </div>
               </Link>
 
-              {/* Service 2: Data Entry & EMR Management */}
+              {/* Service 2: Data Entry Services */}
               <Link to="/services/data-entry" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
                 {/* Hover gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -239,8 +239,8 @@ export default function HomePage() {
                   <div className="w-14 h-14 bg-gradient-to-br from-sky-400 via-cyan-500 to-teal-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-sky-200/50 group-hover:shadow-sky-300/60 transition-all duration-300 group-hover:scale-110">
                     <i className="fas fa-database text-white text-xl"></i>
                   </div>
-                  <h3 className="text-lg font-bold text-dark-text mb-3 group-hover:text-sky-600 transition-colors">Data Entry &amp; EMR Management</h3>
-                  <p className="text-sm text-gray-text leading-relaxed">Handling medical billing, charge entry, and insurance claims (including Workers' Compensation and DME).</p>
+                  <h3 className="text-lg font-bold text-dark-text mb-3 group-hover:text-sky-600 transition-colors">Data Entry Services</h3>
+                  <p className="text-sm text-gray-text leading-relaxed">Efficient and accurate data processing for forms, records, and digital information management.</p>
                   <div className="mt-4 flex items-center gap-2 text-sky-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
                     <span>Learn More</span>
                     <i className="fas fa-arrow-right text-xs"></i>
@@ -251,8 +251,8 @@ export default function HomePage() {
 
             {/* Services Grid - Bottom Row (3 cards) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Service 3: Claims Processing & Medical Billing */}
-              <Link to="/services/claims" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+              {/* Service 3: EMR Services */}
+              <Link to="/services/emr" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
                 {/* Hover gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                 {/* Corner accent */}
@@ -260,10 +260,10 @@ export default function HomePage() {
 
                 <div className="relative z-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-teal-400 via-cyan-500 to-sky-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-teal-200/50 group-hover:shadow-teal-300/60 transition-all duration-300 group-hover:scale-110">
-                    <i className="fas fa-file-invoice-dollar text-white text-xl"></i>
+                    <i className="fas fa-exchange-alt text-white text-xl"></i>
                   </div>
-                  <h3 className="text-base font-bold text-dark-text mb-3 group-hover:text-teal-600 transition-colors">Claims Processing &amp; Medical Billing</h3>
-                  <p className="text-sm text-gray-text leading-relaxed">Transitioning data between systems and indexing medical records.</p>
+                  <h3 className="text-base font-bold text-dark-text mb-3 group-hover:text-teal-600 transition-colors">EMR Services</h3>
+                  <p className="text-sm text-gray-text leading-relaxed">Supporting electronic records management with data migration and system integration.</p>
                   <div className="mt-4 flex items-center gap-2 text-teal-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
                     <span>Learn More</span>
                     <i className="fas fa-arrow-right text-xs"></i>
@@ -271,8 +271,8 @@ export default function HomePage() {
                 </div>
               </Link>
 
-              {/* Service 4: EMR Data Migration */}
-              <Link to="/services/emr" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+              {/* Service 4: Documentation Services */}
+              <Link to="/services/document-conversion" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
                 {/* Hover gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                 {/* Corner accent */}
@@ -280,10 +280,10 @@ export default function HomePage() {
 
                 <div className="relative z-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-blue-400 via-sky-500 to-cyan-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-blue-200/50 group-hover:shadow-blue-300/60 transition-all duration-300 group-hover:scale-110">
-                    <i className="fas fa-exchange-alt text-white text-xl"></i>
+                    <i className="fas fa-file-alt text-white text-xl"></i>
                   </div>
-                  <h3 className="text-base font-bold text-dark-text mb-3 group-hover:text-blue-600 transition-colors">EMR Data Migration &amp; Chart Building</h3>
-                  <p className="text-sm text-gray-text leading-relaxed">Offering 24/7 technical support to reduce downtime and training staff on new EHR systems.</p>
+                  <h3 className="text-base font-bold text-dark-text mb-3 group-hover:text-blue-600 transition-colors">Documentation Services</h3>
+                  <p className="text-sm text-gray-text leading-relaxed">Professional document conversion, formatting, and organization for business needs.</p>
                   <div className="mt-4 flex items-center gap-2 text-blue-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
                     <span>Learn More</span>
                     <i className="fas fa-arrow-right text-xs"></i>
@@ -291,8 +291,8 @@ export default function HomePage() {
                 </div>
               </Link>
 
-              {/* Service 5: Revenue Cycle Management */}
-              <Link to="/services/rcm" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
+              {/* Service 5: CAD Services */}
+              <Link to="/services/cad" className="group relative bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg shadow-cyan-100/50 border border-white/50 transition-all duration-500 block hover:shadow-xl hover:shadow-cyan-200/50 hover:-translate-y-1 hover:bg-white overflow-hidden">
                 {/* Hover gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-sky-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                 {/* Corner accent */}
@@ -300,10 +300,10 @@ export default function HomePage() {
 
                 <div className="relative z-10">
                   <div className="w-14 h-14 bg-gradient-to-br from-indigo-400 via-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mb-5 shadow-lg shadow-indigo-200/50 group-hover:shadow-indigo-300/60 transition-all duration-300 group-hover:scale-110">
-                    <i className="fas fa-chart-line text-white text-xl"></i>
+                    <i className="fas fa-drafting-compass text-white text-xl"></i>
                   </div>
-                  <h3 className="text-base font-bold text-dark-text mb-3 group-hover:text-indigo-600 transition-colors">Revenue Cycle Management (RCM)</h3>
-                  <p className="text-sm text-gray-text leading-relaxed">Improving financial outcomes through end-to-end billing support.</p>
+                  <h3 className="text-base font-bold text-dark-text mb-3 group-hover:text-indigo-600 transition-colors">CAD Services</h3>
+                  <p className="text-sm text-gray-text leading-relaxed">Technical drawing and design support for architectural and engineering projects.</p>
                   <div className="mt-4 flex items-center gap-2 text-indigo-500 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-[-10px] group-hover:translate-x-0">
                     <span>Learn More</span>
                     <i className="fas fa-arrow-right text-xs"></i>
