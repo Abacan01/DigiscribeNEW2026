@@ -88,10 +88,10 @@ export default function QuotePage() {
         <h1 className="text-2xl md:text-3xl font-semibold gradient-text text-center mb-10">Get Quote</h1>
 
         {/* Contact Section */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+        <div className="bg-white rounded-2xl shadow-xl overflow-visible border border-gray-100">
           <div className="flex flex-col lg:flex-row">
             {/* Left Side - Contact Information Card */}
-            <div className="lg:w-2/5 relative overflow-hidden min-h-[520px]" style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)' }}>
+            <div className="lg:w-2/5 relative overflow-hidden min-h-[320px] lg:min-h-[520px] rounded-t-2xl lg:rounded-t-none lg:rounded-l-2xl shrink-0" style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)' }}>
               {/* Decorative wave pattern overlay */}
               <div className="absolute inset-0 opacity-10 pointer-events-none" aria-hidden="true">
                 <svg className="w-full h-full" viewBox="0 0 400 600" preserveAspectRatio="none">
@@ -165,7 +165,7 @@ export default function QuotePage() {
             </div>
 
             {/* Right Side - Form */}
-            <div className="lg:w-3/5 p-8 lg:p-12 bg-gradient-to-br from-white to-sky-50/30 relative z-10">
+            <div className="lg:w-3/5 p-6 sm:p-8 lg:p-12 bg-gradient-to-br from-white to-sky-50/30 relative z-10 rounded-b-2xl lg:rounded-b-none lg:rounded-r-2xl">
               <div className="mb-8">
                 <h3 className="text-xl font-semibold text-dark-text mb-2">Send us a Message</h3>
                 <p className="text-sm text-gray-text">Fill out the form below and we'll get back to you shortly.</p>

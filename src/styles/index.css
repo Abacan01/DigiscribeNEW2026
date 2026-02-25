@@ -557,6 +557,7 @@ footer::after {
     radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.08) 0%, transparent 40%),
     radial-gradient(circle at 90% 80%, rgba(186, 230, 253, 0.15) 0%, transparent 40%);
   pointer-events: none;
+  z-index: -1;
 }
 
 .hero-gradient::after {
@@ -568,7 +569,7 @@ footer::after {
   height: 100px;
   background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.6) 50%, #ffffff 100%);
   pointer-events: none;
-  z-index: 1;
+  z-index: -1;
 }
 
 /* Section divider */

@@ -194,6 +194,7 @@ export default function FaqFloatingButton() {
         flexDirection: 'column',
         alignItems: 'flex-end',
         fontFamily: "'Poppins', sans-serif",
+        pointerEvents: 'none',
       }}
     >
 
@@ -379,6 +380,7 @@ export default function FaqFloatingButton() {
           opacity: scrolled ? 1 : 0,
           transform: scrolled ? 'scale(1) translateY(0px)' : 'scale(0.8) translateY(8px)',
           pointerEvents: scrolled ? 'auto' : 'none',
+          alignSelf: 'flex-end',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = 'rgba(240,249,255,0.98)';
@@ -419,6 +421,8 @@ export default function FaqFloatingButton() {
           transition: 'transform 220ms cubic-bezier(0.22,1,0.36,1), box-shadow 220ms ease',
           transform: isOpen ? 'scale(1.08)' : 'scale(1)',
           flexShrink: 0,
+          pointerEvents: 'auto',
+          alignSelf: 'flex-end',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'scale(1.12)';
