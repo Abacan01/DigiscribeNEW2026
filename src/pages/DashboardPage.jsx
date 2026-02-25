@@ -216,14 +216,25 @@ export default function DashboardPage() {
     }
   }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, currentPage]);
 
-  // Compute counts (across ALL files + folders, not just current folder)
+  // id → name lookup for all folders (used for "inside folder" badge)
+  const folderMap = useMemo(() => {
+    const m = {};
+    for (const f of allFolders) m[f.id] = f.name || 'Unnamed folder';
+    return m;
+  }, [allFolders]);
+
+  // Compute counts scoped to current folder for status tabs; total is always all files
   const counts = useMemo(() => {
-    const result = { total: allFiles.length + allFolders.length, pending: 0, 'in-progress': 0, transcribed: 0 };
-    for (const file of allFiles) {
+    const insideFolder = currentFolderId !== null;
+    const scopedFiles = insideFolder
+      ? allFiles.filter((f) => (f.folderId || null) === currentFolderId)
+      : allFiles;
+    const result = { total: allFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
+    for (const file of scopedFiles) {
       if (result[file.status] !== undefined) result[file.status]++;
     }
     return result;
-  }, [allFiles, allFolders]);
+  }, [allFiles, allFolders, currentFolderId]);
 
   // Unique service categories
   const serviceCategories = useMemo(() => {
@@ -245,8 +256,9 @@ export default function DashboardPage() {
     return allFiles.filter((f) => (f.folderId || null) === null);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter]);
 
-  // Subfolders of current folder – always show; filter by name when searching
+  // Subfolders – hidden while a status tab is active (status view is file-only)
   const currentSubfolders = useMemo(() => {
+    if (statusFilter) return [];
     let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -254,9 +266,8 @@ export default function DashboardPage() {
       const q = searchQuery.toLowerCase().trim();
       folders = folders.filter((f) => f.name && f.name.toLowerCase().includes(q));
     }
-    // status/service filters don't apply to folders – always show them
     return folders;
-  }, [allFolders, currentFolderId, searchQuery]);
+  }, [allFolders, currentFolderId, searchQuery, statusFilter]);
 
   // Count items per folder (files + subfolders)
   const folderItemCounts = useMemo(() => {
@@ -1336,6 +1347,17 @@ export default function DashboardPage() {
                                     {file.serviceCategory && (
                                       <span className="text-[10px] text-indigo-500">{file.serviceCategory}</span>
                                     )}
+                                    {statusFilter && currentFolderId === null && file.folderId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setCurrentFolderId(file.folderId)}
+                                        className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-600 border border-violet-100 hover:bg-violet-100 transition-colors"
+                                        title={`Open folder: ${folderMap[file.folderId] || 'folder'}`}
+                                      >
+                                        <i className="fas fa-folder text-[8px]"></i>
+                                        {folderMap[file.folderId] || 'folder'}
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -1503,6 +1525,8 @@ export default function DashboardPage() {
                           isDeleteConfirm={deleteConfirm === file.id}
                           onDeleteConfirm={handleDeleteFile}
                           onDeleteCancel={() => setDeleteConfirm(null)}
+                          folderName={statusFilter && currentFolderId === null && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
+                          onOpenFolder={statusFilter && currentFolderId === null && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
                         />
                       </div>
                     );

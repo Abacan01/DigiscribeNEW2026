@@ -422,6 +422,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return sizes;
   }, [allFiles]);
 
+  // id → name lookup for all folders (used for "inside folder" badge)
+  const folderMap = useMemo(() => {
+    const m = {};
+    for (const f of allFolders) m[f.id] = f.name || 'Unnamed folder';
+    return m;
+  }, [allFolders]);
+
   // Helper: match file type to grouped label
   const getFileTypeLabel = useCallback((t) => {
     if (!t) return '';
@@ -1539,6 +1546,17 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                                 {file.description}
                               </p>
                             )}
+                            {statusFilter && !isInsideFolder && file.folderId && (
+                              <button
+                                type="button"
+                                onClick={() => setCurrentFolderId(file.folderId)}
+                                className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-600 border border-violet-100 hover:bg-violet-100 transition-colors"
+                                title={`Open folder: ${folderMap[file.folderId] || 'folder'}`}
+                              >
+                                <i className="fas fa-folder text-[8px]"></i>
+                                {folderMap[file.folderId] || 'folder'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1720,6 +1738,17 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                             {urlPlatform.label}
                           </span>
                         )}
+                        {statusFilter && !isInsideFolder && file.folderId && (
+                          <button
+                            type="button"
+                            onClick={() => setCurrentFolderId(file.folderId)}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-500 border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                            title={`Open folder: ${folderMap[file.folderId] || 'folder'}`}
+                          >
+                            <i className="fas fa-folder text-[8px]"></i>
+                            {folderMap[file.folderId] || 'folder'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1890,6 +1919,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   isDeleteConfirm={deleteConfirm === file.id}
                   onDeleteConfirm={handleDeleteFile}
                   onDeleteCancel={() => setDeleteConfirm(null)}
+                  folderName={statusFilter && !isInsideFolder && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
+                  onOpenFolder={statusFilter && !isInsideFolder && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
                 />
               </div>
             );

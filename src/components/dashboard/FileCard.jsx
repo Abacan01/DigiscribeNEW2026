@@ -97,7 +97,7 @@ const statusOptions = [
   { value: 'transcribed', label: 'Transcribed' },
 ];
 
-export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel }) {
+export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel, folderName, onOpenFolder }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -242,6 +242,17 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
               <i className="fas fa-tag text-[8px] text-indigo-400"></i>
               {file.serviceCategory}
             </span>
+          )}
+          {folderName && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenFolder && onOpenFolder(); }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600 border border-violet-100 hover:bg-violet-100 transition-colors"
+              title={`Inside folder: ${folderName}`}
+            >
+              <i className="fas fa-folder text-[8px] text-violet-400"></i>
+              {folderName}
+            </button>
           )}
         </div>
 
