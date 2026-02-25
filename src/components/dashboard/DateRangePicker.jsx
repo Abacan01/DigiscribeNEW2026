@@ -52,16 +52,11 @@ function getPresets() {
   const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
   const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
 
-  const quarter = Math.floor(today.getMonth() / 3);
-  const lastQEnd = new Date(today.getFullYear(), quarter * 3, 0);
-  const lastQStart = new Date(lastQEnd.getFullYear(), lastQEnd.getMonth() - 2, 1);
-
   return [
     { label: 'Today', from: today, to: today },
     { label: 'Yesterday', from: yesterday, to: yesterday },
     { label: 'Last week', from: weekStart, to: weekEnd },
     { label: 'Last month', from: lastMonthStart, to: lastMonthEnd },
-    { label: 'Last quarter', from: lastQStart, to: lastQEnd },
   ];
 }
 
@@ -143,6 +138,19 @@ function CalendarMonth({ year, month, rangeFrom, rangeTo, hoverDate, onDayClick,
 
 /* ── DateRangePicker ─────────────────────────────────────────────── */
 
+/* ── parse MM/DD/YYYY string to Date ─────────────────────────────── */
+function parseDateInput(str) {
+  if (!str) return null;
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, mm, dd, yyyy] = m;
+  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  if (isNaN(d.getTime())) return null;
+  // Validate that the date components match (e.g. no 02/30)
+  if (d.getMonth() + 1 !== Number(mm) || d.getDate() !== Number(dd)) return null;
+  return d;
+}
+
 export default function DateRangePicker({ from, to, onChange }) {
   const [open, setOpen] = useState(false);
   const [calYear, setCalYear] = useState(() => (from || new Date()).getFullYear());
@@ -151,6 +159,9 @@ export default function DateRangePicker({ from, to, onChange }) {
   const [pickTo, setPickTo] = useState(to || null);
   const [hoverDate, setHoverDate] = useState(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [customError, setCustomError] = useState('');
   const ref = useRef(null);
   const triggerRef = useRef(null);
   const presets = useMemo(() => getPresets(), []);
@@ -195,7 +206,20 @@ export default function DateRangePicker({ from, to, onChange }) {
     if (from) {
       setCalYear(from.getFullYear());
       setCalMonth(from.getMonth());
+      const mm = String(from.getMonth() + 1).padStart(2, '0');
+      const dd = String(from.getDate()).padStart(2, '0');
+      setCustomFrom(`${mm}/${dd}/${from.getFullYear()}`);
+    } else {
+      setCustomFrom('');
     }
+    if (to) {
+      const mm = String(to.getMonth() + 1).padStart(2, '0');
+      const dd = String(to.getDate()).padStart(2, '0');
+      setCustomTo(`${mm}/${dd}/${to.getFullYear()}`);
+    } else {
+      setCustomTo('');
+    }
+    setCustomError('');
   }, [from, to]);
 
   const handleDayClick = useCallback((date) => {
@@ -225,9 +249,37 @@ export default function DateRangePicker({ from, to, onChange }) {
   const handleReset = useCallback(() => {
     setPickFrom(null);
     setPickTo(null);
+    setCustomFrom('');
+    setCustomTo('');
+    setCustomError('');
     onChange(null, null);
     setOpen(false);
   }, [onChange]);
+
+  const handleCustomApply = useCallback(() => {
+    const f = parseDateInput(customFrom);
+    const t = parseDateInput(customTo);
+    if (!f || !t) {
+      setCustomError('Use MM/DD/YYYY format');
+      return;
+    }
+    if (f > t) {
+      setCustomError('Start date must be before end date');
+      return;
+    }
+    const today = startOfDay(new Date());
+    if (f > today || t > today) {
+      setCustomError('Dates cannot be in the future');
+      return;
+    }
+    setCustomError('');
+    setPickFrom(f);
+    setPickTo(t);
+    setCalYear(f.getFullYear());
+    setCalMonth(f.getMonth());
+    onChange(startOfDay(f), endOfDay(t));
+    setOpen(false);
+  }, [customFrom, customTo, onChange]);
 
   const prevMonth = () => {
     if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
@@ -249,7 +301,7 @@ export default function DateRangePicker({ from, to, onChange }) {
       className="bg-white rounded-2xl shadow-xl border border-gray-100 p-0 flex min-w-[520px]"
     >
           {/* Left: Presets */}
-          <div className="w-[140px] border-r border-gray-100 py-4 pl-4 pr-2 flex flex-col gap-0.5">
+          <div className="w-[160px] border-r border-gray-100 py-4 pl-4 pr-2 flex flex-col gap-0.5 overflow-y-auto max-h-[400px]">
             {presets.map((p) => {
               const isActive = pickFrom && pickTo && isSameDay(pickFrom, p.from) && isSameDay(pickTo, p.to);
               return (
@@ -265,6 +317,36 @@ export default function DateRangePicker({ from, to, onChange }) {
                 </button>
               );
             })}
+            {/* Custom date input */}
+            <div className="pt-2 mt-1 border-t border-gray-100">
+              <p className="px-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Custom</p>
+              <div className="px-2 space-y-1.5">
+                <input
+                  type="text"
+                  value={customFrom}
+                  onChange={(e) => { setCustomFrom(e.target.value); setCustomError(''); }}
+                  placeholder="MM/DD/YYYY"
+                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-[11px] text-dark-text placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/40"
+                />
+                <input
+                  type="text"
+                  value={customTo}
+                  onChange={(e) => { setCustomTo(e.target.value); setCustomError(''); }}
+                  placeholder="MM/DD/YYYY"
+                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-[11px] text-dark-text placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/40"
+                />
+                {customError && (
+                  <p className="text-[10px] text-red-500 px-0.5">{customError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCustomApply}
+                  className="w-full px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
             <div className="mt-auto pt-3 border-t border-gray-100">
               <button
                 type="button"

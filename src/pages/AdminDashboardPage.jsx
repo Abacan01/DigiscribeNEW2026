@@ -87,15 +87,13 @@ function formatSize(bytes) {
 function formatDate(dateStr) {
   if (!dateStr) return '--';
   try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const d = new Date(dateStr);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
   } catch {
-    return dateStr;
+    return '--';
   }
 }
 
@@ -176,6 +174,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [serviceFilter, setServiceFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
+  const [userFilter, setUserFilter] = useState('');
 
   // Folder-level filters (only active when inside a folder)
   const [dateFrom, setDateFrom] = useState(null);
@@ -290,18 +289,25 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         });
       }
       if (typeFilter) {
-        result = result.filter((f) => mapTypeToLabel(f.type) === typeFilter);
+        result = result.filter((f) => {
+          const label = mapTypeToLabel(f.type);
+          if (typeFilter === 'Document') {
+            return !['Image', 'Audio', 'Video'].includes(label) && label !== '';
+          }
+          return label === typeFilter;
+        });
       }
     }
 
     if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
+    if (userFilter) result = result.filter((f) => f.uploadedByEmail === userFilter);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter((f) => f.originalName && f.originalName.toLowerCase().includes(q));
     }
 
     return result;
-  }, [dateFrom, dateTo, typeFilter, serviceFilter, searchQuery]);
+  }, [dateFrom, dateTo, typeFilter, serviceFilter, userFilter, searchQuery]);
 
   // Compute counts for top status cards
   const counts = useMemo(() => {
@@ -318,14 +324,30 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return result;
   }, [allFiles, currentFolderId, applyNonStatusFilters]);
 
-  // Unique service categories
-  const serviceCategories = useMemo(() => {
-    const cats = new Set();
-    for (const file of allFiles) {
-      if (file.serviceCategory) cats.add(file.serviceCategory);
-    }
-    return Array.from(cats).sort();
-  }, [allFiles]);
+  // Static list of all service categories (always show even if no files exist)
+  const serviceCategories = useMemo(() => [
+    'Transcription Support - Medical',
+    'Transcription Support - Legal',
+    'Transcription Support - General',
+    'Transcription Support - Academic',
+    'Transcription Support - Corporate/Business',
+    'Data Entry - Waybill/Invoice/Charge',
+    'Data Entry - Batch Proof Report',
+    'EMR - Data Entry & Digitalization',
+    'EMR - Data Migration',
+    'EMR - EMR Management',
+    'Document Conversion - OCR & Data Extraction',
+    'Document Conversion - File Format Conversion',
+    'Document Conversion - Book and Ebook Conversion',
+    'Document Conversion - Indexing & Redaction',
+    'CAD - Architectural Drafting',
+    'CAD - Structural Drafting',
+    'CAD - MEP & HVAC',
+    'CAD - 3D Visualization',
+    'E-commerce Product Listing - Data Cleaning & Validation',
+    'E-commerce Product Listing - Data Extraction',
+    'Others',
+  ], []);
 
   // Unique service categories in current folder (for folder-level filter)
   const folderServiceCategories = useMemo(() => {
@@ -361,6 +383,15 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return Array.from(types).sort();
   }, [allFiles, currentFolderId]);
 
+  // Unique user emails across all files (for user search suggestions)
+  const uniqueUserEmails = useMemo(() => {
+    const emails = new Set();
+    for (const file of allFiles) {
+      if (file.uploadedByEmail) emails.add(file.uploadedByEmail);
+    }
+    return Array.from(emails).sort();
+  }, [allFiles]);
+
   // Whether admin is inside a subfolder
   const isInsideFolder = currentFolderId !== null;
 
@@ -375,9 +406,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder]);
 
-  // Subfolders – hidden while a status tab is active (status view is file-only)
+  // Subfolders – hidden while a status/service/type tab is active (those views are file-only)
   const currentSubfolders = useMemo(() => {
-    if (statusFilter) return [];
+    if (statusFilter || serviceFilter || typeFilter) return [];
 
     let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
@@ -394,7 +425,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       });
     }
     return folders;
-  }, [allFolders, currentFolderId, searchQuery, isInsideFolder, dateFrom, dateTo, statusFilter]);
+  }, [allFolders, currentFolderId, searchQuery, isInsideFolder, dateFrom, dateTo, statusFilter, serviceFilter, typeFilter]);
 
   // Item counts per folder
   const folderItemCounts = useMemo(() => {
@@ -978,9 +1009,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setDateFrom(null);
     setDateTo(null);
     setTypeFilter('');
+    setUserFilter('');
   };
 
-  const hasActiveFilters = statusFilter || serviceFilter || searchQuery || (isInsideFolder && (dateFrom || dateTo || typeFilter));
+  const hasActiveFilters = statusFilter || serviceFilter || searchQuery || userFilter || (isInsideFolder && (dateFrom || dateTo || typeFilter));
 
   // Folder-level date change handler
   const handleDateRangeChange = useCallback((from, to) => {
@@ -1054,6 +1086,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         folders={allFolders}
         currentFolderId={currentFolderId}
         onNavigate={setCurrentFolderId}
+        onDrop={handleDrop}
       />
 
       {/* Filter Bar – conditionally render based on root vs inside folder */}
@@ -1076,6 +1109,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             onSortChange={setSortBy}
             onClear={clearFilters}
             hasActiveFilters={hasActiveFilters}
+            userFilter={userFilter}
+            onUserChange={setUserFilter}
+            userEmails={uniqueUserEmails}
           />
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
@@ -1132,21 +1168,19 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               )}
             </div>
 
-            {serviceCategories.length > 0 && (
-              <div className="relative">
-                <select
-                  value={serviceFilter}
-                  onChange={(e) => setServiceFilter(e.target.value)}
-                  className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
-                >
-                  <option value="">All Services</option>
-                  {serviceCategories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
-              </div>
-            )}
+            <div className="relative">
+              <select
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value)}
+                className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
+              >
+                <option value="">All Services</option>
+                {serviceCategories.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
+            </div>
 
             <div className="relative">
               <select

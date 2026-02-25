@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import DateRangePicker from './DateRangePicker';
 
@@ -49,30 +49,12 @@ const SERVICE_TREE = [
 ];
 
 /* ── ServicePicker ───────────────────────────────────────────────── */
-function ServicePicker({ value, onChange, availableCategories = [] }) {
-  // availableCategories: array of stored values like "Transcription Support - Medical"
-  // value: full stored string like "Transcription Support - Medical", or ""
-
-  // Build a Set for quick lookup
-  const availableSet = new Set(availableCategories);
-
-  // Filter SERVICE_TREE to only categories/subs that actually exist in the folder
-  const visibleTree = SERVICE_TREE.reduce((acc, cat) => {
-    if (cat.subs.length === 0) {
-      // "Others" — stored as just the label with no sub
-      if (availableSet.has(cat.label)) {
-        acc.push({ ...cat, visibleSubs: [] });
-      }
-    } else {
-      const visibleSubs = cat.subs.filter((sub) =>
-        availableSet.has(`${cat.label} - ${sub}`)
-      );
-      if (visibleSubs.length > 0) {
-        acc.push({ ...cat, visibleSubs });
-      }
-    }
-    return acc;
-  }, []);
+function ServicePicker({ value, onChange }) {
+  // Always show every category and sub from SERVICE_TREE (no filtering by available files)
+  const visibleTree = SERVICE_TREE.map((cat) => ({
+    ...cat,
+    visibleSubs: cat.subs, // show all subs always
+  }));
 
   const [open, setOpen] = useState(false);
   const [activeKey, setActiveKey] = useState(() => visibleTree[0]?.key || '');
@@ -93,7 +75,7 @@ function ServicePicker({ value, onChange, availableCategories = [] }) {
       setActiveKey(visibleTree[0].key);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, availableCategories.join(',')]);
+  }, [value]);;
 
   const updatePos = useCallback(() => {
     if (!triggerRef.current) return;
@@ -132,7 +114,7 @@ function ServicePicker({ value, onChange, availableCategories = [] }) {
     ? (value.includes(' - ') ? value.split(' - ').slice(1).join(' - ') : value)
     : 'All Services';
 
-  if (visibleTree.length === 0) return null;
+  if (visibleTree.length === 0) return null; // shouldn't happen since we always show all
 
   const panel = open ? createPortal(
     <div
@@ -165,8 +147,16 @@ function ServicePicker({ value, onChange, availableCategories = [] }) {
             <button
               key={cat.key}
               type="button"
-              onMouseEnter={() => setActiveKey(cat.key)}
-              onClick={() => setActiveKey(cat.key)}
+              onMouseEnter={() => { if (cat.subs.length > 0) setActiveKey(cat.key); }}
+              onClick={() => {
+                if (cat.subs.length === 0) {
+                  // "Others" — select/deselect directly, no sub panel
+                  onChange(value === cat.label ? '' : cat.label);
+                  setOpen(false);
+                } else {
+                  setActiveKey(cat.key);
+                }
+              }}
               className={`mx-2 text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${
                 isCurrent
                   ? 'bg-white shadow-sm border border-gray-200/80 text-dark-text'
@@ -181,52 +171,41 @@ function ServicePicker({ value, onChange, availableCategories = [] }) {
         })}
       </div>
 
-      {/* Right – sub-services */}
+      {/* Right – sub-services (hidden when Others is active since it has no subs) */}
       <div className="flex-1 p-4">
-        {activeCategory && (
+        {activeCategory && activeCategory.visibleSubs.length > 0 && (
           <>
             <div className="flex items-center gap-2 mb-3">
               <i className={`fas ${activeCategory.icon} text-primary text-xs`}></i>
               <p className="text-xs font-semibold text-gray-700">{activeCategory.label}</p>
             </div>
-            {activeCategory.visibleSubs.length === 0 ? (
-              /* Others — no sub selection, clicking category selects it directly */
-              <button
-                type="button"
-                onClick={() => { onChange(value === activeCategory.label ? '' : activeCategory.label); setOpen(false); }}
-                className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
-                  value === activeCategory.label
-                    ? 'bg-primary/10 border-primary/30 text-primary'
-                    : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
-                }`}
-              >
-                {value === activeCategory.label && <i className="fas fa-check mr-1.5 text-[9px]"></i>}
-                {activeCategory.label}
-              </button>
-            ) : (
-              <div className="grid grid-cols-2 gap-1.5">
-                {activeCategory.visibleSubs.map((sub) => {
-                  const fullVal = `${activeCategory.label} - ${sub}`;
-                  const isSelected = value === fullVal;
-                  return (
-                    <button
-                      key={sub}
-                      type="button"
-                      onClick={() => { onChange(isSelected ? '' : fullVal); setOpen(false); }}
-                      className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
-                        isSelected
-                          ? 'bg-primary/10 border-primary/30 text-primary'
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
-                      }`}
-                    >
-                      {isSelected && <i className="fas fa-check mr-1.5 text-[9px]"></i>}
-                      {sub}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div className="grid grid-cols-1 gap-1.5">
+              {activeCategory.visibleSubs.map((sub) => {
+                const fullVal = `${activeCategory.label} - ${sub}`;
+                const isSelected = value === fullVal;
+                return (
+                  <button
+                    key={sub}
+                    type="button"
+                    onClick={() => { onChange(isSelected ? '' : fullVal); setOpen(false); }}
+                    className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
+                      isSelected
+                        ? 'bg-primary/10 border-primary/30 text-primary'
+                        : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
+                    }`}
+                  >
+                    {isSelected && <i className="fas fa-check mr-1.5 text-[9px]"></i>}
+                    {sub}
+                  </button>
+                );
+              })}
+            </div>
           </>
+        )}
+        {activeCategory && activeCategory.visibleSubs.length === 0 && (
+          <div className="flex items-center justify-center h-full text-xs text-gray-400">
+            <p>Click <span className="font-medium text-gray-600">&ldquo;{activeCategory.label}&rdquo;</span> on the left to select it</p>
+          </div>
         )}
       </div>
     </div>,
@@ -254,6 +233,9 @@ function ServicePicker({ value, onChange, availableCategories = [] }) {
   );
 }
 
+/* ── Static file type options ────────────────────────────────────── */
+const ALL_FILE_TYPES = ['Image', 'Audio', 'Video', 'Document'];
+
 /* ── Sort options ────────────────────────────────────────────────── */
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest First' },
@@ -280,25 +262,99 @@ export default function FolderFilterToolbar({
   onSortChange,
   onClear,
   hasActiveFilters,
+  userFilter = '',
+  onUserChange,
+  userEmails = [],
 }) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef(null);
+  const suggestionsRef = useRef(null);
+
+  // Compute user suggestions from searchQuery
+  const userSuggestions = useMemo(() => {
+    if (!searchQuery.trim() || !userEmails.length || !onUserChange) return [];
+    const q = searchQuery.toLowerCase().trim();
+    return userEmails.filter((email) => email.toLowerCase().includes(q)).slice(0, 6);
+  }, [searchQuery, userEmails, onUserChange]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const handler = (e) => {
+      if (
+        searchRef.current && !searchRef.current.contains(e.target) &&
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showSuggestions]);
+
+  const handleSearchChange = (val) => {
+    onSearchChange(val);
+    setShowSuggestions(true);
+  };
+
+  const handleSelectUser = (email) => {
+    if (onUserChange) onUserChange(email);
+    onSearchChange('');
+    setShowSuggestions(false);
+  };
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
       <div className="flex flex-col lg:flex-row gap-3 flex-wrap">
 
         {/* Search – LEFT, takes remaining space */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[200px]" ref={searchRef}>
           <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search by file name..."
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => setShowSuggestions(true)}
+            placeholder={onUserChange ? 'Search by file name or user email...' : 'Search by file name...'}
             className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
           />
           {searchQuery && (
-            <button onClick={() => onSearchChange('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button onClick={() => { onSearchChange(''); setShowSuggestions(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               <i className="fas fa-times text-xs"></i>
             </button>
+          )}
+
+          {/* User suggestion dropdown */}
+          {showSuggestions && userSuggestions.length > 0 && (
+            <div
+              ref={suggestionsRef}
+              className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-lg z-50 overflow-hidden"
+            >
+              <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Users</p>
+              {userSuggestions.map((email) => (
+                <button
+                  key={email}
+                  type="button"
+                  onClick={() => handleSelectUser(email)}
+                  className="flex items-center gap-2.5 w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                    <i className="fas fa-user text-[10px] text-indigo-400"></i>
+                  </div>
+                  <span className="text-sm text-dark-text truncate">{email}</span>
+                  <span className="ml-auto text-[10px] text-gray-400">Filter by user</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Active user filter badge below search */}
+          {userFilter && (
+            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <i className="fas fa-user text-[9px]"></i>
+              {userFilter}
+              <button onClick={() => onUserChange('')} className="hover:opacity-70 ml-0.5"><i className="fas fa-times text-[8px]"></i></button>
+            </div>
           )}
         </div>
 
@@ -306,7 +362,7 @@ export default function FolderFilterToolbar({
         <DateRangePicker from={dateFrom} to={dateTo} onChange={onDateChange} />
 
         {/* Service picker – portal popup panel */}
-        <ServicePicker value={serviceFilter} onChange={onServiceChange} availableCategories={serviceCategories} />
+        <ServicePicker value={serviceFilter} onChange={onServiceChange} />
 
         {/* Type filter */}
         <div className="relative">
@@ -316,7 +372,7 @@ export default function FolderFilterToolbar({
             className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[140px]"
           >
             <option value="">All Types</option>
-            {fileTypes.map((t) => (
+            {ALL_FILE_TYPES.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
@@ -378,6 +434,13 @@ export default function FolderFilterToolbar({
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
               &quot;{searchQuery}&quot;
               <button onClick={() => onSearchChange('')} className="hover:opacity-70 ml-0.5"><i className="fas fa-times text-[8px]"></i></button>
+            </span>
+          )}
+          {userFilter && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700">
+              <i className="fas fa-user text-[9px]"></i>
+              {userFilter}
+              <button onClick={() => onUserChange('')} className="hover:opacity-70 ml-0.5"><i className="fas fa-times text-[8px]"></i></button>
             </span>
           )}
         </div>

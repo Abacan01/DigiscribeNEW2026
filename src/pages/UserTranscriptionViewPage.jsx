@@ -118,7 +118,7 @@ export default function UserTranscriptionViewPage() {
                 <i className="fas fa-calendar-alt text-xs text-gray-300"></i>
                 <span>
                   {t.createdAt
-                    ? new Date(t.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                    ? (() => { const d = new Date(t.createdAt); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`; })()
                     : '--'}
                 </span>
               </div>

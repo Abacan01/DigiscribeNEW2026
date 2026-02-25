@@ -42,23 +42,11 @@ function getUserDashboardStateKey(userId) {
 function formatRelativeDate(dateString) {
   if (!dateString) return '--';
   try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    });
+    const d = new Date(dateString);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
   } catch {
     return '--';
   }
@@ -223,6 +211,14 @@ export default function DashboardPage() {
     return m;
   }, [allFolders]);
 
+  // Files the user owns that are in folders they can't see (moved to an admin-only folder)
+  const hiddenFiles = useMemo(() => {
+    const visibleFolderIds = new Set(allFolders.map((f) => f.id));
+    return allFiles.filter((f) => f.folderId && !visibleFolderIds.has(f.folderId));
+  }, [allFiles, allFolders]);
+
+  const [hiddenFilesExpanded, setHiddenFilesExpanded] = useState(false);
+
   // Compute counts scoped to current folder for status tabs; total is always all files
   const counts = useMemo(() => {
     const insideFolder = currentFolderId !== null;
@@ -236,14 +232,30 @@ export default function DashboardPage() {
     return result;
   }, [allFiles, allFolders, currentFolderId]);
 
-  // Unique service categories
-  const serviceCategories = useMemo(() => {
-    const cats = new Set();
-    for (const file of allFiles) {
-      if (file.serviceCategory) cats.add(file.serviceCategory);
-    }
-    return Array.from(cats).sort();
-  }, [allFiles]);
+  // Static list of all service categories (always show even if no files exist)
+  const serviceCategories = useMemo(() => [
+    'Transcription Support - Medical',
+    'Transcription Support - Legal',
+    'Transcription Support - General',
+    'Transcription Support - Academic',
+    'Transcription Support - Corporate/Business',
+    'Data Entry - Waybill/Invoice/Charge',
+    'Data Entry - Batch Proof Report',
+    'EMR - Data Entry & Digitalization',
+    'EMR - Data Migration',
+    'EMR - EMR Management',
+    'Document Conversion - OCR & Data Extraction',
+    'Document Conversion - File Format Conversion',
+    'Document Conversion - Book and Ebook Conversion',
+    'Document Conversion - Indexing & Redaction',
+    'CAD - Architectural Drafting',
+    'CAD - Structural Drafting',
+    'CAD - MEP & HVAC',
+    'CAD - 3D Visualization',
+    'E-commerce Product Listing - Data Cleaning & Validation',
+    'E-commerce Product Listing - Data Extraction',
+    'Others',
+  ], []);
 
   // Files in current folder (or all files when searching/filtering at root)
   const currentFolderFiles = useMemo(() => {
@@ -256,9 +268,9 @@ export default function DashboardPage() {
     return allFiles.filter((f) => (f.folderId || null) === null);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter]);
 
-  // Subfolders – hidden while a status tab is active (status view is file-only)
+  // Subfolders – hidden while a status/service filter is active (those views are file-only)
   const currentSubfolders = useMemo(() => {
-    if (statusFilter) return [];
+    if (statusFilter || serviceFilter) return [];
     let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -267,7 +279,7 @@ export default function DashboardPage() {
       folders = folders.filter((f) => f.name && f.name.toLowerCase().includes(q));
     }
     return folders;
-  }, [allFolders, currentFolderId, searchQuery, statusFilter]);
+  }, [allFolders, currentFolderId, searchQuery, statusFilter, serviceFilter]);
 
   // Count items per folder (files + subfolders)
   const folderItemCounts = useMemo(() => {
@@ -877,6 +889,49 @@ export default function DashboardPage() {
                 ))}
               </div>
 
+              {/* "Moved to admin folder" notice */}
+              {hiddenFiles.length > 0 && (
+                <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setHiddenFilesExpanded((v) => !v)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-amber-100/50 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                      <i className="fas fa-folder-minus text-amber-500 text-sm"></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-amber-700">
+                        {hiddenFiles.length} file{hiddenFiles.length !== 1 ? 's' : ''} moved to a restricted folder
+                      </p>
+                      <p className="text-[11px] text-amber-600/80 mt-0.5">
+                        An admin moved {hiddenFiles.length === 1 ? 'this file' : 'these files'} to a folder you don’t have access to. {hiddenFiles.length === 1 ? 'It’ still' : 'They’re still'} tracked in your status counts above.
+                      </p>
+                    </div>
+                    <i className={`fas fa-chevron-down text-amber-400 text-xs transition-transform flex-shrink-0 ${hiddenFilesExpanded ? 'rotate-180' : ''}`}></i>
+                  </button>
+                  {hiddenFilesExpanded && (
+                    <div className="border-t border-amber-200 px-4 pb-3 pt-2 space-y-2">
+                      {hiddenFiles.map((file) => {
+                        const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
+                        return (
+                          <div key={file.id} className="flex items-center gap-3 py-1.5">
+                            <i className="fas fa-file text-amber-300 text-xs flex-shrink-0 w-4 text-center"></i>
+                            <span className="text-sm text-amber-800 truncate flex-1" title={file.originalName}>
+                              {file.originalName}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border} flex-shrink-0`}>
+                              <i className={`fas ${cfg.icon} text-[8px]`}></i>
+                              {cfg.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Messages */}
               {message && (
                 <div
@@ -909,6 +964,7 @@ export default function DashboardPage() {
                 folders={allFolders}
                 currentFolderId={currentFolderId}
                 onNavigate={setCurrentFolderId}
+                onDrop={handleDrop}
               />
 
               {/* Filter Bar */}
@@ -930,21 +986,19 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  {serviceCategories.length > 0 && (
-                    <div className="relative">
-                      <select
-                        value={serviceFilter}
-                        onChange={(e) => setServiceFilter(e.target.value)}
-                        className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
-                      >
-                        <option value="">All Services</option>
-                        {serviceCategories.map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                      <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
-                    </div>
-                  )}
+                  <div className="relative">
+                    <select
+                      value={serviceFilter}
+                      onChange={(e) => setServiceFilter(e.target.value)}
+                      className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
+                    >
+                      <option value="">All Services</option>
+                      {serviceCategories.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
+                  </div>
 
                   <div className="relative">
                     <select
@@ -1638,7 +1692,7 @@ export default function DashboardPage() {
                             )}
                             <span className="text-[11px] text-gray-400 flex items-center gap-1">
                               <i className="fas fa-clock text-[9px]"></i>
-                              {t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '--'}
+                              {t.createdAt ? (() => { const d = new Date(t.createdAt); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`; })() : '--'}
                             </span>
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
                               t.deliveryType === 'file' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'

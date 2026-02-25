@@ -1,23 +1,11 @@
 function formatRelativeDate(dateString) {
   if (!dateString) return '--';
   try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-    });
+    const d = new Date(dateString);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
   } catch {
     return '--';
   }
@@ -106,10 +94,7 @@ export default function FolderRow({
         <span className="text-xs text-gray-text">Folder</span>
       </td>
       <td className="px-4 py-3.5">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-indigo-50 text-indigo-600 border-indigo-200">
-          <i className="fas fa-folder text-[9px]"></i>
-          Folder
-        </span>
+        <span className="text-sm text-gray-400">--</span>
       </td>
       {showUploadedBy && (
         <td className="px-4 py-3.5">
