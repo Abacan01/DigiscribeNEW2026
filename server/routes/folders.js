@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import { adminDb } from '../firebaseAdmin.js';
 import { verifyAuth } from '../middleware/authMiddleware.js';
+import { mkdirOnFtp, renameDirOnFtp, removeDirOnFtp, moveOnFtp } from '../services/ftp.js';
+import {
+  resolveFolderFtpPath,
+  sanitizeName,
+  updateDescendantFilePaths,
+  computeFileFtpPath,
+} from '../services/ftpPathResolver.js';
 
 const router = Router();
 
@@ -33,6 +40,14 @@ router.post('/', verifyAuth, async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    // --- FTP sync: create directory on FTP ---
+    try {
+      const ftpPath = await resolveFolderFtpPath(docRef.id, adminDb);
+      if (ftpPath) await mkdirOnFtp(ftpPath);
+    } catch (ftpErr) {
+      console.warn('[ftp] mkdir warning:', ftpErr.message);
+    }
 
     res.json({ success: true, folderId: docRef.id });
   } catch (err) {
@@ -87,7 +102,24 @@ router.put('/:id', verifyAuth, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied.' });
     }
 
+    // --- FTP sync: rename directory on FTP ---
+    const oldFtpPath = await resolveFolderFtpPath(req.params.id, adminDb);
+
     await docRef.update({ name: name.trim(), updatedAt: new Date() });
+
+    // Resolve new path (after name update)
+    const newFtpPath = await resolveFolderFtpPath(req.params.id, adminDb);
+
+    if (oldFtpPath && newFtpPath && oldFtpPath !== newFtpPath) {
+      try {
+        await renameDirOnFtp(oldFtpPath, newFtpPath);
+        // Update storagePath / url for all files inside this folder tree
+        await updateDescendantFilePaths(req.params.id, adminDb);
+      } catch (ftpErr) {
+        console.warn('[ftp] rename-folder warning:', ftpErr.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -129,7 +161,24 @@ router.put('/:id/move', verifyAuth, async (req, res) => {
       }
     }
 
+    // --- FTP sync: move directory on FTP ---
+    const oldFtpPath = await resolveFolderFtpPath(folderId, adminDb);
+
     await docRef.update({ parentId: parentId || null, updatedAt: new Date() });
+
+    // Resolve new path (after parentId update)
+    const newFtpPath = await resolveFolderFtpPath(folderId, adminDb);
+
+    if (oldFtpPath && newFtpPath && oldFtpPath !== newFtpPath) {
+      try {
+        await renameDirOnFtp(oldFtpPath, newFtpPath);
+        // Update storagePath / url for all files inside this folder tree
+        await updateDescendantFilePaths(folderId, adminDb);
+      } catch (ftpErr) {
+        console.warn('[ftp] move-folder warning:', ftpErr.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -154,28 +203,77 @@ router.delete('/:id', verifyAuth, async (req, res) => {
 
     const newParent = folderData.parentId || null;
 
+    // --- FTP sync: resolve the folder's FTP path before deletion ---
+    let folderFtpPath = '';
+    try {
+      folderFtpPath = await resolveFolderFtpPath(req.params.id, adminDb);
+    } catch (e) { /* ignore */ }
+
     // Move all files in this folder to the parent folder
     const filesSnapshot = await adminDb.collection('files')
       .where('folderId', '==', req.params.id)
       .get();
 
-    const batch = adminDb.batch();
-    filesSnapshot.docs.forEach((fileDoc) => {
-      batch.update(fileDoc.ref, { folderId: newParent, updatedAt: new Date() });
-    });
+    // --- FTP sync: move each file on FTP to the parent folder path ---
+    for (const fileDoc of filesSnapshot.docs) {
+      const fileData = fileDoc.data();
+      const oldStoragePath = fileData.storagePath || fileData.savedAs;
+      if (oldStoragePath) {
+        try {
+          const newStoragePath = await computeFileFtpPath(fileData, newParent, adminDb);
+          if (oldStoragePath !== newStoragePath) {
+            await moveOnFtp(oldStoragePath, newStoragePath);
+            const encodedPath = newStoragePath.split('/').map(encodeURIComponent).join('/');
+            await fileDoc.ref.update({
+              folderId: newParent,
+              storagePath: newStoragePath,
+              url: `/api/files/${encodedPath}`,
+              updatedAt: new Date(),
+            });
+          } else {
+            await fileDoc.ref.update({ folderId: newParent, updatedAt: new Date() });
+          }
+        } catch (ftpErr) {
+          console.warn('[ftp] delete-folder file-move warning:', ftpErr.message);
+          await fileDoc.ref.update({ folderId: newParent, updatedAt: new Date() });
+        }
+      } else {
+        await fileDoc.ref.update({ folderId: newParent, updatedAt: new Date() });
+      }
+    }
 
-    // Move all subfolders to the parent folder
+    // Move all subfolders to the parent folder (Firestore only — FTP dirs will be inside the folder being deleted)
     const subfoldersSnapshot = await adminDb.collection('folders')
       .where('parentId', '==', req.params.id)
       .get();
 
+    // Update subfolder parentIds first
+    const batch = adminDb.batch();
     subfoldersSnapshot.docs.forEach((subDoc) => {
       batch.update(subDoc.ref, { parentId: newParent, updatedAt: new Date() });
     });
 
-    // Delete the folder
+    // Delete the folder document
     batch.delete(docRef);
     await batch.commit();
+
+    // --- FTP sync: update subfolder descendant file paths, then try to remove the old directory ---
+    for (const subDoc of subfoldersSnapshot.docs) {
+      try {
+        // After parentId update, recalculate FTP paths for all files in each subfolder tree
+        await updateDescendantFilePaths(subDoc.id, adminDb);
+      } catch (ftpErr) {
+        console.warn('[ftp] delete-folder subfolder-path-update warning:', ftpErr.message);
+      }
+    }
+
+    if (folderFtpPath) {
+      try {
+        await removeDirOnFtp(folderFtpPath);
+      } catch (ftpErr) {
+        console.warn('[ftp] delete-folder rmdir warning:', ftpErr.message);
+      }
+    }
 
     res.json({ success: true });
   } catch (err) {

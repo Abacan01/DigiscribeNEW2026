@@ -16,6 +16,7 @@ import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
 import { uploadToFtp, uploadBufferToFtp, appendBufferToFtp, moveOnFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
+import { resolveFolderFtpPath, computeFileFtpPath, sanitizeName } from './services/ftpPathResolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,7 +211,22 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     const storageSub = buildStoragePath(serviceCategory, mimeType);
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${Date.now()}-${safeName}`;
-    const storagePath = `${storageSub}/${finalName}`;
+    const defaultStoragePath = `${storageSub}/${finalName}`;
+
+    // If uploading into a folder, place the file inside the folder FTP path
+    let storagePath = defaultStoragePath;
+    let originalStoragePath = null;
+    if (folderId) {
+      try {
+        const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
+        if (folderFtpPath) {
+          storagePath = `${folderFtpPath}/${finalName}`;
+          originalStoragePath = defaultStoragePath; // preserve the service-category path for later
+        }
+      } catch (e) {
+        console.warn('[upload/complete] folder path resolution failed, using default path:', e.message);
+      }
+    }
     let finalSize = 0;
 
     if (IS_VERCEL) {
@@ -312,6 +328,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
         originalName: fileName,
         savedAs: finalName,
         storagePath,
+        ...(originalStoragePath ? { originalStoragePath } : {}),
         size: finalSize,
         type: mimeType,
         fileCategory: getFileCategory(mimeType),
@@ -409,9 +426,24 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
     }
 
     const storageSub = buildStoragePath(serviceCategory, contentType);
-    const storagePath = `${storageSub}/${finalName}`;
+    const defaultStoragePath = `${storageSub}/${finalName}`;
     const stats = fs.statSync(finalPath);
     const displayName = customName?.trim() || originalName;
+
+    // If uploading into a folder, place the file inside the folder FTP path
+    let storagePath = defaultStoragePath;
+    let originalStoragePathUrl = null;
+    if (folderId) {
+      try {
+        const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
+        if (folderFtpPath) {
+          storagePath = `${folderFtpPath}/${finalName}`;
+          originalStoragePathUrl = defaultStoragePath;
+        }
+      } catch (e) {
+        console.warn('[upload/url] folder path resolution failed, using default path:', e.message);
+      }
+    }
 
     // Upload to FTP, then remove local temp
     await uploadToFtp(finalPath, storagePath);
@@ -425,6 +457,7 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
         originalName: displayName,
         savedAs: finalName,
         storagePath,
+        ...(originalStoragePathUrl ? { originalStoragePath: originalStoragePathUrl } : {}),
         size: stats.size,
         type: contentType,
         fileCategory: getFileCategory(contentType),
@@ -590,7 +623,30 @@ app.post('/api/files/bulk-move', verifyAuth, async (req, res) => {
       const fileData = doc.data();
       // Non-admins can only move their own files
       if (req.user.role !== 'admin' && fileData.uploadedBy !== req.user.uid) continue;
-      await docRef.update({ folderId: folderId || null, updatedAt: new Date() });
+
+      // --- FTP sync: move file on FTP to the target folder path ---
+      const oldStoragePath = fileData.storagePath || fileData.savedAs;
+      let newStoragePath = oldStoragePath;
+      try {
+        newStoragePath = await computeFileFtpPath(fileData, folderId || null, adminDb);
+        if (oldStoragePath && newStoragePath && oldStoragePath !== newStoragePath) {
+          await moveOnFtp(oldStoragePath, newStoragePath);
+        }
+      } catch (ftpErr) {
+        console.warn('[ftp] bulk-move warning for', id, ':', ftpErr.message);
+        newStoragePath = oldStoragePath; // fallback: keep old path
+      }
+
+      const updateData = { folderId: folderId || null, updatedAt: new Date() };
+      if (newStoragePath !== oldStoragePath) {
+        if (!fileData.originalStoragePath && oldStoragePath) {
+          updateData.originalStoragePath = oldStoragePath;
+        }
+        updateData.storagePath = newStoragePath;
+        const encodedPath = newStoragePath.split('/').map(encodeURIComponent).join('/');
+        updateData.url = `/api/files/${encodedPath}`;
+      }
+      await docRef.update(updateData);
       moved++;
     }
     res.json({ success: true, moved });

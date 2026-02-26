@@ -258,3 +258,58 @@ export async function moveOnFtp(fromRemotePath, toRemotePath) {
     client.close();
   }
 }
+
+/**
+ * Creates a directory (and any parent directories) on the FTP server.
+ *
+ * @param {string} remoteDirPath - Directory path relative to FTP_BASE
+ */
+export async function mkdirOnFtp(remoteDirPath) {
+  const client = await createClient();
+  try {
+    await client.ensureDir(`${FTP_BASE}/${remoteDirPath}`);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * Removes an empty directory from the FTP server.
+ * Silently ignores errors (e.g. directory not empty or not found).
+ *
+ * @param {string} remoteDirPath - Directory path relative to FTP_BASE
+ */
+export async function removeDirOnFtp(remoteDirPath) {
+  const client = await createClient();
+  try {
+    await client.removeDir(`${FTP_BASE}/${remoteDirPath}`);
+  } catch (err) {
+    console.warn('[ftp] removeDir warning:', err.message);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * Renames/moves a directory on the FTP server.
+ * Creates the target parent directory if needed.
+ * Silently ignores errors (e.g. source not found).
+ *
+ * @param {string} fromDirPath - Source directory relative to FTP_BASE
+ * @param {string} toDirPath   - Target directory relative to FTP_BASE
+ */
+export async function renameDirOnFtp(fromDirPath, toDirPath) {
+  const client = await createClient();
+  try {
+    const fromFull = `${FTP_BASE}/${fromDirPath}`;
+    const toFull = `${FTP_BASE}/${toDirPath}`;
+    const toParent = path.posix.dirname(toFull);
+    await client.ensureDir(toParent);
+    await client.cd('/');
+    await client.rename(fromFull, toFull);
+  } catch (err) {
+    console.warn('[ftp] renameDir warning:', err.message);
+  } finally {
+    client.close();
+  }
+}

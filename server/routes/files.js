@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { adminDb } from '../firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from '../middleware/authMiddleware.js';
-import { deleteFromFtp } from '../services/ftp.js';
+import { deleteFromFtp, moveOnFtp } from '../services/ftp.js';
+import { computeFileFtpPath } from '../services/ftpPathResolver.js';
+import path from 'path';
 
 const router = Router();
 
@@ -156,7 +158,39 @@ router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
       }
     }
 
-    await docRef.update({ folderId: folderId || null, updatedAt: new Date() });
+    // --- FTP sync: move file to the new folder path ---
+    const oldStoragePath = fileData.storagePath || fileData.savedAs;
+    const oldFolderId = fileData.folderId || null;
+    const newFolderId = folderId || null;
+
+    // Only move on FTP if folder actually changed
+    if (oldFolderId !== newFolderId && oldStoragePath) {
+      try {
+        // Save original path on first move so we can restore it if moved back to root
+        const originalStoragePathToSave = fileData.originalStoragePath || oldStoragePath;
+        const newStoragePath = await computeFileFtpPath({ ...fileData, originalStoragePath: originalStoragePathToSave }, newFolderId, adminDb);
+
+        if (oldStoragePath !== newStoragePath) {
+          await moveOnFtp(oldStoragePath, newStoragePath);
+        }
+
+        const encodedPath = newStoragePath.split('/').map(encodeURIComponent).join('/');
+        await docRef.update({
+          folderId: newFolderId,
+          storagePath: newStoragePath,
+          url: `/api/files/${encodedPath}`,
+          originalStoragePath: originalStoragePathToSave,
+          updatedAt: new Date(),
+        });
+      } catch (ftpErr) {
+        console.warn('[ftp] move-to-folder warning:', ftpErr.message);
+        // Still update Firestore folderId even if FTP move fails
+        await docRef.update({ folderId: newFolderId, updatedAt: new Date() });
+      }
+    } else {
+      await docRef.update({ folderId: newFolderId, updatedAt: new Date() });
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -175,7 +209,50 @@ router.put('/metadata/:fileId/rename', verifyAdmin, async (req, res) => {
     if (!doc.exists) {
       return res.status(404).json({ success: false, error: 'File not found.' });
     }
-    await docRef.update({ originalName: name.trim(), updatedAt: new Date() });
+
+    const fileData = doc.data();
+    const oldStoragePath = fileData.storagePath || fileData.savedAs;
+    const newDisplayName = name.trim();
+
+    // --- FTP sync: rename the file on FTP ---
+    if (oldStoragePath) {
+      try {
+        const dir = path.posix.dirname(oldStoragePath);
+        const oldBaseName = path.posix.basename(oldStoragePath);
+        // Preserve the unique timestamp prefix from savedAs, change the display portion
+        const ext = path.posix.extname(oldBaseName);
+        // savedAs is like "1234567890-original_name.mp3"
+        const savedAs = fileData.savedAs || oldBaseName;
+        const dashIndex = savedAs.indexOf('-');
+        const prefix = dashIndex > 0 ? savedAs.slice(0, dashIndex + 1) : `${Date.now()}-`;
+        const safeName = newDisplayName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const newFileName = `${prefix}${safeName}`;
+        // Only add extension if safeName doesn't already end with it
+        const finalNewFileName = safeName.toLowerCase().endsWith(ext.toLowerCase()) ? newFileName : newFileName;
+        const newStoragePath = `${dir}/${finalNewFileName}`;
+
+        if (oldStoragePath !== newStoragePath) {
+          await moveOnFtp(oldStoragePath, newStoragePath);
+          const encodedPath = newStoragePath.split('/').map(encodeURIComponent).join('/');
+          await docRef.update({
+            originalName: newDisplayName,
+            savedAs: finalNewFileName,
+            storagePath: newStoragePath,
+            url: `/api/files/${encodedPath}`,
+            updatedAt: new Date(),
+          });
+        } else {
+          await docRef.update({ originalName: newDisplayName, updatedAt: new Date() });
+        }
+      } catch (ftpErr) {
+        console.warn('[ftp] rename warning:', ftpErr.message);
+        // Still update display name even if FTP rename fails
+        await docRef.update({ originalName: newDisplayName, updatedAt: new Date() });
+      }
+    } else {
+      await docRef.update({ originalName: newDisplayName, updatedAt: new Date() });
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
