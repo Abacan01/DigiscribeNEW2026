@@ -156,9 +156,10 @@ export default function LoginPage() {
           <img
             src="/images/manilacityhall.png"
             alt="DigiScribe"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover opacity-80"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/20 to-slate-900/10" />
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/30 via-sky-600/20 to-blue-700/25" />
           <div className="absolute top-5 left-5 z-10">
             <Link
               to="/"
