@@ -228,6 +228,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [renameFileValue, setRenameFileValue] = useState('');
   const [renameFileExt, setRenameFileExt] = useState('');
 
+  // Transcription attachment state
+  const [transcriptionTarget, setTranscriptionTarget] = useState(null); // file to attach transcription to
+  const [transcriptionUploading, setTranscriptionUploading] = useState(false);
+
   useEffect(() => {
     dashboardStateHydratedRef.current = false;
   }, [user?.uid]);
@@ -714,6 +718,51 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [getIdToken]);
 
+  // Attach transcription to a file
+  const handleAttachTranscription = useCallback(async (fileId, file) => {
+    setTranscriptionUploading(true);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const formData = new FormData();
+      formData.append('transcription', file);
+      const res = await fetch(`/api/files/metadata/${fileId}/transcription`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to attach transcription.');
+      setMessage({ type: 'success', text: `Transcription "${data.transcriptionName}" attached successfully.` });
+      setTranscriptionTarget(null);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setTranscriptionUploading(false);
+      setTimeout(() => setMessage(null), 4000);
+    }
+  }, [getIdToken]);
+
+  // Remove transcription from a file
+  const handleRemoveTranscription = useCallback(async (fileId) => {
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/files/metadata/${fileId}/transcription`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to remove transcription.');
+      setMessage({ type: 'success', text: 'Transcription removed.' });
+      setTranscriptionTarget(null);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setTimeout(() => setMessage(null), 3000);
+    }
+  }, [getIdToken]);
+
   const handleDeleteFile = useCallback(async (fileId) => {
     setDeleteLoading(fileId);
     setMessage(null);
@@ -1172,6 +1221,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       }});
       items.push({ divider: true });
       items.push({ icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) });
+      items.push({
+        icon: file.transcriptionUrl ? 'fa-file-circle-check' : 'fa-paperclip',
+        label: file.transcriptionUrl ? 'Manage Transcription' : 'Attach Transcription',
+        onClick: () => setTranscriptionTarget(file),
+      });
       items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
       items.push({ divider: true });
       items.push({ icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) });
@@ -2006,6 +2060,17 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                                 {folderMap[file.folderId] || 'folder'}
                               </button>
                             )}
+                            {file.transcriptionUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setTranscriptionTarget(file)}
+                                className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                                title={`Transcription: ${file.transcriptionName}`}
+                              >
+                                <i className="fas fa-file-circle-check text-[8px]"></i>
+                                {file.transcriptionName}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -2366,6 +2431,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   onDeleteCancel={() => setDeleteConfirm(null)}
                   folderName={statusFilter && !isInsideFolder && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                   onOpenFolder={statusFilter && !isInsideFolder && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
+                  onTranscription={(f) => setTranscriptionTarget(f)}
                 />
               </div>
             );
@@ -2500,6 +2566,140 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           excludeIds={[]}
           title={`Move ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''} to folder`}
         />
+      )}
+
+      {/* Attach Transcription Modal */}
+      {transcriptionTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !transcriptionUploading && setTranscriptionTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-dark-text">
+                  {transcriptionTarget.transcriptionUrl ? 'Manage Transcription' : 'Attach Transcription'}
+                </h3>
+                <p className="text-xs text-gray-text mt-0.5 truncate max-w-[300px]" title={transcriptionTarget.originalName}>
+                  For: {transcriptionTarget.originalName}
+                </p>
+              </div>
+              <button
+                onClick={() => !transcriptionUploading && setTranscriptionTarget(null)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <i className="fas fa-times text-sm"></i>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Current transcription info */}
+              {transcriptionTarget.transcriptionUrl && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <i className="fas fa-file-circle-check text-emerald-600 text-sm"></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-emerald-800 truncate">{transcriptionTarget.transcriptionName}</p>
+                      <p className="text-[11px] text-emerald-600 mt-0.5">
+                        {transcriptionTarget.transcriptionSize ? formatSize(transcriptionTarget.transcriptionSize) : ''}
+                        {transcriptionTarget.transcriptionAttachedAt && (
+                          <> &middot; Attached {formatDate(typeof transcriptionTarget.transcriptionAttachedAt === 'string' ? transcriptionTarget.transcriptionAttachedAt : transcriptionTarget.transcriptionAttachedAt?.toDate?.()?.toISOString?.() || '')}</>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <a
+                        href={fileUrl(transcriptionTarget.transcriptionUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-8 h-8 rounded-lg hover:bg-emerald-100 flex items-center justify-center text-emerald-600 transition-colors"
+                        title="View transcription"
+                      >
+                        <i className="fas fa-eye text-xs"></i>
+                      </a>
+                      <button
+                        onClick={() => handleRemoveTranscription(transcriptionTarget.id)}
+                        className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors"
+                        title="Remove transcription"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload new transcription */}
+              <div>
+                <label className="block text-sm font-medium text-dark-text mb-2">
+                  {transcriptionTarget.transcriptionUrl ? 'Replace with new file' : 'Upload transcription file'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    id="transcription-file-input"
+                    accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.xlsx,.xls,.csv,.pptx,.ppt"
+                    className="hidden"
+                    disabled={transcriptionUploading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleAttachTranscription(transcriptionTarget.id, f);
+                    }}
+                  />
+                  <label
+                    htmlFor="transcription-file-input"
+                    className={`flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+                      transcriptionUploading
+                        ? 'border-gray-200 bg-gray-50 cursor-wait'
+                        : 'border-gray-200 hover:border-primary/40 hover:bg-primary/[0.02]'
+                    }`}
+                  >
+                    {transcriptionUploading ? (
+                      <>
+                        <i className="fas fa-spinner fa-spin text-primary text-sm"></i>
+                        <span className="text-sm text-gray-text">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-cloud-upload-alt text-primary text-sm"></i>
+                        <span className="text-sm text-gray-text">Choose a file (PDF, DOCX, TXT, etc.)</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              {/* Quick status change */}
+              {!transcriptionTarget.transcriptionUrl && transcriptionTarget.status !== 'in-progress' && (
+                <button
+                  onClick={() => { handleStatusChange(transcriptionTarget.id, 'in-progress'); setTranscriptionTarget((prev) => prev ? { ...prev, status: 'in-progress' } : null); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 transition-colors"
+                >
+                  <i className="fas fa-spinner text-xs"></i>
+                  Mark as In Progress
+                </button>
+              )}
+              {transcriptionTarget.transcriptionUrl && transcriptionTarget.status !== 'transcribed' && (
+                <button
+                  onClick={() => { handleStatusChange(transcriptionTarget.id, 'transcribed'); setTranscriptionTarget((prev) => prev ? { ...prev, status: 'transcribed' } : null); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 transition-colors"
+                >
+                  <i className="fas fa-check-circle text-xs"></i>
+                  Mark as Transcribed
+                </button>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+              <button
+                onClick={() => !transcriptionUploading && setTranscriptionTarget(null)}
+                disabled={transcriptionUploading}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -97,7 +97,7 @@ const statusOptions = [
   { value: 'transcribed', label: 'Transcribed' },
 ];
 
-export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel, folderName, onOpenFolder }) {
+export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel, folderName, onOpenFolder, onTranscription }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -252,6 +252,17 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
             >
               <i className="fas fa-folder text-[8px] text-violet-400"></i>
               {folderName}
+            </button>
+          )}
+          {file.transcriptionUrl && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onTranscription && onTranscription(file); }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors"
+              title={file.transcriptionName || 'Transcription attached'}
+            >
+              <i className="fas fa-file-circle-check text-[8px] text-emerald-400"></i>
+              Transcribed
             </button>
           )}
         </div>

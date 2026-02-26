@@ -134,3 +134,17 @@ export async function updateDescendantFilePaths(folderId, db) {
 }
 
 export { sanitizeName, sanitizeEmail };
+
+/**
+ * Builds the FTP storage path for a transcription attachment.
+ * Layout: admin/Transcribed/{ownerEmailDir}/{fileName}
+ *
+ * @param {string} ownerEmail - The email of the file's uploader
+ * @param {string} fileName - The transcription file name
+ * @returns {string} FTP path relative to FTP_BASE
+ */
+export function buildTranscriptionFtpPath(ownerEmail, fileName) {
+  const emailDir = sanitizeEmail(ownerEmail);
+  const safeName = (fileName || 'transcription').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `admin/Transcribed/${emailDir}/${safeName}`;
+}

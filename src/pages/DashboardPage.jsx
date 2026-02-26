@@ -103,9 +103,9 @@ export default function DashboardPage() {
   const { user, isAdmin, getIdToken } = useAuth();
   const [activeTab, setActiveTab] = useState('files');
   const [viewMode, setViewMode] = useState(() => {
-    if (typeof window === 'undefined') return 'grid';
+    if (typeof window === 'undefined') return 'list';
     const saved = window.localStorage.getItem('user-dashboard-view-mode');
-    return saved === 'list' ? 'list' : 'grid';
+    return saved === 'grid' ? 'grid' : 'list';
   });
   const [statusFilter, setStatusFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState([]);
@@ -843,7 +843,6 @@ export default function DashboardPage() {
           setRenameValue(folder.name);
         }},
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
-        { icon: 'fa-file-archive', label: 'Download as ZIP', onClick: () => handleFolderDownload(folder) },
         { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
         { divider: true },
         { icon: 'fa-trash-alt', label: 'Delete Folder', danger: true, onClick: () => setDeleteFolderConfirm(folder.id) },
@@ -858,19 +857,22 @@ export default function DashboardPage() {
 
     if (selCount <= 1) {
       items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
-      items.push({
-        icon: 'fa-download',
-        label: 'Download',
-        disabled: isUrl,
-        onClick: isUrl ? () => {} : () => {
-          const a = document.createElement('a');
-          a.href = getDownloadUrl(file.url);
-          a.download = file.originalName;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        },
-      });
+
+      // Users can only download when a transcription has been attached by admin
+      if (file.transcriptionUrl) {
+        items.push({
+          icon: 'fa-file-circle-check',
+          label: 'Download Transcription',
+          onClick: () => {
+            const a = document.createElement('a');
+            a.href = getDownloadUrl(file.transcriptionUrl);
+            a.download = file.transcriptionName || file.originalName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          },
+        });
+      }
       items.push({ divider: true });
       items.push({ icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) });
       items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
@@ -880,8 +882,6 @@ export default function DashboardPage() {
     }
 
     if (selCount > 1) {
-      items.push({ icon: 'fa-download', label: `Download ${selCount} Selected as ZIP`, onClick: () => handleBulkDownload() });
-      items.push({ divider: true });
       items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
       items.push({ icon: 'fa-trash-alt', label: `Delete ${selCount} Selected`, danger: true, onClick: () => setBulkDeleteConfirm(true) });
@@ -1181,14 +1181,6 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      onClick={handleBulkDownload}
-                      disabled={bulkLoading || selectedFileCount === 0}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50"
-                    >
-                      {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-download text-[10px]"></i>}
-                      Download ZIP
-                    </button>
                     <button
                       onClick={() => setBulkMoveActive(true)}
                       disabled={bulkLoading}
@@ -1494,6 +1486,12 @@ export default function DashboardPage() {
                                         {folderMap[file.folderId] || 'folder'}
                                       </button>
                                     )}
+                                    {file.transcriptionUrl && (
+                                      <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100" title={file.transcriptionName || 'Transcription attached'}>
+                                        <i className="fas fa-file-circle-check text-[8px]"></i>
+                                        Transcription ready
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -1525,24 +1523,24 @@ export default function DashboardPage() {
                                     <i className="fas fa-eye text-[10px]"></i>
                                     View
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (isUrl) return;
-                                      const a = document.createElement('a');
-                                      a.href = getDownloadUrl(file.url);
-                                      a.download = file.originalName;
-                                      document.body.appendChild(a);
-                                      a.click();
-                                      a.remove();
-                                    }}
-                                    disabled={isUrl}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                                    title={isUrl ? 'URL uploads cannot be downloaded from here' : 'Download file'}
-                                  >
-                                    <i className="fas fa-download text-[10px]"></i>
-                                    Download
-                                  </button>
+                                  {file.transcriptionUrl && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const a = document.createElement('a');
+                                        a.href = getDownloadUrl(file.transcriptionUrl);
+                                        a.download = file.transcriptionName || file.originalName;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        a.remove();
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                      title={`Download transcription: ${file.transcriptionName || 'transcription'}`}
+                                    >
+                                      <i className="fas fa-file-circle-check text-[10px]"></i>
+                                      Transcription
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => setDeleteConfirm(file.id)}
@@ -1661,6 +1659,14 @@ export default function DashboardPage() {
                           onDeleteCancel={() => setDeleteConfirm(null)}
                           folderName={statusFilter && currentFolderId === null && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                           onOpenFolder={statusFilter && currentFolderId === null && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
+                          onTranscription={file.transcriptionUrl ? (f) => {
+                            const a = document.createElement('a');
+                            a.href = getDownloadUrl(f.transcriptionUrl);
+                            a.download = f.transcriptionName || f.originalName;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                          } : undefined}
                         />
                       </div>
                     );

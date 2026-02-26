@@ -1,11 +1,13 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { adminDb } from '../firebaseAdmin.js';
 import { verifyAuth } from '../middleware/authMiddleware.js';
-import { deleteFromFtp, moveOnFtp } from '../services/ftp.js';
-import { computeFileFtpPath } from '../services/ftpPathResolver.js';
+import { deleteFromFtp, moveOnFtp, uploadBufferToFtp } from '../services/ftp.js';
+import { computeFileFtpPath, buildTranscriptionFtpPath } from '../services/ftpPathResolver.js';
 import path from 'path';
 
 const router = Router();
+const transcriptionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // POST /api/files/metadata - Save file metadata
 router.post('/metadata', verifyAuth, async (req, res) => {
@@ -285,10 +287,125 @@ router.delete('/metadata/:fileId', verifyAuth, async (req, res) => {
       await deleteFromFtp(remotePath);
     }
 
+    // Delete attached transcription from FTP
+    if (fileData.transcriptionStoragePath) {
+      try {
+        await deleteFromFtp(fileData.transcriptionStoragePath);
+      } catch (e) {
+        console.warn('[delete] Failed to clean up transcription:', e.message);
+      }
+    }
+
     // Delete the Firestore document
     await docRef.delete();
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/files/metadata/:fileId/transcription - Attach transcription file (admin only)
+router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.single('transcription'), async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: 'No transcription file provided.' });
+  }
+
+  try {
+    const docRef = adminDb.collection('files').doc(req.params.fileId);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'File not found.' });
+    }
+
+    const fileData = doc.data();
+    const ownerEmail = fileData.uploadedByEmail || 'unknown';
+
+    // Build a unique name: Transcribed_{timestamp}_{originalName}
+    const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const transcriptionFileName = `Transcribed_${Date.now()}_${safeName}`;
+    const ftpPath = buildTranscriptionFtpPath(ownerEmail, transcriptionFileName);
+
+    // If a previous transcription exists, delete it from FTP
+    if (fileData.transcriptionStoragePath) {
+      try {
+        await deleteFromFtp(fileData.transcriptionStoragePath);
+      } catch (e) {
+        console.warn('[transcription] Failed to delete old transcription from FTP:', e.message);
+      }
+    }
+
+    // Upload new transcription to FTP
+    await uploadBufferToFtp(req.file.buffer, ftpPath);
+
+    // Build the URL for serving
+    const encodedPath = ftpPath.split('/').map(encodeURIComponent).join('/');
+    const transcriptionUrl = `/api/files/${encodedPath}`;
+
+    // Update Firestore
+    await docRef.update({
+      transcriptionUrl,
+      transcriptionName: req.file.originalname,
+      transcriptionStoragePath: ftpPath,
+      transcriptionSize: req.file.size,
+      transcriptionType: req.file.mimetype || 'application/octet-stream',
+      transcriptionAttachedAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    res.json({
+      success: true,
+      transcriptionUrl,
+      transcriptionName: req.file.originalname,
+      transcriptionSize: req.file.size,
+    });
+  } catch (err) {
+    console.error('[transcription] upload error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/files/metadata/:fileId/transcription - Remove transcription attachment (admin only)
+router.delete('/metadata/:fileId/transcription', verifyAuth, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    const docRef = adminDb.collection('files').doc(req.params.fileId);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'File not found.' });
+    }
+
+    const fileData = doc.data();
+
+    // Delete from FTP
+    if (fileData.transcriptionStoragePath) {
+      try {
+        await deleteFromFtp(fileData.transcriptionStoragePath);
+      } catch (e) {
+        console.warn('[transcription] Failed to delete from FTP:', e.message);
+      }
+    }
+
+    // Clear transcription fields
+    const { FieldValue } = await import('firebase-admin/firestore');
+    await docRef.update({
+      transcriptionUrl: FieldValue.delete(),
+      transcriptionName: FieldValue.delete(),
+      transcriptionStoragePath: FieldValue.delete(),
+      transcriptionSize: FieldValue.delete(),
+      transcriptionType: FieldValue.delete(),
+      transcriptionAttachedAt: FieldValue.delete(),
+      updatedAt: new Date(),
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[transcription] delete error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
