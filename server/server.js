@@ -120,17 +120,13 @@ function getFileCategory(mimeType) {
   return 'Other';
 }
 
-// Build structured storage path: {serviceCategory}/{uploaderEmail}/{year}/{month}/{fileCategory}
-// Always uses forward slashes (URL-safe) regardless of OS.
-// Includes uploader email so FTP users can identify who uploaded each file.
-function buildStoragePath(serviceCategory, mimeType, uploaderEmail) {
-  const now = new Date();
-  const year = String(now.getFullYear());
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const category = getFileCategory(mimeType);
-  const catDir = (serviceCategory || 'Uncategorized').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const emailDir = (uploaderEmail || 'unknown').replace(/[^a-zA-Z0-9._@-]/g, '_');
-  return [catDir, emailDir, year, month, category].join('/');
+// Build a flat filename prefix: {Service}_{email}_{timestamp}
+// No nested folders — service & uploader are baked into the filename so
+// anyone browsing FTP can immediately see who uploaded what and for which service.
+function buildFilePrefix(serviceCategory, uploaderEmail) {
+  const svc = (serviceCategory || 'Uncategorized').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const email = (uploaderEmail || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_');
+  return `${svc}_${email}`;
 }
 
 // Encode each path segment individually so slashes remain literal slashes in URLs.
@@ -239,11 +235,11 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: `File type "${mimeType}" is not allowed.` });
     }
 
-    // Build structured storage path
-    const storageSub = buildStoragePath(serviceCategory, mimeType, req.user.email);
+    // Build flat filename: {Service}_{email}_{timestamp}-{filename}
+    const prefix = buildFilePrefix(serviceCategory, req.user.email);
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const finalName = `${Date.now()}-${safeName}`;
-    const defaultStoragePath = `${storageSub}/${finalName}`;
+    const finalName = `${prefix}_${Date.now()}-${safeName}`;
+    const defaultStoragePath = finalName;
 
     // If uploading into a folder, place the file inside the folder FTP path
     let storagePath = defaultStoragePath;
@@ -457,8 +453,10 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
       originalName = fetched.originalName;
     }
 
-    const storageSub = buildStoragePath(serviceCategory, contentType, req.user.email);
-    const defaultStoragePath = `${storageSub}/${finalName}`;
+    const prefix = buildFilePrefix(serviceCategory, req.user.email);
+    // Prepend service+email prefix to the finalName for flat storage
+    finalName = `${prefix}_${finalName}`;
+    const defaultStoragePath = finalName;
     const stats = fs.statSync(finalPath);
     const displayName = customName?.trim() || originalName;
 
