@@ -398,6 +398,17 @@ export default function UploadPage() {
     document.title = 'Upload Files - DigiScribe Transcription Corp.';
   }, []);
 
+  // Warn users before closing tab while uploading
+  useEffect(() => {
+    if (!uploading) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [uploading]);
+
   /* ---- Step labels for the indicator ---- */
   const stepLabels = ['Method', uploadMethod === 'url' ? 'URLs' : 'Files', 'Details', 'Submit', 'Result'];
 

@@ -403,6 +403,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Whether admin is inside a subfolder
   const isInsideFolder = currentFolderId !== null;
 
+  // Set of valid folder IDs (for orphan detection)
+  const validFolderIds = useMemo(() => new Set(allFolders.map((f) => f.id)), [allFolders]);
+
   // Files in current folder (or all files when searching/filtering at root)
   const currentFolderFiles = useMemo(() => {
     if (isInsideFolder) {
@@ -411,8 +414,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
     // Root: expand to all files when searching/filtering
     if (searchQuery.trim() || statusFilter || serviceFilter.length > 0) return allFiles;
-    return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
-  }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder]);
+    // At root: show files with no folder AND orphaned files (folderId points to deleted/missing folder)
+    return allFiles.filter((f) => {
+      const fid = f.folderId || null;
+      if (fid === null) return true;
+      return !validFolderIds.has(fid);
+    });
+  }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder, validFolderIds]);
 
   // Subfolders – hidden while a status/service/type tab is active (those views are file-only)
   const currentSubfolders = useMemo(() => {

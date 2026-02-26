@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { adminDb } from '../firebaseAdmin.js';
-import { verifyAuth, verifyAdmin } from '../middleware/authMiddleware.js';
+import { verifyAuth } from '../middleware/authMiddleware.js';
 import { deleteFromFtp, moveOnFtp } from '../services/ftp.js';
 import { computeFileFtpPath } from '../services/ftpPathResolver.js';
 import path from 'path';
@@ -197,8 +197,8 @@ router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
   }
 });
 
-// PUT /api/files/metadata/:fileId/rename - Rename file display name (admin only)
-router.put('/metadata/:fileId/rename', verifyAdmin, async (req, res) => {
+// PUT /api/files/metadata/:fileId/rename - Rename file display name
+router.put('/metadata/:fileId/rename', verifyAuth, async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, error: 'Name is required.' });
@@ -211,6 +211,12 @@ router.put('/metadata/:fileId/rename', verifyAdmin, async (req, res) => {
     }
 
     const fileData = doc.data();
+
+    // Non-admins can only rename their own files
+    if (req.user.role !== 'admin' && fileData.uploadedBy !== req.user.uid) {
+      return res.status(403).json({ success: false, error: 'You can only rename your own files.' });
+    }
+
     const oldStoragePath = fileData.storagePath || fileData.savedAs;
     const newDisplayName = name.trim();
 
@@ -259,8 +265,8 @@ router.put('/metadata/:fileId/rename', verifyAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/files/metadata/:fileId - Delete file metadata and uploaded file (admin only)
-router.delete('/metadata/:fileId', verifyAdmin, async (req, res) => {
+// DELETE /api/files/metadata/:fileId - Delete file metadata and uploaded file
+router.delete('/metadata/:fileId', verifyAuth, async (req, res) => {
   try {
     const docRef = adminDb.collection('files').doc(req.params.fileId);
     const doc = await docRef.get();
@@ -270,6 +276,11 @@ router.delete('/metadata/:fileId', verifyAdmin, async (req, res) => {
     }
 
     const fileData = doc.data();
+
+    // Non-admins can only delete their own files
+    if (req.user.role !== 'admin' && fileData.uploadedBy !== req.user.uid) {
+      return res.status(403).json({ success: false, error: 'You can only delete your own files.' });
+    }
 
     // Delete the file from FTP
     const remotePath = fileData.storagePath || fileData.savedAs;

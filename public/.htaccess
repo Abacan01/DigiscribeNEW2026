@@ -1,9 +1,15 @@
+# SECURITY: Disable directory listing — prevents browsing folder contents
+Options -Indexes
+
 # Route /api/* → PHP reverse-proxy → Node.js on port 25264
 # SPA fallback → index.html for React Router
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+
+  # Block direct access to uploads folder (if it still exists in webroot)
+  RewriteRule ^uploads(/|$) - [F,L]
 
   # Skip rewriting for real files & directories
   # Forward /api/* to the PHP proxy (which curls to Node.js internally)

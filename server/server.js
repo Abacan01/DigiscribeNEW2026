@@ -17,6 +17,7 @@ import foldersRouter from './routes/folders.js';
 import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
 import { uploadToFtp, uploadBufferToFtp, appendBufferToFtp, moveOnFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 import { resolveFolderFtpPath, computeFileFtpPath, sanitizeName } from './services/ftpPathResolver.js';
+import { startFtpSync, reconcileOnce } from './services/ftpSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,35 @@ console.log('[startup] adminDb initialized:', !!adminDb);
 // Vercel serverless functions can only write to /tmp
 const chunksDir = IS_VERCEL ? '/tmp/chunks' : path.join(__dirname, 'chunks');
 if (!fs.existsSync(chunksDir)) fs.mkdirSync(chunksDir, { recursive: true });
+
+// Periodic cleanup of orphaned chunk files (abandoned uploads where user closed the tab)
+const CHUNK_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+function cleanupOrphanedChunks() {
+  try {
+    const now = Date.now();
+    const entries = fs.readdirSync(chunksDir);
+    let cleaned = 0;
+    for (const name of entries) {
+      if (name === 'assemble-tmp' || name === '_deliveries') continue;
+      const fullPath = path.join(chunksDir, name);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile() && (now - stat.mtimeMs) > CHUNK_MAX_AGE_MS) {
+          fs.unlinkSync(fullPath);
+          cleaned++;
+        }
+      } catch { /* skip individual errors */ }
+    }
+    if (cleaned > 0) console.log(`[cleanup] Removed ${cleaned} orphaned chunk file(s)`);
+  } catch { /* ignore */ }
+}
+
+// Run cleanup every 10 minutes
+if (!IS_VERCEL) {
+  setInterval(cleanupOrphanedChunks, 10 * 60 * 1000);
+  // Initial cleanup after 30s
+  setTimeout(cleanupOrphanedChunks, 30_000);
+}
 
 // CORS — allow dev + production origins
 // FRONTEND_URL supports comma-separated values, e.g.:
@@ -90,15 +120,17 @@ function getFileCategory(mimeType) {
   return 'Other';
 }
 
-// Build structured storage path: {serviceCategory}/{year}/{month}/{fileCategory}
+// Build structured storage path: {serviceCategory}/{uploaderEmail}/{year}/{month}/{fileCategory}
 // Always uses forward slashes (URL-safe) regardless of OS.
-function buildStoragePath(serviceCategory, mimeType) {
+// Includes uploader email so FTP users can identify who uploaded each file.
+function buildStoragePath(serviceCategory, mimeType, uploaderEmail) {
   const now = new Date();
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const category = getFileCategory(mimeType);
   const catDir = (serviceCategory || 'Uncategorized').replace(/[^a-zA-Z0-9_-]/g, '_');
-  return [catDir, year, month, category].join('/');
+  const emailDir = (uploaderEmail || 'unknown').replace(/[^a-zA-Z0-9._@-]/g, '_');
+  return [catDir, emailDir, year, month, category].join('/');
 }
 
 // Encode each path segment individually so slashes remain literal slashes in URLs.
@@ -208,7 +240,7 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     }
 
     // Build structured storage path
-    const storageSub = buildStoragePath(serviceCategory, mimeType);
+    const storageSub = buildStoragePath(serviceCategory, mimeType, req.user.email);
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${Date.now()}-${safeName}`;
     const defaultStoragePath = `${storageSub}/${finalName}`;
@@ -425,7 +457,7 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
       originalName = fetched.originalName;
     }
 
-    const storageSub = buildStoragePath(serviceCategory, contentType);
+    const storageSub = buildStoragePath(serviceCategory, contentType, req.user.email);
     const defaultStoragePath = `${storageSub}/${finalName}`;
     const stats = fs.statSync(finalPath);
     const displayName = customName?.trim() || originalName;
@@ -571,8 +603,8 @@ app.post('/api/files/bulk-download', verifyAuth, async (req, res) => {
   }
 });
 
-// POST /api/files/bulk-delete - Delete multiple files (admin only)
-app.post('/api/files/bulk-delete', verifyAdmin, async (req, res) => {
+// POST /api/files/bulk-delete - Delete multiple files
+app.post('/api/files/bulk-delete', verifyAuth, async (req, res) => {
   const { fileIds } = req.body;
   if (!Array.isArray(fileIds) || fileIds.length === 0) {
     return res.status(400).json({ success: false, error: 'fileIds array is required.' });
@@ -586,6 +618,10 @@ app.post('/api/files/bulk-delete', verifyAdmin, async (req, res) => {
       if (!doc.exists) continue;
 
       const fileData = doc.data();
+
+      // Non-admins can only delete their own files
+      if (req.user.role !== 'admin' && fileData.uploadedBy !== req.user.uid) continue;
+
       const remotePath = fileData.storagePath || fileData.savedAs;
       if (remotePath) {
         await deleteFromFtp(remotePath);
@@ -650,6 +686,16 @@ app.post('/api/files/bulk-move', verifyAuth, async (req, res) => {
       moved++;
     }
     res.json({ success: true, moved });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/ftp-sync - Manually trigger FTP→DB reconciliation (admin only)
+app.post('/api/ftp-sync', verifyAdmin, async (req, res) => {
+  try {
+    const result = await reconcileOnce(adminDb);
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -915,6 +961,11 @@ if (!IS_VERCEL) {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`FTP host: ${process.env.FTP_HOST || '(not configured)'}`);
     console.log(`FTP base path: ${process.env.FTP_BASE_PATH || 'uploads'}`);
+
+    // Start background FTP→DB reconciliation (every 60s)
+    if (adminDb) {
+      startFtpSync(adminDb);
+    }
   });
 }
 

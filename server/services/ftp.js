@@ -313,3 +313,21 @@ export async function renameDirOnFtp(fromDirPath, toDirPath) {
     client.close();
   }
 }
+
+/**
+ * Check if a file exists on the FTP server.
+ *
+ * @param {string} remotePath - File path relative to FTP_BASE
+ * @returns {Promise<boolean>} True if file exists
+ */
+export async function existsOnFtp(remotePath) {
+  const client = await createClient();
+  try {
+    await client.size(`${FTP_BASE}/${remotePath}`);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    client.close();
+  }
+}
