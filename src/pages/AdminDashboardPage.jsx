@@ -332,6 +332,17 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return result;
   }, [dateFrom, dateTo, typeFilter, serviceFilter, userFilter, searchQuery]);
 
+  // Effective data scoped by selected user
+  const effectiveFiles = useMemo(() => {
+    if (!selectedUserEmail) return allFiles;
+    return allFiles.filter((f) => f.uploadedByEmail === selectedUserEmail);
+  }, [allFiles, selectedUserEmail]);
+
+  const effectiveFolders = useMemo(() => {
+    if (!selectedUserEmail) return allFolders;
+    return allFolders.filter((f) => f.createdByEmail === selectedUserEmail);
+  }, [allFolders, selectedUserEmail]);
+
   // Compute counts for top status cards
   const counts = useMemo(() => {
     const insideFolder = currentFolderId !== null;
@@ -432,17 +443,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
     return Object.values(userMap).sort((a, b) => a.email.localeCompare(b.email));
   }, [allFiles, allFolders]);
-
-  // Effective data scoped by selected user
-  const effectiveFiles = useMemo(() => {
-    if (!selectedUserEmail) return allFiles;
-    return allFiles.filter((f) => f.uploadedByEmail === selectedUserEmail);
-  }, [allFiles, selectedUserEmail]);
-
-  const effectiveFolders = useMemo(() => {
-    if (!selectedUserEmail) return allFolders;
-    return allFolders.filter((f) => f.createdByEmail === selectedUserEmail);
-  }, [allFolders, selectedUserEmail]);
 
   // Whether admin is inside a subfolder or user scope
   const isInsideFolder = currentFolderId !== null;
