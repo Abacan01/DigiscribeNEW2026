@@ -118,8 +118,28 @@ function FilePreview({ file, onRemove, disabled, customName, onNameChange }) {
   const [preview, setPreview] = useState(null);
   const [editing, setEditing] = useState(false);
   const category = getFileCategory(file.type);
-  const displayName = customName || file.name;
-  const { base, ext } = splitFileName(displayName);
+
+  // Extension is always locked to the original file — never editable
+  const { base: originalBase, ext: fixedExt } = splitFileName(file.name);
+
+  // Derive editable base from customName, stripping the fixed extension if present
+  const getDisplayBase = (name) => {
+    if (!name) return originalBase;
+    if (fixedExt && name.endsWith(fixedExt)) return name.slice(0, -fixedExt.length);
+    const { base } = splitFileName(name);
+    return base || originalBase;
+  };
+
+  // Local state so the input can hold an empty string while the user is typing
+  const [localBase, setLocalBase] = useState(() => getDisplayBase(customName));
+
+  // Keep localBase in sync with external customName changes (but not while editing)
+  useEffect(() => {
+    if (!editing) {
+      setLocalBase(getDisplayBase(customName));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customName, editing]);
 
   useEffect(() => {
     if (category === 'image') {
@@ -131,26 +151,55 @@ function FilePreview({ file, onRemove, disabled, customName, onNameChange }) {
 
   const handleNameChange = (e) => {
     const newBase = e.target.value;
-    if (onNameChange) onNameChange(newBase + ext);
+    setLocalBase(newBase);
+    // Always append the fixed extension so the stored name is complete
+    if (onNameChange) onNameChange(newBase + fixedExt);
+  };
+
+  const handleBlur = () => {
+    setEditing(false);
+    // If the user left the field empty, revert to the original filename base
+    if (!localBase.trim()) {
+      setLocalBase(originalBase);
+      if (onNameChange) onNameChange(file.name);
+    }
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.target.blur();
-      setEditing(false);
     }
   };
 
   return (
     <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
       {/* Preview / Icon */}
-      <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+      <div className={`w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 ${
+        category === 'image' && preview ? '' :
+        category === 'audio' ? 'bg-sky-50' :
+        category === 'video' ? 'bg-rose-50' :
+        file.type === 'application/pdf' ? 'bg-red-50' :
+        (file.type.includes('word') || file.type === 'application/msword') ? 'bg-blue-50' :
+        (file.type.includes('excel') || file.type.includes('spreadsheet')) ? 'bg-green-50' :
+        (file.type === 'text/plain' || file.type === 'text/csv') ? 'bg-gray-50' :
+        'bg-gray-100'
+      }`}>
         {category === 'image' && preview ? (
-          <img src={preview} alt={displayName} className="w-full h-full object-cover" />
+          <img src={preview} alt={localBase + fixedExt} className="w-full h-full object-cover" />
+        ) : category === 'image' ? (
+          <i className="fas fa-image text-violet-500 text-xl"></i>
         ) : category === 'audio' ? (
-          <i className="fas fa-music text-primary text-xl"></i>
+          <i className="fas fa-music text-sky-500 text-xl"></i>
         ) : category === 'video' ? (
-          <i className="fas fa-video text-primary text-xl"></i>
+          <i className="fas fa-video text-rose-500 text-xl"></i>
+        ) : file.type === 'application/pdf' ? (
+          <i className="fas fa-file-pdf text-red-500 text-xl"></i>
+        ) : (file.type.includes('word') || file.type === 'application/msword') ? (
+          <i className="fas fa-file-word text-blue-500 text-xl"></i>
+        ) : (file.type.includes('excel') || file.type.includes('spreadsheet')) ? (
+          <i className="fas fa-file-excel text-green-500 text-xl"></i>
+        ) : (file.type === 'text/plain' || file.type === 'text/csv') ? (
+          <i className="fas fa-file-alt text-gray-500 text-xl"></i>
         ) : (
           <i className="fas fa-file text-gray-400 text-xl"></i>
         )}
@@ -163,10 +212,10 @@ function FilePreview({ file, onRemove, disabled, customName, onNameChange }) {
             <>
               <input
                 type="text"
-                value={base}
+                value={localBase}
                 onChange={handleNameChange}
                 onFocus={() => setEditing(true)}
-                onBlur={() => setEditing(false)}
+                onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
                 className={`text-sm font-medium text-dark-text bg-transparent min-w-0 flex-1 truncate px-1.5 py-0.5 rounded-md outline-none transition-all ${
                   editing
@@ -175,10 +224,10 @@ function FilePreview({ file, onRemove, disabled, customName, onNameChange }) {
                 }`}
                 title="Click to rename"
               />
-              <span className="text-sm text-gray-400 flex-shrink-0">{ext}</span>
+              <span className="text-sm text-gray-400 flex-shrink-0">{fixedExt}</span>
             </>
           ) : (
-            <p className="text-sm font-medium text-dark-text truncate">{displayName}</p>
+            <p className="text-sm font-medium text-dark-text truncate">{localBase + fixedExt}</p>
           )}
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -1176,7 +1225,7 @@ export default function UploadPage() {
           {/* File / URL count */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-              <i className={`fas ${uploadMethod === 'file' ? 'fa-files' : 'fa-list'} text-primary`}></i>
+              <i className={`fas ${uploadMethod === 'file' ? 'fa-copy' : 'fa-list'} text-primary`}></i>
             </div>
             <div>
               <p className="text-xs text-gray-text">

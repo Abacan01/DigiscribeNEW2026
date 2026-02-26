@@ -419,8 +419,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     if (statusFilter || serviceFilter.length > 0 || typeFilter) return [];
 
     let folders = allFolders
-      .filter((f) => (f.parentId || null) === currentFolderId)
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      .filter((f) => (f.parentId || null) === currentFolderId);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       folders = folders.filter((f) => f.name && f.name.toLowerCase().includes(q));
@@ -498,14 +497,21 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return result;
   }, [currentFolderFiles, statusFilter, sortBy, isInsideFolder, applyNonStatusFilters]);
 
-  // Combined items for pagination: folders first (unless sorting by size)
+  // Combined items for pagination: sort folders by the same sortBy, then combine with files
   const allPageItems = useMemo(() => {
-    if (sortBy === 'size' && currentSubfolders.length > 0) {
-      const foldersWithSize = currentSubfolders.map((f) => ({ ...f, _isFolder: true, _size: folderSizes[f.id] || 0 }));
-      const filesWithSize = filteredFiles.map((f) => ({ ...f, _isFolder: false, _size: f.size || 0 }));
-      return [...foldersWithSize, ...filesWithSize].sort((a, b) => b._size - a._size);
+    const sortedFolders = [...currentSubfolders];
+    switch (sortBy) {
+      case 'oldest': sortedFolders.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)); break;
+      case 'name-asc': sortedFolders.sort((a, b) => (a.name || '').localeCompare(b.name || '')); break;
+      case 'name-desc': sortedFolders.sort((a, b) => (b.name || '').localeCompare(a.name || '')); break;
+      case 'size': {
+        const foldersWithSize = sortedFolders.map((f) => ({ ...f, _isFolder: true, _size: folderSizes[f.id] || 0 }));
+        const filesWithSize = filteredFiles.map((f) => ({ ...f, _isFolder: false, _size: f.size || 0 }));
+        return [...foldersWithSize, ...filesWithSize].sort((a, b) => b._size - a._size);
+      }
+      default: sortedFolders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)); break;
     }
-    return [...currentSubfolders, ...filteredFiles];
+    return [...sortedFolders, ...filteredFiles];
   }, [currentSubfolders, filteredFiles, sortBy, folderSizes]);
   const totalFilePages = Math.max(1, Math.ceil(allPageItems.length / ADMIN_DASHBOARD_PAGE_SIZE));
   const paginatedItems = useMemo(() => {
