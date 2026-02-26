@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
@@ -12,6 +12,7 @@ import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
+import DocumentViewerModal from '../components/dashboard/DocumentViewerModal';
 import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
 import { useFolders } from '../hooks/useFolders';
@@ -113,6 +114,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusError, setStatusError] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
+  const [docViewerFile, setDocViewerFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [propertiesFolder, setPropertiesFolder] = useState(null);
   const [message, setMessage] = useState(null);
@@ -861,7 +863,12 @@ export default function DashboardPage() {
       // Users can only download when a transcription has been attached by admin
       if (file.transcriptionUrl) {
         items.push({
-          icon: 'fa-file-circle-check',
+          icon: 'fa-eye',
+          label: 'View Transcription',
+          onClick: () => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize }),
+        });
+        items.push({
+          icon: 'fa-download',
           label: 'Download Transcription',
           onClick: () => {
             const a = document.createElement('a');
@@ -1439,8 +1446,8 @@ export default function DashboardPage() {
                           const isSelected = selectedIds.has(file.id);
                           const isUrl = file.sourceType === 'url';
                           return (
+                            <React.Fragment key={file.id}>
                             <tr
-                              key={file.id}
                               className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
                               draggable
                               onDragStart={(e) => handleDragStart(e, file, 'file')}
@@ -1486,12 +1493,6 @@ export default function DashboardPage() {
                                         {folderMap[file.folderId] || 'folder'}
                                       </button>
                                     )}
-                                    {file.transcriptionUrl && (
-                                      <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100" title={file.transcriptionName || 'Transcription attached'}>
-                                        <i className="fas fa-file-circle-check text-[8px]"></i>
-                                        Transcription ready
-                                      </span>
-                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -1523,24 +1524,6 @@ export default function DashboardPage() {
                                     <i className="fas fa-eye text-[10px]"></i>
                                     View
                                   </button>
-                                  {file.transcriptionUrl && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const a = document.createElement('a');
-                                        a.href = getDownloadUrl(file.transcriptionUrl);
-                                        a.download = file.transcriptionName || file.originalName;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        a.remove();
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                                      title={`Download transcription: ${file.transcriptionName || 'transcription'}`}
-                                    >
-                                      <i className="fas fa-file-circle-check text-[10px]"></i>
-                                      Transcription
-                                    </button>
-                                  )}
                                   <button
                                     type="button"
                                     onClick={() => setDeleteConfirm(file.id)}
@@ -1558,6 +1541,59 @@ export default function DashboardPage() {
                                 </div>
                               </td>
                             </tr>
+                            {/* Transcription sub-row */}
+                            {file.transcriptionUrl && (
+                              <tr className="bg-emerald-50/30">
+                                <td className="px-3 py-2"></td>
+                                <td className="px-4 py-2" colSpan={3}>
+                                  <div className="flex items-center gap-2.5 pl-11">
+                                    <span className="text-gray-300 text-xs select-none">└─</span>
+                                    <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                                      <i className="fas fa-file-circle-check text-emerald-500 text-[10px]"></i>
+                                    </div>
+                                    <span className="text-[12px] font-medium text-dark-text truncate max-w-[220px]" title={file.transcriptionName}>
+                                      {file.transcriptionName || 'Transcription'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <span className="text-[11px] text-gray-text">{file.transcriptionAttachedAt ? formatRelativeDate(typeof file.transcriptionAttachedAt === 'object' && file.transcriptionAttachedAt.toDate ? file.transcriptionAttachedAt.toDate().toISOString() : file.transcriptionAttachedAt) : '--'}</span>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <span className="text-[11px] text-gray-text">{file.transcriptionSize > 0 ? formatSize(file.transcriptionSize) : '--'}</span>
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                                      title="View transcription"
+                                    >
+                                      <i className="fas fa-eye text-[10px]"></i>
+                                      View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const a = document.createElement('a');
+                                        a.href = getDownloadUrl(file.transcriptionUrl);
+                                        a.download = file.transcriptionName || file.originalName;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        a.remove();
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                      title="Download transcription"
+                                    >
+                                      <i className="fas fa-download text-[10px]"></i>
+                                      Download
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -1659,7 +1695,8 @@ export default function DashboardPage() {
                           onDeleteCancel={() => setDeleteConfirm(null)}
                           folderName={statusFilter && currentFolderId === null && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                           onOpenFolder={statusFilter && currentFolderId === null && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
-                          onTranscription={file.transcriptionUrl ? (f) => {
+                          onViewTranscription={file.transcriptionUrl ? (f) => setDocViewerFile({ url: f.transcriptionUrl, name: f.transcriptionName || 'Transcription', type: f.transcriptionType, size: f.transcriptionSize }) : undefined}
+                          onDownloadTranscription={file.transcriptionUrl ? (f) => {
                             const a = document.createElement('a');
                             a.href = getDownloadUrl(f.transcriptionUrl);
                             a.download = f.transcriptionName || f.originalName;
@@ -1814,6 +1851,14 @@ export default function DashboardPage() {
           onClose={() => setPreviewFile(null)}
           canEditDescription={!isAdmin}
           onSaveDescription={handleUpdateDescription}
+        />
+      )}
+
+      {/* Document Viewer Modal (transcription view) */}
+      {docViewerFile && (
+        <DocumentViewerModal
+          file={docViewerFile}
+          onClose={() => setDocViewerFile(null)}
         />
       )}
 

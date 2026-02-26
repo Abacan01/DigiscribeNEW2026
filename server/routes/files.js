@@ -352,6 +352,7 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
       transcriptionSize: req.file.size,
       transcriptionType: req.file.mimetype || 'application/octet-stream',
       transcriptionAttachedAt: new Date(),
+      status: 'transcribed',
       updatedAt: new Date(),
     });
 

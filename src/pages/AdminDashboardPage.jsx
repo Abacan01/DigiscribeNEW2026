@@ -12,6 +12,7 @@ import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
+import DocumentViewerModal from '../components/dashboard/DocumentViewerModal';
 import FolderFilterToolbar from '../components/dashboard/FolderFilterToolbar';
 import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
 import CreateUserForm from '../components/admin/CreateUserForm';
@@ -230,6 +231,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   // Transcription attachment state
   const [transcriptionTarget, setTranscriptionTarget] = useState(null); // file to attach transcription to
+  const [docViewerFile, setDocViewerFile] = useState(null);
   const [transcriptionUploading, setTranscriptionUploading] = useState(false);
 
   useEffect(() => {
@@ -2525,6 +2527,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         />
       )}
 
+      {/* Document Viewer Modal (transcription view) */}
+      {docViewerFile && (
+        <DocumentViewerModal
+          file={docViewerFile}
+          onClose={() => setDocViewerFile(null)}
+        />
+      )}
+
       {/* Properties Modals */}
       {propertiesFile && <FilePropertiesModal file={propertiesFile} onClose={() => setPropertiesFile(null)} />}
       {propertiesFolder && (
@@ -2607,15 +2617,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <a
-                        href={fileUrl(transcriptionTarget.transcriptionUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => setDocViewerFile({ url: transcriptionTarget.transcriptionUrl, name: transcriptionTarget.transcriptionName || 'Transcription', type: transcriptionTarget.transcriptionType, size: transcriptionTarget.transcriptionSize })}
                         className="w-8 h-8 rounded-lg hover:bg-emerald-100 flex items-center justify-center text-emerald-600 transition-colors"
                         title="View transcription"
                       >
                         <i className="fas fa-eye text-xs"></i>
-                      </a>
+                      </button>
                       <button
                         onClick={() => handleRemoveTranscription(transcriptionTarget.id)}
                         className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors"

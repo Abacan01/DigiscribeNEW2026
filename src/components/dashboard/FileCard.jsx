@@ -97,7 +97,7 @@ const statusOptions = [
   { value: 'transcribed', label: 'Transcribed' },
 ];
 
-export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel, folderName, onOpenFolder, onTranscription }) {
+export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel, folderName, onOpenFolder, onTranscription, onViewTranscription, onDownloadTranscription }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -254,7 +254,7 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
               {folderName}
             </button>
           )}
-          {file.transcriptionUrl && (
+          {file.transcriptionUrl && isAdmin && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onTranscription && onTranscription(file); }}
@@ -272,6 +272,38 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
           <p className="text-xs text-gray-400 mb-3 line-clamp-2 leading-relaxed">
             {file.description}
           </p>
+        )}
+
+        {/* Transcription attachment (user grid view) */}
+        {file.transcriptionUrl && !isAdmin && (
+          <div className="mb-3 p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <i className="fas fa-file-circle-check text-emerald-500 text-[9px]"></i>
+              </div>
+              <span className="text-[11px] font-medium text-dark-text truncate flex-1" title={file.transcriptionName}>
+                {file.transcriptionName || 'Transcription'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 pl-7">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onViewTranscription && onViewTranscription(file); }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-gray-500 hover:text-primary hover:bg-white transition-colors"
+              >
+                <i className="fas fa-eye text-[9px]"></i>
+                View
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDownloadTranscription && onDownloadTranscription(file); }}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-white transition-colors"
+              >
+                <i className="fas fa-download text-[9px]"></i>
+                Download
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Footer: uploader info + action */}
