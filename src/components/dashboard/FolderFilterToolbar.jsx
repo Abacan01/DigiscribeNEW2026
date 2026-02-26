@@ -43,31 +43,15 @@ export const SERVICE_TREE = [
 ];
 
 /* ── ServicePicker ───────────────────────────────────────────────── */
-export function ServicePicker({ value, onChange }) {
-  // Always show every category and sub from SERVICE_TREE (no filtering by available files)
-  const visibleTree = SERVICE_TREE.map((cat) => ({
-    ...cat,
-    visibleSubs: cat.subs, // show all subs always
-  }));
+export function ServicePicker({ value = [], onChange }) {
+  // value is an array of strings (parent labels like "EMR" or sub labels like "EMR - Data Migration")
+  const visibleTree = SERVICE_TREE.map((cat) => ({ ...cat, visibleSubs: cat.subs }));
 
   const [open, setOpen] = useState(false);
   const [activeKey, setActiveKey] = useState(() => visibleTree[0]?.key || '');
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
-
-  // Keep activeKey valid when value changes
-  useEffect(() => {
-    if (value) {
-      const found = visibleTree.find((c) =>
-        value === c.label || value.startsWith(`${c.label} - `)
-      );
-      if (found) setActiveKey(found.key);
-    } else if (visibleTree.length > 0 && !visibleTree.find((c) => c.key === activeKey)) {
-      setActiveKey(visibleTree[0].key);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);;
 
   const updatePos = useCallback(() => {
     if (!triggerRef.current) return;
@@ -78,9 +62,7 @@ export function ServicePicker({ value, onChange }) {
     setPos({ top: rect.bottom + 6, left });
   }, []);
 
-  useEffect(() => {
-    if (open) updatePos();
-  }, [open, updatePos]);
+  useEffect(() => { if (open) updatePos(); }, [open, updatePos]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,13 +80,67 @@ export function ServicePicker({ value, onChange }) {
     };
   }, [open]);
 
-  const activeCategory = visibleTree.find((c) => c.key === activeKey) || visibleTree[0];
-  const isActive = !!value;
+  // ── Helpers ──────────────────────────────────────────────────────
+  const isParentSelected = (cat) => value.includes(cat.label);
+  const hasAnySubSelected = (cat) => cat.subs.some((sub) => value.includes(`${cat.label} - ${sub}`));
+  const isSubChecked = (cat, sub) => value.includes(`${cat.label} - ${sub}`) || value.includes(cat.label);
 
-  // Button label
-  const buttonLabel = value
-    ? (value.includes(' - ') ? value.split(' - ').slice(1).join(' - ') : value)
-    : 'All Services';
+  const toggleParent = (cat) => {
+    if (value.includes(cat.label)) {
+      // Remove parent selection entirely
+      onChange(value.filter((v) => v !== cat.label));
+    } else {
+      // Add parent; remove any individual sub entries for this parent (redundant)
+      onChange([...value.filter((v) => !v.startsWith(`${cat.label} - `)), cat.label]);
+    }
+  };
+
+  const toggleSub = (cat, sub) => {
+    const fullVal = `${cat.label} - ${sub}`;
+    if (value.includes(cat.label)) {
+      // Parent broadly selected → clicking a sub means "exclude this one"
+      // Result: remove parent, add all other subs
+      const otherSubs = cat.subs.filter((s) => s !== sub).map((s) => `${cat.label} - ${s}`);
+      onChange([...value.filter((v) => v !== cat.label), ...otherSubs]);
+    } else if (value.includes(fullVal)) {
+      onChange(value.filter((v) => v !== fullVal));
+    } else {
+      onChange([...value, fullVal]);
+    }
+  };
+
+  const toggleSelectAll = (cat) => {
+    const parentIn = value.includes(cat.label);
+    const allSubsIn = cat.subs.every((sub) => value.includes(`${cat.label} - ${sub}`));
+    if (parentIn || allSubsIn) {
+      // Deselect everything for this category
+      onChange(value.filter((v) => v !== cat.label && !v.startsWith(`${cat.label} - `)));
+    } else {
+      // Select all via parent label (most efficient)
+      onChange([...value.filter((v) => !v.startsWith(`${cat.label} - `)), cat.label]);
+    }
+  };
+
+  const activeCategory = visibleTree.find((c) => c.key === activeKey) || visibleTree[0];
+  const isActive = value.length > 0;
+
+  // Button label + icon
+  const buttonLabel = (() => {
+    if (!isActive) return 'All Services';
+    if (value.length === 1) {
+      const v = value[0];
+      return v.includes(' - ') ? v.split(' - ').slice(1).join(' - ') : v;
+    }
+    return `${value.length} Selected`;
+  })();
+
+  const triggerIcon = (() => {
+    if (!isActive) return 'fa-concierge-bell';
+    const firstVal = value[0];
+    const parentLabel = firstVal.includes(' - ') ? firstVal.split(' - ')[0] : firstVal;
+    const found = SERVICE_TREE.find((c) => c.label === parentLabel);
+    return found ? found.icon : 'fa-concierge-bell';
+  })();
 
   if (visibleTree.length === 0) return null;
 
@@ -121,9 +157,9 @@ export function ServicePicker({ value, onChange }) {
         </p>
         <button
           type="button"
-          onClick={() => { onChange(''); setOpen(false); }}
+          onClick={() => { onChange([]); setOpen(false); }}
           className={`mx-2 text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-            !value ? 'bg-primary/10 text-primary' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+            !isActive ? 'bg-primary/10 text-primary' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
           }`}
         >
           <i className="fas fa-layer-group mr-1.5 text-[10px]"></i>
@@ -132,33 +168,33 @@ export function ServicePicker({ value, onChange }) {
         <div className="h-px bg-gray-200 mx-3 my-1" />
         {visibleTree.map((cat) => {
           const isCurrent = cat.key === activeKey;
-          // Broad parent selected (e.g. value === "Transcription Support")
-          const isBroadSelected = value === cat.label;
-          // Specific sub selected under this parent
-          const hasSubSelected = cat.visibleSubs.some((sub) => value === `${cat.label} - ${sub}`);
-          const hasSelected = isBroadSelected || hasSubSelected;
+          const broadly = isParentSelected(cat);
+          const hasSub = hasAnySubSelected(cat);
+          const hasAny = broadly || hasSub;
           return (
             <button
               key={cat.key}
               type="button"
               onMouseEnter={() => { if (cat.subs.length > 0) setActiveKey(cat.key); }}
               onClick={() => {
-                // Clicking parent selects broadly (all its subs)
-                onChange(value === cat.label ? '' : cat.label);
-                if (cat.subs.length === 0) setOpen(false);
-                else setActiveKey(cat.key);
+                toggleParent(cat);
+                if (cat.subs.length > 0) setActiveKey(cat.key);
               }}
               className={`mx-2 text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${
-                isBroadSelected
+                broadly
                   ? 'bg-primary/10 text-primary border border-primary/30'
                   : isCurrent
                     ? 'bg-white shadow-sm border border-gray-200/80 text-dark-text'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
               }`}
             >
-              <i className={`fas ${cat.icon} text-[10px] ${hasSelected ? 'text-primary' : 'text-gray-400'}`}></i>
+              <i className={`fas ${cat.icon} text-[10px] ${hasAny ? 'text-primary' : 'text-gray-400'}`}></i>
               <span className="leading-tight">{cat.label}</span>
-              {hasSelected && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"></span>}
+              {hasAny && (
+                broadly
+                  ? <i className="fas fa-check ml-auto text-[9px] text-primary flex-shrink-0"></i>
+                  : <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"></span>
+              )}
             </button>
           );
         })}
@@ -173,38 +209,42 @@ export function ServicePicker({ value, onChange }) {
                 <i className={`fas ${activeCategory.icon} text-primary text-xs`}></i>
                 <p className="text-xs font-semibold text-gray-700">{activeCategory.label}</p>
               </div>
-              {/* Show All button for this category */}
               <button
                 type="button"
-                onClick={() => { onChange(value === activeCategory.label ? '' : activeCategory.label); setOpen(false); }}
+                onClick={() => toggleSelectAll(activeCategory)}
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all border ${
-                  value === activeCategory.label
+                  isParentSelected(activeCategory) || activeCategory.subs.every((s) => value.includes(`${activeCategory.label} - ${s}`))
                     ? 'bg-primary/10 border-primary/30 text-primary'
                     : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                 }`}
               >
-                {value === activeCategory.label ? <><i className="fas fa-check mr-1 text-[8px]"></i>All Selected</> : 'Select All'}
+                {isParentSelected(activeCategory) || activeCategory.subs.every((s) => value.includes(`${activeCategory.label} - ${s}`))
+                  ? <><i className="fas fa-check mr-1 text-[8px]"></i>All Selected</>
+                  : 'Select All'}
               </button>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
               {activeCategory.visibleSubs.map((sub) => {
-                const fullVal = `${activeCategory.label} - ${sub}`;
-                const isSelected = value === fullVal;
-                const isParentBroad = value === activeCategory.label;
+                const checked = isSubChecked(activeCategory, sub);
+                const broadly = isParentSelected(activeCategory);
                 return (
                   <button
                     key={sub}
                     type="button"
-                    onClick={() => { onChange(isSelected ? '' : fullVal); setOpen(false); }}
-                    className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
-                      isSelected
-                        ? 'bg-primary/10 border-primary/30 text-primary'
-                        : isParentBroad
+                    onClick={() => toggleSub(activeCategory, sub)}
+                    className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all border flex items-center gap-2 ${
+                      checked
+                        ? broadly
                           ? 'bg-primary/5 border-primary/20 text-primary/80'
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
+                          : 'bg-primary/10 border-primary/30 text-primary'
+                        : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
                     }`}
                   >
-                    {(isSelected || isParentBroad) && <i className="fas fa-check mr-1.5 text-[9px]"></i>}
+                    <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center ${
+                      checked ? 'bg-primary border-primary' : 'border-gray-300 bg-white'
+                    }`}>
+                      {checked && <i className="fas fa-check text-white" style={{ fontSize: '7px' }}></i>}
+                    </span>
                     {sub}
                   </button>
                 );
@@ -229,8 +269,17 @@ export function ServicePicker({ value, onChange }) {
             : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
         }`}
       >
-        <i className="fas fa-concierge-bell text-xs"></i>
+        <i className={`fas ${triggerIcon} text-xs`}></i>
         <span className="max-w-[160px] truncate">{buttonLabel}</span>
+        {isActive && (
+          <span
+            className="ml-1 w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0"
+            onClick={(e) => { e.stopPropagation(); onChange([]); }}
+            title="Clear"
+          >
+            <i className="fas fa-times" style={{ fontSize: '7px' }}></i>
+          </span>
+        )}
         <i className={`fas fa-chevron-down text-[10px] transition-transform ${open ? 'rotate-180' : ''}`}></i>
       </button>
       {panel}
@@ -421,13 +470,18 @@ export default function FolderFilterToolbar({
               <button onClick={() => onDateChange(null, null)} className="hover:opacity-70 ml-0.5"><i className="fas fa-times text-[8px]"></i></button>
             </span>
           )}
-          {serviceFilter && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600">
-              <i className="fas fa-concierge-bell text-[9px]"></i>
-              {serviceFilter}
-              <button onClick={() => onServiceChange('')} className="hover:opacity-70 ml-0.5"><i className="fas fa-times text-[8px]"></i></button>
-            </span>
-          )}
+          {serviceFilter && serviceFilter.length > 0 && serviceFilter.map((sf) => {
+            const parentLabel = sf.includes(' - ') ? sf.split(' - ')[0] : sf;
+            const subLabel = sf.includes(' - ') ? sf.split(' - ').slice(1).join(' - ') : null;
+            const catIcon = SERVICE_TREE.find((c) => c.label === parentLabel)?.icon || 'fa-concierge-bell';
+            return (
+              <span key={sf} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600">
+                <i className={`fas ${catIcon} text-[9px]`}></i>
+                <span>{subLabel ? `${parentLabel} › ${subLabel}` : parentLabel}</span>
+                <button onClick={() => onServiceChange(serviceFilter.filter((v) => v !== sf))} className="hover:opacity-70 ml-0.5"><i className="fas fa-times text-[8px]"></i></button>
+              </span>
+            );
+          })}
           {typeFilter && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-violet-50 text-violet-600">
               <i className="fas fa-file text-[9px]"></i>

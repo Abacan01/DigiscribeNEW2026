@@ -4,6 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 
 const REMEMBER_PREF_KEY = 'digiscribe-remember-login';
 
+// Persist across re-mounts so the entrance animation only plays once per session
+let _hasAnimatedIn = false;
+
 function getDefaultRoute(role) {
   return role === 'admin' ? '/admin/dashboard' : '/dashboard';
 }
@@ -25,7 +28,7 @@ function resolvePostLoginRoute(role, fromPath) {
 }
 
 export default function LoginPage() {
-  const [isEntering, setIsEntering] = useState(false);
+  const [isEntering, setIsEntering] = useState(_hasAnimatedIn);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isPasswordIconAnimating, setIsPasswordIconAnimating] = useState(false);
   const [isSubmitAnimating, setIsSubmitAnimating] = useState(false);
@@ -48,11 +51,13 @@ export default function LoginPage() {
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (motionQuery.matches) {
+      _hasAnimatedIn = true;
       setIsEntering(true);
       return;
     }
 
     const frameId = window.requestAnimationFrame(() => {
+      _hasAnimatedIn = true;
       setIsEntering(true);
     });
 

@@ -13,7 +13,7 @@ import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import FolderFilterToolbar from '../components/dashboard/FolderFilterToolbar';
-import { ServicePicker } from '../components/dashboard/FolderFilterToolbar';
+import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
 import CreateUserForm from '../components/admin/CreateUserForm';
 import UserTable from '../components/admin/UserTable';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
@@ -172,7 +172,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = folderActions;
 
   const [statusFilter, setStatusFilter] = useState('');
-  const [serviceFilter, setServiceFilter] = useState('');
+  const [serviceFilter, setServiceFilter] = useState([]);
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [userFilter, setUserFilter] = useState('');
@@ -236,7 +236,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
       if (state.viewMode === 'grid' || state.viewMode === 'list') setViewMode(state.viewMode);
       if (typeof state.statusFilter === 'string') setStatusFilter(state.statusFilter);
-      if (typeof state.serviceFilter === 'string') setServiceFilter(state.serviceFilter);
+      if (Array.isArray(state.serviceFilter)) setServiceFilter(state.serviceFilter);
       if (typeof state.sortBy === 'string') setSortBy(state.sortBy);
       if (typeof state.searchQuery === 'string') setSearchQuery(state.searchQuery);
       if (typeof state.currentFolderId === 'string' || state.currentFolderId === null) setCurrentFolderId(state.currentFolderId ?? null);
@@ -300,12 +300,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       }
     }
 
-    if (serviceFilter) {
-      if (serviceFilter.includes(' - ')) {
-        result = result.filter((f) => f.serviceCategory === serviceFilter);
-      } else {
-        result = result.filter((f) => f.serviceCategory && (f.serviceCategory === serviceFilter || f.serviceCategory.startsWith(`${serviceFilter} - `)));
-      }
+    if (serviceFilter.length > 0) {
+      result = result.filter((f) => {
+        if (!f.serviceCategory) return false;
+        return serviceFilter.some((sf) => {
+          if (sf.includes(' - ')) return f.serviceCategory === sf;
+          return f.serviceCategory === sf || f.serviceCategory.startsWith(`${sf} - `);
+        });
+      });
     }
     if (userFilter) result = result.filter((f) => f.uploadedByEmail === userFilter);
     if (searchQuery.trim()) {
@@ -408,13 +410,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
     }
     // Root: expand to all files when searching/filtering
-    if (searchQuery.trim() || statusFilter || serviceFilter) return allFiles;
+    if (searchQuery.trim() || statusFilter || serviceFilter.length > 0) return allFiles;
     return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
   }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder]);
 
   // Subfolders – hidden while a status/service/type tab is active (those views are file-only)
   const currentSubfolders = useMemo(() => {
-    if (statusFilter || serviceFilter || typeFilter) return [];
+    if (statusFilter || serviceFilter.length > 0 || typeFilter) return [];
 
     let folders = allFolders
       .filter((f) => (f.parentId || null) === currentFolderId)
@@ -1017,7 +1019,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   const clearFilters = () => {
     setStatusFilter('');
-    setServiceFilter('');
+    setServiceFilter([]);
     setSearchQuery('');
     setDateFrom(null);
     setDateTo(null);
@@ -1025,7 +1027,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setUserFilter('');
   };
 
-  const hasActiveFilters = statusFilter || serviceFilter || searchQuery || userFilter || (isInsideFolder && (dateFrom || dateTo || typeFilter));
+  const hasActiveFilters = statusFilter || serviceFilter.length > 0 || searchQuery || userFilter || (isInsideFolder && (dateFrom || dateTo || typeFilter));
 
   // Folder-level date change handler
   const handleDateRangeChange = useCallback((from, to) => {
@@ -1237,12 +1239,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   <button onClick={() => setStatusFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
                 </span>
               )}
-              {serviceFilter && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600">
-                  {serviceFilter}
-                  <button onClick={() => setServiceFilter('')} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
-                </span>
-              )}
+              {serviceFilter.length > 0 && serviceFilter.map((sf) => {
+                const parentLabel = sf.includes(' - ') ? sf.split(' - ')[0] : sf;
+                const subLabel = sf.includes(' - ') ? sf.split(' - ').slice(1).join(' - ') : null;
+                const catIcon = SERVICE_TREE.find((c) => c.label === parentLabel)?.icon || 'fa-concierge-bell';
+                return (
+                  <span key={sf} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-600">
+                    <i className={`fas ${catIcon} text-[9px]`}></i>
+                    <span>{subLabel ? `${parentLabel} › ${subLabel}` : parentLabel}</span>
+                    <button onClick={() => setServiceFilter((prev) => prev.filter((v) => v !== sf))} className="hover:opacity-70"><i className="fas fa-times text-[8px]"></i></button>
+                  </span>
+                );
+              })}
               {searchQuery && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
                   &quot;{searchQuery}&quot;
@@ -1250,7 +1258,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 </span>
               )}
               <span className="text-xs text-gray-400 ml-1">
-                {(isSearching || statusFilter || serviceFilter) ? 'Across all folders \u00b7 ' : ''}
+                {(isSearching || statusFilter || serviceFilter.length > 0) ? 'Across all folders \u00b7 ' : ''}
                 {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
               </span>
             </div>
