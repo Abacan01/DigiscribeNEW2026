@@ -767,11 +767,65 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setDeleteFolderConfirm(null);
   }, [deleteFolder, currentFolderId, allFolders]);
 
+  // Drag-start handler — supports multi-select dragging
+  const handleDragStart = useCallback((e, item, itemType) => {
+    const isItemSelected = selectedIds.has(item.id);
+    const isMulti = isItemSelected && selectedIds.size > 1;
+    if (isMulti) {
+      e.dataTransfer.setData('application/json', JSON.stringify({
+        type: 'multi',
+        fileIds: selectedFileIds,
+        folderIds: selectedFolderIds,
+      }));
+      // Show a count badge as the drag ghost
+      const ghost = document.createElement('div');
+      ghost.style.cssText = 'position:fixed;top:-9999px;left:-9999px;background:#4f46e5;color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;white-space:nowrap;';
+      ghost.textContent = `${selectedIds.size} items`;
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, 18);
+      setTimeout(() => document.body.removeChild(ghost), 0);
+    } else {
+      e.dataTransfer.setData('application/json', JSON.stringify({ type: itemType, id: item.id }));
+    }
+    e.dataTransfer.effectAllowed = 'move';
+  }, [selectedIds, selectedFileIds, selectedFolderIds]);
+
+  // Drag and drop handler — handles single and multi-select drops
   const handleDrop = useCallback(async (e, targetFolderId) => {
     setDragOverFolder(null);
+    let isMultiDrop = false;
     try {
-      const payload = JSON.parse(e.dataTransfer.getData('application/json'));
-      if (payload.type === 'file') {
+      const raw = e.dataTransfer.getData('application/json');
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      if (payload.type === 'multi') {
+        isMultiDrop = true;
+        setBulkLoading(true);
+        let movedFiles = 0, movedFolders = 0, skippedFolders = 0;
+        const { fileIds, folderIds } = payload;
+        if (fileIds.length > 0) {
+          const token = await getIdToken();
+          const res = await fetch('/api/files/bulk-move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ fileIds, folderId: targetFolderId || null }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error(data.error || 'Move failed.');
+          movedFiles = Number(data.moved || 0);
+        }
+        for (const fid of folderIds) {
+          if (fid === targetFolderId) { skippedFolders++; continue; }
+          try { await moveFolder(fid, targetFolderId || null); movedFolders++; }
+          catch { skippedFolders++; }
+        }
+        const parts = [];
+        if (movedFiles > 0) parts.push(`${movedFiles} file${movedFiles !== 1 ? 's' : ''}`);
+        if (movedFolders > 0) parts.push(`${movedFolders} folder${movedFolders !== 1 ? 's' : ''}`);
+        if (skippedFolders > 0) parts.push(`${skippedFolders} skipped`);
+        setMessage({ type: 'success', text: `Moved ${parts.join(', ')}.` });
+        setSelectedIds(new Set());
+      } else if (payload.type === 'file') {
         await moveFileToFolder(payload.id, targetFolderId);
         setMessage({ type: 'success', text: 'File moved.' });
       } else if (payload.type === 'folder') {
@@ -782,8 +836,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
+    } finally {
+      if (isMultiDrop) setBulkLoading(false);
     }
-  }, [moveFileToFolder, moveFolder]);
+  }, [moveFileToFolder, moveFolder, getIdToken]);
 
   const handleMoveConfirm = useCallback(async (targetFolderId) => {
     if (!moveTarget) return;
@@ -1519,6 +1575,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       onDragOver={setDragOverFolder}
                       onDragLeave={() => setDragOverFolder(null)}
                       onDrop={handleDrop}
+                      onDragStart={handleDragStart}
                       itemCount={folderItemCounts[folder.id] || 0}
                       totalSize={folderSizes[folder.id] || 0}
                     />
@@ -1535,10 +1592,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       key={file.id}
                       className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
                       draggable={renamingFileId !== file.id}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
-                        e.dataTransfer.effectAllowed = 'move';
-                      }}
+                      onDragStart={(e) => handleDragStart(e, file, 'file')}
                       onContextMenu={(e) => handleFileContextMenu(e, file)}
                     >
                       <td className="text-center px-3 py-3.5">
@@ -1714,6 +1768,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 onDragOver={setDragOverFolder}
                 onDragLeave={() => setDragOverFolder(null)}
                 onDrop={handleDrop}
+                onDragStart={handleDragStart}
                 itemCount={folderItemCounts[folder.id] || 0}
                 totalSize={folderSizes[folder.id] || 0}
                 showOwner
@@ -1730,10 +1785,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   key={file.id}
                   className={`p-4 rounded-xl border transition-colors ${isSelected ? 'border-primary/30 bg-primary/[0.02]' : 'border-gray-100'}`}
                   draggable={renamingFileId !== file.id}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
+                  onDragStart={(e) => handleDragStart(e, file, 'file')}
                   onContextMenu={(e) => handleFileContextMenu(e, file)}
                 >
                   <div className="flex items-start gap-3 mb-3">
@@ -1936,6 +1988,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 onDragOver={setDragOverFolder}
                 onDragLeave={() => setDragOverFolder(null)}
                 onDrop={handleDrop}
+                onDragStart={handleDragStart}
                 itemCount={folderItemCounts[folder.id] || 0}
                 totalSize={folderSizes[folder.id] || 0}
                 showOwner
@@ -1950,10 +2003,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 key={file.id}
                 className="transition-all"
                 draggable={renamingFileId !== file.id}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('application/json', JSON.stringify({ type: 'file', id: file.id }));
-                  e.dataTransfer.effectAllowed = 'move';
-                }}
+                onDragStart={(e) => handleDragStart(e, file, 'file')}
                 onContextMenu={(e) => handleFileContextMenu(e, file)}
               >
                 <FileCard

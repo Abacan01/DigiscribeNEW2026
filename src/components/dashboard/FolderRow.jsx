@@ -29,6 +29,7 @@ export default function FolderRow({
   onDragOver,
   onDragLeave,
   onDrop,
+  onDragStart: onDragStartProp,
   itemCount,
   totalSize,
   showUploadedBy = true,
@@ -44,8 +45,12 @@ export default function FolderRow({
       }`}
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'folder', id: folder.id }));
-        e.dataTransfer.effectAllowed = 'move';
+        if (onDragStartProp) {
+          onDragStartProp(e, folder, 'folder');
+        } else {
+          e.dataTransfer.setData('application/json', JSON.stringify({ type: 'folder', id: folder.id }));
+          e.dataTransfer.effectAllowed = 'move';
+        }
       }}
       onDragOver={(e) => {
         e.preventDefault();
