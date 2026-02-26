@@ -12,6 +12,7 @@ import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
+import { ServicePicker } from '../components/dashboard/FolderFilterToolbar';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
 import { useFolders } from '../hooks/useFolders';
 import { useFolderActions } from '../hooks/useFolderActions';
@@ -254,7 +255,6 @@ export default function DashboardPage() {
     'CAD - 3D Visualization',
     'E-commerce Product Listing - Data Cleaning & Validation',
     'E-commerce Product Listing - Data Extraction',
-    'Others',
   ], []);
 
   // Files in current folder (or all files when searching/filtering at root)
@@ -310,7 +310,15 @@ export default function DashboardPage() {
     let result = [...currentFolderFiles];
 
     if (statusFilter) result = result.filter((f) => f.status === statusFilter);
-    if (serviceFilter) result = result.filter((f) => f.serviceCategory === serviceFilter);
+    if (serviceFilter) {
+      if (serviceFilter.includes(' - ')) {
+        // Specific sub-category match
+        result = result.filter((f) => f.serviceCategory === serviceFilter);
+      } else {
+        // Broad parent match — e.g. "Transcription Support" matches "Transcription Support - Medical", etc.
+        result = result.filter((f) => f.serviceCategory && (f.serviceCategory === serviceFilter || f.serviceCategory.startsWith(`${serviceFilter} - `)));
+      }
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter((f) =>
@@ -328,8 +336,15 @@ export default function DashboardPage() {
     return result;
   }, [currentFolderFiles, statusFilter, serviceFilter, searchQuery, sortBy]);
 
-  // Combined items for pagination: folders first, then files
-  const allPageItems = useMemo(() => [...currentSubfolders, ...filteredFiles], [currentSubfolders, filteredFiles]);
+  // Combined items for pagination: folders first (unless sorting by size)
+  const allPageItems = useMemo(() => {
+    if (sortBy === 'size' && currentSubfolders.length > 0) {
+      const foldersWithSize = currentSubfolders.map((f) => ({ ...f, _isFolder: true, _size: folderSizes[f.id] || 0 }));
+      const filesWithSize = filteredFiles.map((f) => ({ ...f, _isFolder: false, _size: f.size || 0 }));
+      return [...foldersWithSize, ...filesWithSize].sort((a, b) => b._size - a._size);
+    }
+    return [...currentSubfolders, ...filteredFiles];
+  }, [currentSubfolders, filteredFiles, sortBy, folderSizes]);
   const totalFilePages = Math.max(1, Math.ceil(allPageItems.length / DASHBOARD_PAGE_SIZE));
   const paginatedItems = useMemo(() => {
     const startIndex = (currentPage - 1) * DASHBOARD_PAGE_SIZE;
@@ -831,7 +846,7 @@ export default function DashboardPage() {
               New Folder
             </button>
             <Link
-              to="/upload"
+              to={currentFolderId ? `/upload?folderId=${currentFolderId}` : '/upload'}
               className="btn-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300 inline-flex items-center gap-2"
             >
               <i className="fas fa-plus text-xs"></i>
@@ -959,14 +974,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Breadcrumbs */}
-              <Breadcrumbs
-                folders={allFolders}
-                currentFolderId={currentFolderId}
-                onNavigate={setCurrentFolderId}
-                onDrop={handleDrop}
-              />
-
               {/* Filter Bar */}
               <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 shadow-sm">
                 <div className="flex flex-col lg:flex-row gap-3">
@@ -986,19 +993,7 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <div className="relative">
-                    <select
-                      value={serviceFilter}
-                      onChange={(e) => setServiceFilter(e.target.value)}
-                      className="appearance-none pl-4 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all min-w-[180px]"
-                    >
-                      <option value="">All Services</option>
-                      {serviceCategories.map((cat) => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
-                  </div>
+                  <ServicePicker value={serviceFilter} onChange={setServiceFilter} />
 
                   <div className="relative">
                     <select
@@ -1084,6 +1079,14 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+
+              {/* Breadcrumbs */}
+              <Breadcrumbs
+                folders={allFolders}
+                currentFolderId={currentFolderId}
+                onNavigate={setCurrentFolderId}
+                onDrop={handleDrop}
+              />
 
               {/* Bulk action bar */}
               {selectedCount > 0 && (
@@ -1256,7 +1259,7 @@ export default function DashboardPage() {
                       Create Folder
                     </button>
                     <Link
-                      to="/upload"
+                      to={currentFolderId ? `/upload?folderId=${currentFolderId}` : '/upload'}
                       className="inline-flex items-center gap-2 btn-gradient text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all"
                     >
                       <i className="fas fa-plus text-xs"></i>

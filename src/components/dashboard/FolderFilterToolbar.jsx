@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import DateRangePicker from './DateRangePicker';
 
 /* ── Service hierarchy — subs MUST match UploadPage children exactly ─ */
-const SERVICE_TREE = [
+export const SERVICE_TREE = [
   {
     key: 'transcription',
     label: 'Transcription Support',
@@ -40,16 +40,10 @@ const SERVICE_TREE = [
     icon: 'fa-shopping-cart',
     subs: ['Data Cleaning & Validation', 'Data Extraction'],
   },
-  {
-    key: 'others',
-    label: 'Others',
-    icon: 'fa-ellipsis-h',
-    subs: [],
-  },
 ];
 
 /* ── ServicePicker ───────────────────────────────────────────────── */
-function ServicePicker({ value, onChange }) {
+export function ServicePicker({ value, onChange }) {
   // Always show every category and sub from SERVICE_TREE (no filtering by available files)
   const visibleTree = SERVICE_TREE.map((cat) => ({
     ...cat,
@@ -62,13 +56,11 @@ function ServicePicker({ value, onChange }) {
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
 
-  // Keep activeKey valid when tree changes
+  // Keep activeKey valid when value changes
   useEffect(() => {
     if (value) {
       const found = visibleTree.find((c) =>
-        c.visibleSubs.length === 0
-          ? value === c.label
-          : value.startsWith(`${c.label} - `)
+        value === c.label || value.startsWith(`${c.label} - `)
       );
       if (found) setActiveKey(found.key);
     } else if (visibleTree.length > 0 && !visibleTree.find((c) => c.key === activeKey)) {
@@ -109,12 +101,12 @@ function ServicePicker({ value, onChange }) {
   const activeCategory = visibleTree.find((c) => c.key === activeKey) || visibleTree[0];
   const isActive = !!value;
 
-  // Button label: show just the sub part (after " - "), or the full value for Others
+  // Button label
   const buttonLabel = value
     ? (value.includes(' - ') ? value.split(' - ').slice(1).join(' - ') : value)
     : 'All Services';
 
-  if (visibleTree.length === 0) return null; // shouldn't happen since we always show all
+  if (visibleTree.length === 0) return null;
 
   const panel = open ? createPortal(
     <div
@@ -140,27 +132,28 @@ function ServicePicker({ value, onChange }) {
         <div className="h-px bg-gray-200 mx-3 my-1" />
         {visibleTree.map((cat) => {
           const isCurrent = cat.key === activeKey;
-          const hasSelected = cat.visibleSubs.length === 0
-            ? value === cat.label
-            : cat.visibleSubs.some((sub) => value === `${cat.label} - ${sub}`);
+          // Broad parent selected (e.g. value === "Transcription Support")
+          const isBroadSelected = value === cat.label;
+          // Specific sub selected under this parent
+          const hasSubSelected = cat.visibleSubs.some((sub) => value === `${cat.label} - ${sub}`);
+          const hasSelected = isBroadSelected || hasSubSelected;
           return (
             <button
               key={cat.key}
               type="button"
               onMouseEnter={() => { if (cat.subs.length > 0) setActiveKey(cat.key); }}
               onClick={() => {
-                if (cat.subs.length === 0) {
-                  // "Others" — select/deselect directly, no sub panel
-                  onChange(value === cat.label ? '' : cat.label);
-                  setOpen(false);
-                } else {
-                  setActiveKey(cat.key);
-                }
+                // Clicking parent selects broadly (all its subs)
+                onChange(value === cat.label ? '' : cat.label);
+                if (cat.subs.length === 0) setOpen(false);
+                else setActiveKey(cat.key);
               }}
               className={`mx-2 text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 ${
-                isCurrent
-                  ? 'bg-white shadow-sm border border-gray-200/80 text-dark-text'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                isBroadSelected
+                  ? 'bg-primary/10 text-primary border border-primary/30'
+                  : isCurrent
+                    ? 'bg-white shadow-sm border border-gray-200/80 text-dark-text'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
               }`}
             >
               <i className={`fas ${cat.icon} text-[10px] ${hasSelected ? 'text-primary' : 'text-gray-400'}`}></i>
@@ -171,18 +164,33 @@ function ServicePicker({ value, onChange }) {
         })}
       </div>
 
-      {/* Right – sub-services (hidden when Others is active since it has no subs) */}
+      {/* Right – sub-services */}
       <div className="flex-1 p-4">
         {activeCategory && activeCategory.visibleSubs.length > 0 && (
           <>
-            <div className="flex items-center gap-2 mb-3">
-              <i className={`fas ${activeCategory.icon} text-primary text-xs`}></i>
-              <p className="text-xs font-semibold text-gray-700">{activeCategory.label}</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <i className={`fas ${activeCategory.icon} text-primary text-xs`}></i>
+                <p className="text-xs font-semibold text-gray-700">{activeCategory.label}</p>
+              </div>
+              {/* Show All button for this category */}
+              <button
+                type="button"
+                onClick={() => { onChange(value === activeCategory.label ? '' : activeCategory.label); setOpen(false); }}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all border ${
+                  value === activeCategory.label
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                }`}
+              >
+                {value === activeCategory.label ? <><i className="fas fa-check mr-1 text-[8px]"></i>All Selected</> : 'Select All'}
+              </button>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
               {activeCategory.visibleSubs.map((sub) => {
                 const fullVal = `${activeCategory.label} - ${sub}`;
                 const isSelected = value === fullVal;
+                const isParentBroad = value === activeCategory.label;
                 return (
                   <button
                     key={sub}
@@ -191,21 +199,18 @@ function ServicePicker({ value, onChange }) {
                     className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
                       isSelected
                         ? 'bg-primary/10 border-primary/30 text-primary'
-                        : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
+                        : isParentBroad
+                          ? 'bg-primary/5 border-primary/20 text-primary/80'
+                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
                     }`}
                   >
-                    {isSelected && <i className="fas fa-check mr-1.5 text-[9px]"></i>}
+                    {(isSelected || isParentBroad) && <i className="fas fa-check mr-1.5 text-[9px]"></i>}
                     {sub}
                   </button>
                 );
               })}
             </div>
           </>
-        )}
-        {activeCategory && activeCategory.visibleSubs.length === 0 && (
-          <div className="flex items-center justify-center h-full text-xs text-gray-400">
-            <p>Click <span className="font-medium text-gray-600">&ldquo;{activeCategory.label}&rdquo;</span> on the left to select it</p>
-          </div>
         )}
       </div>
     </div>,

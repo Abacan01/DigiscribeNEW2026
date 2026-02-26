@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { useAuth } from '../contexts/AuthContext';
@@ -50,11 +50,6 @@ const SERVICE_CATEGORIES = [
     icon: 'fas fa-shopping-cart',
     children: ['Data Cleaning & Validation', 'Data Extraction'],
   },
-  {
-    label: 'Others',
-    icon: 'fas fa-ellipsis-h',
-    children: [],
-  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -94,7 +89,12 @@ function getFileCategory(type) {
   if (type.startsWith('image/')) return 'image';
   if (type.startsWith('audio/')) return 'audio';
   if (type.startsWith('video/')) return 'video';
-  return 'unknown';
+  if (type === 'application/pdf') return 'pdf';
+  if (type.includes('word') || type === 'application/msword') return 'document';
+  if (type.includes('excel') || type.includes('spreadsheet')) return 'spreadsheet';
+  if (type.includes('powerpoint') || type.includes('presentation')) return 'presentation';
+  if (type === 'text/plain' || type === 'text/csv') return 'text';
+  return 'document';
 }
 
 function isValidUrl(str) {
@@ -131,7 +131,6 @@ function FilePreview({ file, onRemove, disabled, customName, onNameChange }) {
 
   const handleNameChange = (e) => {
     const newBase = e.target.value;
-    if (newBase.length === 0) return;
     if (onNameChange) onNameChange(newBase + ext);
   };
 
@@ -303,6 +302,8 @@ function WizardNav({ onBack, onNext, nextLabel, nextDisabled, showBack }) {
 export default function UploadPage() {
   const animationRef = useScrollAnimation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const folderId = searchParams.get('folderId') || null;
   const { getIdToken, role } = useAuth();
   const fileInputRef = useRef(null);
 
@@ -567,6 +568,7 @@ export default function UploadPage() {
             mimeType,
             description,
             serviceCategory,
+            folderId,
           }),
         });
 
@@ -651,7 +653,7 @@ export default function UploadPage() {
         const res = await fetch('/api/upload/url', {
           method: 'POST',
           headers: { ...authHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: urls[i], customName: urlNames[i] || '', description, serviceCategory }),
+          body: JSON.stringify({ url: urls[i], customName: urlNames[i] || '', description, serviceCategory, folderId }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -1048,7 +1050,7 @@ export default function UploadPage() {
         <select
           value={serviceCategoryMain}
           onChange={(e) => handleMainCategoryChange(e.target.value)}
-          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all mb-3"
+          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all mb-3"
         >
           <option value="">Select a service...</option>
           {SERVICE_CATEGORIES.map((cat) => (
@@ -1061,7 +1063,7 @@ export default function UploadPage() {
           <select
             value={serviceCategory ? serviceCategory.replace(`${serviceCategoryMain} - `, '') : ''}
             onChange={(e) => handleSubCategoryChange(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-dark-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
           >
             <option value="">Select a sub-category...</option>
             {selectedMainCategory.children.map((sub) => (
@@ -1198,7 +1200,12 @@ export default function UploadPage() {
                     <i className={`fas ${
                       getFileCategory(f.type) === 'image' ? 'fa-image' :
                       getFileCategory(f.type) === 'audio' ? 'fa-music' :
-                      getFileCategory(f.type) === 'video' ? 'fa-video' : 'fa-file'
+                      getFileCategory(f.type) === 'video' ? 'fa-video' :
+                      getFileCategory(f.type) === 'pdf' ? 'fa-file-pdf' :
+                      getFileCategory(f.type) === 'document' ? 'fa-file-word' :
+                      getFileCategory(f.type) === 'spreadsheet' ? 'fa-file-excel' :
+                      getFileCategory(f.type) === 'presentation' ? 'fa-file-powerpoint' :
+                      getFileCategory(f.type) === 'text' ? 'fa-file-alt' : 'fa-file'
                     } text-primary/60 w-4`}></i>
                     <span className="truncate">{getFileName(i)}</span>
                     <span className="text-gray-300 flex-shrink-0">({formatSize(f.size)})</span>
