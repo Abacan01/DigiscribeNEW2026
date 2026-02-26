@@ -208,6 +208,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   // User scope (virtual per-user folder layer for admin)
   const [selectedUserEmail, setSelectedUserEmail] = useState(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userPage, setUserPage] = useState(1);
+
+  // Root view mode: 'users' = per-user folders, 'general' = all files combined
+  const [rootViewMode, setRootViewMode] = useState('users');
 
   // Folder state
   const [currentFolderId, setCurrentFolderId] = useState(null);
@@ -244,6 +249,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       if (typeof state.searchQuery === 'string') setSearchQuery(state.searchQuery);
       if (typeof state.currentFolderId === 'string' || state.currentFolderId === null) setCurrentFolderId(state.currentFolderId ?? null);
       if (typeof state.selectedUserEmail === 'string' || state.selectedUserEmail === null) setSelectedUserEmail(state.selectedUserEmail ?? null);
+      if (state.rootViewMode === 'users' || state.rootViewMode === 'general') setRootViewMode(state.rootViewMode);
       if (Number.isInteger(state.currentPage) && state.currentPage > 0) setCurrentPage(state.currentPage);
     } catch {
       // Ignore malformed cache entries
@@ -269,6 +275,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       searchQuery,
       currentFolderId,
       selectedUserEmail,
+      rootViewMode,
       currentPage,
       updatedAt: Date.now(),
     };
@@ -277,7 +284,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     } catch {
       // Ignore storage quota/private mode errors
     }
-  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, currentPage]);
+  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, rootViewMode, currentPage]);
 
   const applyNonStatusFilters = useCallback((files, { scopedToCurrentFolder }) => {
     let result = [...files];
@@ -444,9 +451,41 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return Object.values(userMap).sort((a, b) => a.email.localeCompare(b.email));
   }, [allFiles, allFolders]);
 
+  // Global overview stats for admin root
+  const globalStats = useMemo(() => {
+    const stats = {
+      totalUsers: virtualUserFolders.length,
+      totalFiles: allFiles.length,
+      totalFolders: allFolders.length,
+      totalSize: 0,
+      pending: 0,
+      'in-progress': 0,
+      transcribed: 0,
+    };
+    for (const f of allFiles) {
+      stats.totalSize += f.size || 0;
+      if (stats[f.status] !== undefined) stats[f.status]++;
+    }
+    return stats;
+  }, [allFiles, allFolders, virtualUserFolders]);
+
+  // Filtered & paginated virtual user folders
+  const filteredUserFolders = useMemo(() => {
+    if (!userSearchQuery.trim()) return virtualUserFolders;
+    const q = userSearchQuery.toLowerCase().trim();
+    return virtualUserFolders.filter((vu) => vu.email.toLowerCase().includes(q));
+  }, [virtualUserFolders, userSearchQuery]);
+
+  const USERS_PER_PAGE = 12;
+  const totalUserPages = Math.max(1, Math.ceil(filteredUserFolders.length / USERS_PER_PAGE));
+  const paginatedUserFolders = useMemo(() => {
+    const start = (userPage - 1) * USERS_PER_PAGE;
+    return filteredUserFolders.slice(start, start + USERS_PER_PAGE);
+  }, [filteredUserFolders, userPage]);
+
   // Whether admin is inside a subfolder or user scope
   const isInsideFolder = currentFolderId !== null;
-  const isAtVirtualRoot = !selectedUserEmail && !currentFolderId;
+  const isAtVirtualRoot = rootViewMode === 'users' && !selectedUserEmail && !currentFolderId;
 
   // Set of valid folder IDs (for orphan detection)
   const validFolderIds = useMemo(() => new Set(effectiveFolders.map((f) => f.id)), [effectiveFolders]);
@@ -586,12 +625,26 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, selectedUserEmail, dateFrom, dateTo, typeFilter]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, selectedUserEmail, rootViewMode, dateFrom, dateTo, typeFilter]);
+
+  // Reset user page when search changes
+  useEffect(() => {
+    setUserPage(1);
+  }, [userSearchQuery]);
+
+  // Clamp user page to valid range
+  useEffect(() => {
+    setUserPage((prev) => {
+      if (prev < 1) return 1;
+      if (prev > totalUserPages) return totalUserPages;
+      return prev;
+    });
+  }, [totalUserPages]);
 
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, selectedUserEmail, dateFrom, dateTo, typeFilter]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, selectedUserEmail, rootViewMode, dateFrom, dateTo, typeFilter]);
 
   // Reset filters when switching between root and folder views
   useEffect(() => {
@@ -1390,14 +1443,36 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       {/* Breadcrumbs */}
       <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-4 shadow-sm">
         <div className="flex items-center gap-1 text-sm overflow-x-auto">
-          {/* All Users root */}
+          {/* Root view toggle: General / Per User */}
+          {!selectedUserEmail && !currentFolderId && (
+            <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5 mr-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => { setRootViewMode('general'); setCurrentFolderId(null); setSelectedUserEmail(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 whitespace-nowrap ${rootViewMode === 'general' ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-dark-text'}`}
+              >
+                <i className="fas fa-layer-group text-[10px]"></i>
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRootViewMode('users'); setCurrentFolderId(null); setSelectedUserEmail(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 whitespace-nowrap ${rootViewMode === 'users' ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-dark-text'}`}
+              >
+                <i className="fas fa-users text-[10px]"></i>
+                Per User
+              </button>
+            </div>
+          )}
+
+          {/* Root breadcrumb */}
           <button
             type="button"
             onClick={() => { setSelectedUserEmail(null); setCurrentFolderId(null); }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${isAtVirtualRoot ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${!selectedUserEmail && !currentFolderId ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
           >
-            <i className="fas fa-users text-xs"></i>
-            All Users
+            <i className={`fas ${rootViewMode === 'general' && !selectedUserEmail ? 'fa-layer-group' : 'fa-users'} text-xs`}></i>
+            {rootViewMode === 'general' && !selectedUserEmail ? 'All Files' : 'All Users'}
           </button>
 
           {selectedUserEmail && (
@@ -1414,8 +1489,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             </>
           )}
 
-          {/* Folder chain (only when inside a folder and user is selected) */}
-          {selectedUserEmail && currentFolderId && (() => {
+          {/* Folder chain (when inside a folder) */}
+          {currentFolderId && (() => {
             const folderMap = {};
             for (const f of allFolders) folderMap[f.id] = f;
             const chain = [];
@@ -1565,53 +1640,171 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         </div>
       ) : isAtVirtualRoot ? (
         /* ── Virtual User Folders (admin root) ── */
-        virtualUserFolders.length === 0 ? (
-          <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <i className="fas fa-users text-primary text-xl"></i>
-            </div>
-            <p className="text-sm font-medium text-dark-text">No users have uploaded files yet</p>
-            <p className="text-xs text-gray-text mt-1">User folders will appear here once files are uploaded.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {virtualUserFolders.map((vu) => (
-              <button
-                key={vu.email}
-                type="button"
-                onClick={() => setSelectedUserEmail(vu.email)}
-                className="bg-white rounded-xl border border-gray-100 hover:border-primary/30 hover:shadow-md p-5 text-left transition-all group"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 transition-colors">
-                    <i className="fas fa-user-folder text-lg"></i>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-dark-text truncate">{vu.email}</p>
-                    <p className="text-[11px] text-gray-text mt-0.5">
-                      {vu.fileCount} file{vu.fileCount !== 1 ? 's' : ''} &middot; {vu.folderCount} folder{vu.folderCount !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <i className="fas fa-chevron-right text-gray-300 text-xs group-hover:text-primary transition-colors"></i>
+        <div className="space-y-4">
+          {/* Global overview stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'Total Users', value: globalStats.totalUsers, icon: 'fa-users', bg: 'bg-indigo-50', text: 'text-indigo-600', iconBg: 'bg-indigo-100' },
+              { label: 'Total Files', value: globalStats.totalFiles, icon: 'fa-file-alt', bg: 'bg-sky-50', text: 'text-sky-600', iconBg: 'bg-sky-100' },
+              { label: 'Total Folders', value: globalStats.totalFolders, icon: 'fa-folder', bg: 'bg-violet-50', text: 'text-violet-600', iconBg: 'bg-violet-100' },
+              { label: 'Total Size', value: formatSize(globalStats.totalSize), icon: 'fa-database', bg: 'bg-emerald-50', text: 'text-emerald-600', iconBg: 'bg-emerald-100' },
+              { label: 'Pending', value: globalStats.pending, icon: 'fa-clock', bg: 'bg-amber-50', text: 'text-amber-600', iconBg: 'bg-amber-100' },
+              { label: 'Transcribed', value: globalStats.transcribed, icon: 'fa-check-circle', bg: 'bg-green-50', text: 'text-green-600', iconBg: 'bg-green-100' },
+            ].map((stat) => (
+              <div key={stat.label} className={`${stat.bg} rounded-xl border border-gray-100 p-4 flex items-center gap-3`}>
+                <div className={`w-9 h-9 rounded-lg ${stat.iconBg} flex items-center justify-center flex-shrink-0`}>
+                  <i className={`fas ${stat.icon} ${stat.text} text-sm`}></i>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-gray-text">
-                  {vu.totalSize > 0 && (
-                    <span className="inline-flex items-center gap-1">
-                      <i className="fas fa-database text-[9px]"></i>
-                      {formatSize(vu.totalSize)}
-                    </span>
-                  )}
-                  {vu.latestUpload && (
-                    <span className="inline-flex items-center gap-1">
-                      <i className="fas fa-clock text-[9px]"></i>
-                      {formatDate(vu.latestUpload.toISOString())}
-                    </span>
-                  )}
+                <div className="min-w-0">
+                  <p className={`text-lg font-bold ${stat.text} leading-tight`}>{stat.value}</p>
+                  <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">{stat.label}</p>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
-        )
+
+          {/* In-Progress highlight when > 0 */}
+          {globalStats['in-progress'] > 0 && (
+            <div className="bg-sky-50 rounded-xl border border-sky-100 px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">
+                <i className="fas fa-spinner text-sky-600 text-sm"></i>
+              </div>
+              <p className="text-sm text-sky-700 font-medium">
+                {globalStats['in-progress']} file{globalStats['in-progress'] !== 1 ? 's' : ''} currently in progress
+              </p>
+            </div>
+          )}
+
+          {/* Search bar */}
+          <div className="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
+            <div className="relative">
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm"></i>
+              <input
+                type="text"
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Search users by email..."
+                className="w-full pl-9 pr-8 py-2.5 text-sm rounded-lg border border-gray-200 focus:border-primary/50 focus:ring-2 focus:ring-primary/10 outline-none transition-all placeholder:text-gray-300"
+              />
+              {userSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setUserSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition-colors"
+                >
+                  <i className="fas fa-times text-xs"></i>
+                </button>
+              )}
+            </div>
+            {userSearchQuery.trim() && (
+              <p className="text-[11px] text-gray-400 mt-2 px-1">
+                {filteredUserFolders.length} user{filteredUserFolders.length !== 1 ? 's' : ''} matching &ldquo;{userSearchQuery.trim()}&rdquo;
+              </p>
+            )}
+          </div>
+
+          {/* User cards grid */}
+          {filteredUserFolders.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
+              <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                <i className={`fas ${userSearchQuery.trim() ? 'fa-search' : 'fa-users'} text-primary text-lg`}></i>
+              </div>
+              <p className="text-sm font-medium text-dark-text">
+                {userSearchQuery.trim() ? 'No users match your search' : 'No users have uploaded files yet'}
+              </p>
+              <p className="text-xs text-gray-text mt-1">
+                {userSearchQuery.trim() ? 'Try a different email address.' : 'User folders will appear here once files are uploaded.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {paginatedUserFolders.map((vu) => (
+                <button
+                  key={vu.email}
+                  type="button"
+                  onClick={() => { setSelectedUserEmail(vu.email); setUserSearchQuery(''); }}
+                  className="bg-white rounded-xl border border-gray-100 hover:border-primary/30 hover:shadow-md p-5 text-left transition-all group"
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 transition-colors">
+                      <i className="fas fa-user-folder text-lg"></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-dark-text truncate">{vu.email}</p>
+                      <p className="text-[11px] text-gray-text mt-0.5">
+                        {vu.fileCount} file{vu.fileCount !== 1 ? 's' : ''} &middot; {vu.folderCount} folder{vu.folderCount !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <i className="fas fa-chevron-right text-gray-300 text-xs group-hover:text-primary transition-colors"></i>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-gray-text">
+                    {vu.totalSize > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <i className="fas fa-database text-[9px]"></i>
+                        {formatSize(vu.totalSize)}
+                      </span>
+                    )}
+                    {vu.latestUpload && (
+                      <span className="inline-flex items-center gap-1">
+                        <i className="fas fa-clock text-[9px]"></i>
+                        {formatDate(vu.latestUpload.toISOString())}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* User pagination */}
+          {totalUserPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
+              <p className="text-xs text-gray-500">
+                Page <span className="font-semibold text-dark-text">{userPage}</span> of <span className="font-semibold text-dark-text">{totalUserPages}</span>
+                <span className="mx-1.5 text-gray-300">&middot;</span>
+                Showing {paginatedUserFolders.length} of {filteredUserFolders.length} users
+              </p>
+              <div className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setUserPage((p) => Math.max(1, p - 1))}
+                  disabled={userPage <= 1}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <i className="fas fa-chevron-left text-[10px]"></i>
+                  Prev
+                </button>
+                {getPageNumbers(userPage, totalUserPages).map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`u-ellipsis-${idx}`} className="px-2 py-1.5 text-xs text-gray-400 select-none">&hellip;</span>
+                  ) : (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setUserPage(p)}
+                      className={`min-w-[32px] h-[30px] px-2 rounded-lg border text-xs font-medium transition-colors ${
+                        p === userPage
+                          ? 'bg-primary text-white border-primary shadow-sm'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+                <button
+                  type="button"
+                  onClick={() => setUserPage((p) => Math.min(totalUserPages, p + 1))}
+                  disabled={userPage >= totalUserPages}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <i className="fas fa-chevron-right text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       ) : totalItems === 0 && !hasActiveFilters ? (
         <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
