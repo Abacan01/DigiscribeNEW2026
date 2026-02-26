@@ -166,9 +166,7 @@ router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
     // Only move on FTP if folder actually changed
     if (oldFolderId !== newFolderId && oldStoragePath) {
       try {
-        // Save original path on first move so we can restore it if moved back to root
-        const originalStoragePathToSave = fileData.originalStoragePath || oldStoragePath;
-        const newStoragePath = await computeFileFtpPath({ ...fileData, originalStoragePath: originalStoragePathToSave }, newFolderId, adminDb);
+        const newStoragePath = await computeFileFtpPath(fileData, newFolderId, adminDb);
 
         if (oldStoragePath !== newStoragePath) {
           await moveOnFtp(oldStoragePath, newStoragePath);
@@ -179,7 +177,6 @@ router.put('/metadata/:fileId/folder', verifyAuth, async (req, res) => {
           folderId: newFolderId,
           storagePath: newStoragePath,
           url: `/api/files/${encodedPath}`,
-          originalStoragePath: originalStoragePathToSave,
           updatedAt: new Date(),
         });
       } catch (ftpErr) {

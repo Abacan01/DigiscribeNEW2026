@@ -120,13 +120,11 @@ function getFileCategory(mimeType) {
   return 'Other';
 }
 
-// Build a flat filename prefix: {Service}_{email}_{timestamp}
-// No nested folders — service & uploader are baked into the filename so
-// anyone browsing FTP can immediately see who uploaded what and for which service.
-function buildFilePrefix(serviceCategory, uploaderEmail) {
+// Build a flat filename prefix: {Service}_{timestamp}
+// The uploader's email is now used as the FTP directory, not baked into the filename.
+function buildFilePrefix(serviceCategory) {
   const svc = (serviceCategory || 'Uncategorized').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const email = (uploaderEmail || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_');
-  return `${svc}_${email}`;
+  return svc;
 }
 
 // Encode each path segment individually so slashes remain literal slashes in URLs.
@@ -235,21 +233,21 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: `File type "${mimeType}" is not allowed.` });
     }
 
-    // Build flat filename: {Service}_{email}_{timestamp}-{filename}
-    const prefix = buildFilePrefix(serviceCategory, req.user.email);
+    // Build filename: {Service}_{timestamp}-{filename}
+    const prefix = buildFilePrefix(serviceCategory);
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const finalName = `${prefix}_${Date.now()}-${safeName}`;
-    const defaultStoragePath = finalName;
+    // Per-user directory: {email}/{filename}
+    const emailDir = (req.user.email || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown';
+    const defaultStoragePath = `${emailDir}/${finalName}`;
 
-    // If uploading into a folder, place the file inside the folder FTP path
+    // If uploading into a folder, place the file inside the folder FTP path (already includes email dir)
     let storagePath = defaultStoragePath;
-    let originalStoragePath = null;
     if (folderId) {
       try {
         const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
         if (folderFtpPath) {
           storagePath = `${folderFtpPath}/${finalName}`;
-          originalStoragePath = defaultStoragePath; // preserve the service-category path for later
         }
       } catch (e) {
         console.warn('[upload/complete] folder path resolution failed, using default path:', e.message);
@@ -356,7 +354,6 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
         originalName: fileName,
         savedAs: finalName,
         storagePath,
-        ...(originalStoragePath ? { originalStoragePath } : {}),
         size: finalSize,
         type: mimeType,
         fileCategory: getFileCategory(mimeType),
@@ -453,22 +450,22 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
       originalName = fetched.originalName;
     }
 
-    const prefix = buildFilePrefix(serviceCategory, req.user.email);
-    // Prepend service+email prefix to the finalName for flat storage
+    const prefix = buildFilePrefix(serviceCategory);
+    // Prepend service prefix to the finalName
     finalName = `${prefix}_${finalName}`;
-    const defaultStoragePath = finalName;
+    // Per-user directory: {email}/{filename}
+    const emailDir = (req.user.email || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown';
+    const defaultStoragePath = `${emailDir}/${finalName}`;
     const stats = fs.statSync(finalPath);
     const displayName = customName?.trim() || originalName;
 
-    // If uploading into a folder, place the file inside the folder FTP path
+    // If uploading into a folder, place the file inside the folder FTP path (already includes email dir)
     let storagePath = defaultStoragePath;
-    let originalStoragePathUrl = null;
     if (folderId) {
       try {
         const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
         if (folderFtpPath) {
           storagePath = `${folderFtpPath}/${finalName}`;
-          originalStoragePathUrl = defaultStoragePath;
         }
       } catch (e) {
         console.warn('[upload/url] folder path resolution failed, using default path:', e.message);
@@ -487,7 +484,6 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
         originalName: displayName,
         savedAs: finalName,
         storagePath,
-        ...(originalStoragePathUrl ? { originalStoragePath: originalStoragePathUrl } : {}),
         size: stats.size,
         type: contentType,
         fileCategory: getFileCategory(contentType),
@@ -673,9 +669,6 @@ app.post('/api/files/bulk-move', verifyAuth, async (req, res) => {
 
       const updateData = { folderId: folderId || null, updatedAt: new Date() };
       if (newStoragePath !== oldStoragePath) {
-        if (!fileData.originalStoragePath && oldStoragePath) {
-          updateData.originalStoragePath = oldStoragePath;
-        }
         updateData.storagePath = newStoragePath;
         const encodedPath = newStoragePath.split('/').map(encodeURIComponent).join('/');
         updateData.url = `/api/files/${encodedPath}`;

@@ -140,7 +140,7 @@ export default function DashboardPage() {
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
 
   const { files: allFiles, loading, error } = useFirestoreFiles();
-  const { folders: allFolders, loading: foldersLoading } = useFolders();
+  const { folders: allFolders, loading: foldersLoading, refetch: refetchFolders } = useFolders();
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = useFolderActions();
   const { transcriptions, loading: transLoading, error: transError, fetchTranscriptions } = useTranscriptions();
 
@@ -212,11 +212,22 @@ export default function DashboardPage() {
     return m;
   }, [allFolders]);
 
+  // Reset currentFolderId if it points to a folder that no longer exists
+  useEffect(() => {
+    if (foldersLoading || !allFolders) return;
+    if (currentFolderId && allFolders.length >= 0) {
+      const exists = allFolders.some((f) => f.id === currentFolderId);
+      if (!exists) setCurrentFolderId(null);
+    }
+  }, [foldersLoading, allFolders, currentFolderId]);
+
   // Files the user owns that are in folders they can't see (moved to an admin-only folder)
   const hiddenFiles = useMemo(() => {
+    // Don't flag while folders are still loading — avoids false positives
+    if (foldersLoading) return [];
     const visibleFolderIds = new Set(allFolders.map((f) => f.id));
     return allFiles.filter((f) => f.folderId && !visibleFolderIds.has(f.folderId));
-  }, [allFiles, allFolders]);
+  }, [allFiles, allFolders, foldersLoading]);
 
   const [hiddenFilesExpanded, setHiddenFilesExpanded] = useState(false);
 
@@ -666,24 +677,27 @@ export default function DashboardPage() {
   // Folder actions
   const handleCreateFolder = useCallback(async (name, parentId) => {
     await createFolder(name, parentId);
+    await refetchFolders();
     setMessage({ type: 'success', text: `Folder "${name}" created.` });
     setTimeout(() => setMessage(null), 3000);
-  }, [createFolder]);
+  }, [createFolder, refetchFolders]);
 
   const handleRenameFolder = useCallback(async (folderId, newName) => {
     try {
       await renameFolder(folderId, newName);
+      await refetchFolders();
       setMessage({ type: 'success', text: 'Folder renamed.' });
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     }
     setRenamingFolder(null);
-  }, [renameFolder]);
+  }, [renameFolder, refetchFolders]);
 
   const handleDeleteFolder = useCallback(async (folderId) => {
     try {
       await deleteFolder(folderId);
+      await refetchFolders();
       setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
       setTimeout(() => setMessage(null), 3000);
       // If we're inside the deleted folder, navigate to parent
@@ -695,7 +709,7 @@ export default function DashboardPage() {
       setMessage({ type: 'error', text: err.message });
     }
     setDeleteFolderConfirm(null);
-  }, [deleteFolder, currentFolderId, allFolders]);
+  }, [deleteFolder, refetchFolders, currentFolderId, allFolders]);
 
   // Drag-start handler — supports multi-select dragging
   const handleDragStart = useCallback((e, item, itemType) => {

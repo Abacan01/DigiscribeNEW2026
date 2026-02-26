@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,11 +35,39 @@ function writeFoldersCache(userId, role, folders) {
   }
 }
 
+/**
+ * Fetch folders from the server API (uses Admin SDK — bypasses Firestore rules).
+ */
+async function fetchFoldersFromApi(getIdToken) {
+  const token = await getIdToken();
+  const res = await fetch('/api/folders', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load folders');
+  return (data.folders || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
+
 export function useFolders() {
-  const { user, role } = useAuth();
+  const { user, role, getIdToken } = useAuth();
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Track whether we're using the API fallback (Firestore rules blocked the listener)
+  const [useApiFallback, setUseApiFallback] = useState(false);
+
+  // Manual refetch — call after create/rename/delete to get fresh data immediately
+  const refetch = useCallback(async () => {
+    if (!user || !getIdToken) return;
+    try {
+      const fresh = await fetchFoldersFromApi(getIdToken);
+      setFolders(fresh);
+      writeFoldersCache(user.uid, role, fresh);
+      setError(null);
+    } catch (err) {
+      console.error('[useFolders] refetch error:', err.message);
+    }
+  }, [user, role, getIdToken]);
 
   useEffect(() => {
     if (!user) {
@@ -57,6 +85,7 @@ export function useFolders() {
     }
     setError(null);
 
+    // Try real-time Firestore listener first
     try {
       let q;
       if (role === 'admin') {
@@ -102,10 +131,21 @@ export function useFolders() {
           setLoading(false);
           setError(null);
         },
-        (err) => {
-          console.error('Error loading folders:', err.message);
-          setError(err.message);
-          setLoading(false);
+        async (err) => {
+          console.warn('[useFolders] Firestore listener failed, falling back to API:', err.message);
+          setUseApiFallback(true);
+          // Firestore rules likely blocking — fall back to server API
+          try {
+            const apiFolders = await fetchFoldersFromApi(getIdToken);
+            setFolders(apiFolders);
+            writeFoldersCache(user.uid, role, apiFolders);
+            setLoading(false);
+            setError(null);
+          } catch (apiErr) {
+            console.error('[useFolders] API fallback also failed:', apiErr.message);
+            setError(apiErr.message);
+            setLoading(false);
+          }
         }
       );
 
@@ -115,7 +155,14 @@ export function useFolders() {
       setError(err.message);
       setLoading(false);
     }
-  }, [user, role]);
+  }, [user, role, getIdToken]);
 
-  return { folders, loading, error };
+  // When using API fallback, poll every 5s for changes (no real-time listener available)
+  useEffect(() => {
+    if (!useApiFallback || !user || !getIdToken) return;
+    const interval = setInterval(refetch, 5000);
+    return () => clearInterval(interval);
+  }, [useApiFallback, user, getIdToken, refetch]);
+
+  return { folders, loading, error, refetch };
 }

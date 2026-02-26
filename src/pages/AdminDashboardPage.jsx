@@ -167,7 +167,7 @@ function getUrlPlatform(sourceUrl) {
 
 /* ─────────────────────────── Files Tab ─────────────────────────── */
 
-function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoading, folderActions }) {
+function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoading, folderActions, refetchFolders }) {
   const { user, getIdToken } = useAuth();
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = folderActions;
 
@@ -206,6 +206,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Context menu state
   const [contextMenu, setContextMenu] = useState(null);
 
+  // User scope (virtual per-user folder layer for admin)
+  const [selectedUserEmail, setSelectedUserEmail] = useState(null);
+
   // Folder state
   const [currentFolderId, setCurrentFolderId] = useState(null);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -240,11 +243,21 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       if (typeof state.sortBy === 'string') setSortBy(state.sortBy);
       if (typeof state.searchQuery === 'string') setSearchQuery(state.searchQuery);
       if (typeof state.currentFolderId === 'string' || state.currentFolderId === null) setCurrentFolderId(state.currentFolderId ?? null);
+      if (typeof state.selectedUserEmail === 'string' || state.selectedUserEmail === null) setSelectedUserEmail(state.selectedUserEmail ?? null);
       if (Number.isInteger(state.currentPage) && state.currentPage > 0) setCurrentPage(state.currentPage);
     } catch {
       // Ignore malformed cache entries
     }
   }, [user?.uid]);
+
+  // Reset currentFolderId if it points to a folder that no longer exists
+  useEffect(() => {
+    if (foldersLoading || !allFolders) return;
+    if (currentFolderId && allFolders.length >= 0) {
+      const exists = allFolders.some((f) => f.id === currentFolderId);
+      if (!exists) { setCurrentFolderId(null); setSelectedUserEmail(null); }
+    }
+  }, [foldersLoading, allFolders, currentFolderId]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !user?.uid || !dashboardStateHydratedRef.current) return;
@@ -255,6 +268,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       sortBy,
       searchQuery,
       currentFolderId,
+      selectedUserEmail,
       currentPage,
       updatedAt: Date.now(),
     };
@@ -263,7 +277,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     } catch {
       // Ignore storage quota/private mode errors
     }
-  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, currentPage]);
+  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, currentPage]);
 
   const applyNonStatusFilters = useCallback((files, { scopedToCurrentFolder }) => {
     let result = [...files];
@@ -322,16 +336,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const counts = useMemo(() => {
     const insideFolder = currentFolderId !== null;
     const scopedFiles = insideFolder
-      ? allFiles.filter((f) => (f.folderId || null) === currentFolderId)
-      : allFiles;
+      ? effectiveFiles.filter((f) => (f.folderId || null) === currentFolderId)
+      : effectiveFiles;
     const filesForStatusCounts = applyNonStatusFilters(scopedFiles, { scopedToCurrentFolder: insideFolder });
 
-    const result = { total: allFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
+    const result = { total: effectiveFiles.length, pending: 0, 'in-progress': 0, transcribed: 0 };
     for (const file of filesForStatusCounts) {
       if (result[file.status] !== undefined) result[file.status]++;
     }
     return result;
-  }, [allFiles, currentFolderId, applyNonStatusFilters]);
+  }, [effectiveFiles, currentFolderId, applyNonStatusFilters]);
 
   // Static list of all service categories (always show even if no files exist)
   const serviceCategories = useMemo(() => [
@@ -361,19 +375,19 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const folderServiceCategories = useMemo(() => {
     if (!currentFolderId) return [];
     const cats = new Set();
-    for (const file of allFiles) {
+    for (const file of effectiveFiles) {
       if ((file.folderId || null) === currentFolderId && file.serviceCategory) {
         cats.add(file.serviceCategory);
       }
     }
     return Array.from(cats).sort();
-  }, [allFiles, currentFolderId]);
+  }, [effectiveFiles, currentFolderId]);
 
   // Unique file types in current folder (for folder-level filter)
   const folderFileTypes = useMemo(() => {
     if (!currentFolderId) return [];
     const types = new Set();
-    for (const file of allFiles) {
+    for (const file of effectiveFiles) {
       if ((file.folderId || null) === currentFolderId && file.type) {
         // Group by main category (e.g. "image", "audio", "video", "pdf", "document")
         const t = file.type;
@@ -389,7 +403,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       }
     }
     return Array.from(types).sort();
-  }, [allFiles, currentFolderId]);
+  }, [effectiveFiles, currentFolderId]);
 
   // Unique user emails across all files (for user search suggestions)
   const uniqueUserEmails = useMemo(() => {
@@ -400,33 +414,65 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     return Array.from(emails).sort();
   }, [allFiles]);
 
-  // Whether admin is inside a subfolder
+  // Virtual user-level folders for admin root view
+  const virtualUserFolders = useMemo(() => {
+    const userMap = {};
+    for (const file of allFiles) {
+      const email = file.uploadedByEmail || 'unknown';
+      if (!userMap[email]) userMap[email] = { email, fileCount: 0, folderCount: 0, totalSize: 0, latestUpload: null };
+      userMap[email].fileCount++;
+      userMap[email].totalSize += file.size || 0;
+      const d = file.uploadedAt ? new Date(file.uploadedAt) : null;
+      if (d && (!userMap[email].latestUpload || d > userMap[email].latestUpload)) userMap[email].latestUpload = d;
+    }
+    for (const folder of allFolders) {
+      const email = folder.createdByEmail || 'unknown';
+      if (!userMap[email]) userMap[email] = { email, fileCount: 0, folderCount: 0, totalSize: 0, latestUpload: null };
+      userMap[email].folderCount++;
+    }
+    return Object.values(userMap).sort((a, b) => a.email.localeCompare(b.email));
+  }, [allFiles, allFolders]);
+
+  // Effective data scoped by selected user
+  const effectiveFiles = useMemo(() => {
+    if (!selectedUserEmail) return allFiles;
+    return allFiles.filter((f) => f.uploadedByEmail === selectedUserEmail);
+  }, [allFiles, selectedUserEmail]);
+
+  const effectiveFolders = useMemo(() => {
+    if (!selectedUserEmail) return allFolders;
+    return allFolders.filter((f) => f.createdByEmail === selectedUserEmail);
+  }, [allFolders, selectedUserEmail]);
+
+  // Whether admin is inside a subfolder or user scope
   const isInsideFolder = currentFolderId !== null;
+  const isAtVirtualRoot = !selectedUserEmail && !currentFolderId;
 
   // Set of valid folder IDs (for orphan detection)
-  const validFolderIds = useMemo(() => new Set(allFolders.map((f) => f.id)), [allFolders]);
+  const validFolderIds = useMemo(() => new Set(effectiveFolders.map((f) => f.id)), [effectiveFolders]);
 
-  // Files in current folder (or all files when searching/filtering at root)
+  // Files in current folder (or all user files when searching/filtering)
   const currentFolderFiles = useMemo(() => {
+    if (isAtVirtualRoot) return []; // At virtual root, user folders are shown, not files
     if (isInsideFolder) {
-      // Inside a folder: always scope to this folder only
-      return allFiles.filter((f) => (f.folderId || null) === currentFolderId);
+      return effectiveFiles.filter((f) => (f.folderId || null) === currentFolderId);
     }
-    // Root: expand to all files when searching/filtering
-    if (searchQuery.trim() || statusFilter || serviceFilter.length > 0) return allFiles;
-    // At root: show files with no folder AND orphaned files (folderId points to deleted/missing folder)
-    return allFiles.filter((f) => {
+    // User root: expand to all user files when searching/filtering
+    if (searchQuery.trim() || statusFilter || serviceFilter.length > 0) return effectiveFiles;
+    // User root: show files with no folder AND orphaned files
+    return effectiveFiles.filter((f) => {
       const fid = f.folderId || null;
       if (fid === null) return true;
       return !validFolderIds.has(fid);
     });
-  }, [allFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder, validFolderIds]);
+  }, [effectiveFiles, currentFolderId, searchQuery, statusFilter, serviceFilter, isInsideFolder, isAtVirtualRoot, validFolderIds]);
 
   // Subfolders – hidden while a status/service/type tab is active (those views are file-only)
   const currentSubfolders = useMemo(() => {
+    if (isAtVirtualRoot) return []; // Virtual root shows user folders, not real folders
     if (statusFilter || serviceFilter.length > 0 || typeFilter) return [];
 
-    let folders = allFolders
+    let folders = effectiveFolders
       .filter((f) => (f.parentId || null) === currentFolderId);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -440,33 +486,33 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       });
     }
     return folders;
-  }, [allFolders, currentFolderId, searchQuery, isInsideFolder, dateFrom, dateTo, statusFilter, serviceFilter, typeFilter]);
+  }, [effectiveFolders, currentFolderId, searchQuery, isInsideFolder, isAtVirtualRoot, dateFrom, dateTo, statusFilter, serviceFilter, typeFilter]);
 
   // Item counts per folder
   const folderItemCounts = useMemo(() => {
     const c = {};
-    for (const f of allFiles) {
+    for (const f of effectiveFiles) {
       const fid = f.folderId || null;
       if (fid) c[fid] = (c[fid] || 0) + 1;
     }
-    for (const f of allFolders) {
+    for (const f of effectiveFolders) {
       const pid = f.parentId || null;
       if (pid) c[pid] = (c[pid] || 0) + 1;
     }
     return c;
-  }, [allFiles, allFolders]);
+  }, [effectiveFiles, effectiveFolders]);
 
   // Total file sizes per folder (direct files only)
   const folderSizes = useMemo(() => {
     const sizes = {};
-    for (const f of allFiles) {
+    for (const f of effectiveFiles) {
       const fid = f.folderId || null;
       if (fid && f.size > 0) {
         sizes[fid] = (sizes[fid] || 0) + f.size;
       }
     }
     return sizes;
-  }, [allFiles]);
+  }, [effectiveFiles]);
 
   // id → name lookup for all folders (used for "inside folder" badge)
   const folderMap = useMemo(() => {
@@ -540,12 +586,12 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, dateFrom, dateTo, typeFilter]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, selectedUserEmail, dateFrom, dateTo, typeFilter]);
 
   // Clear selection when filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, dateFrom, dateTo, typeFilter]);
+  }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId, selectedUserEmail, dateFrom, dateTo, typeFilter]);
 
   // Reset filters when switching between root and folder views
   useEffect(() => {
@@ -726,20 +772,22 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Folder action handlers
   const handleCreateFolder = useCallback(async (name, parentId) => {
     await createFolder(name, parentId);
+    await refetchFolders();
     setMessage({ type: 'success', text: `Folder "${name}" created.` });
     setTimeout(() => setMessage(null), 3000);
-  }, [createFolder]);
+  }, [createFolder, refetchFolders]);
 
   const handleRenameFolder = useCallback(async (folderId, newName) => {
     try {
       await renameFolder(folderId, newName);
+      await refetchFolders();
       setMessage({ type: 'success', text: 'Folder renamed.' });
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     }
     setRenamingFolder(null);
-  }, [renameFolder]);
+  }, [renameFolder, refetchFolders]);
 
   const handleRenameFile = useCallback(async (fileId, newName) => {
     if (!newName.trim()) return;
@@ -763,6 +811,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const handleDeleteFolder = useCallback(async (folderId) => {
     try {
       await deleteFolder(folderId);
+      await refetchFolders();
       setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
       setTimeout(() => setMessage(null), 3000);
       if (currentFolderId === folderId) {
@@ -773,7 +822,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setMessage({ type: 'error', text: err.message });
     }
     setDeleteFolderConfirm(null);
-  }, [deleteFolder, currentFolderId, allFolders]);
+  }, [deleteFolder, refetchFolders, currentFolderId, allFolders]);
 
   // Drag-start handler — supports multi-select dragging
   const handleDragStart = useCallback((e, item, itemType) => {
@@ -1106,12 +1155,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   }, []);
   const isSearching = searchQuery.trim().length > 0;
   const selectedCount = selectedFileCount + selectedFolderCount;
-  const totalItems = currentSubfolders.length + filteredFiles.length;
+  const totalItems = isAtVirtualRoot ? virtualUserFolders.length : currentSubfolders.length + filteredFiles.length;
   const isLoading = filesLoading || foldersLoading;
 
   return (
     <div className="space-y-4">
-      {/* Stats Row */}
+      {/* Stats Row — hidden at virtual root */}
+      {!isAtVirtualRoot && (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <button
           onClick={() => setStatusFilter('')}
@@ -1149,6 +1199,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           </button>
         ))}
       </div>
+      )}
 
       {/* Messages */}
       {message && (
@@ -1166,8 +1217,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         </div>
       )}
 
-      {/* Filter Bar – conditionally render based on root vs inside folder */}
-      {isInsideFolder ? (
+      {/* Filter Bar – conditionally render based on root vs inside folder (hidden at virtual root) */}
+      {!isAtVirtualRoot && (isInsideFolder ? (
         /* ── Inside-folder filter: date range + type + category ── */
         <div className="space-y-3">
           <FolderFilterToolbar
@@ -1334,15 +1385,60 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             </div>
           )}
         </div>
-      )}
+      ))}
 
       {/* Breadcrumbs */}
-      <Breadcrumbs
-        folders={allFolders}
-        currentFolderId={currentFolderId}
-        onNavigate={setCurrentFolderId}
-        onDrop={handleDrop}
-      />
+      <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-4 shadow-sm">
+        <div className="flex items-center gap-1 text-sm overflow-x-auto">
+          {/* All Users root */}
+          <button
+            type="button"
+            onClick={() => { setSelectedUserEmail(null); setCurrentFolderId(null); }}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${isAtVirtualRoot ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+          >
+            <i className="fas fa-users text-xs"></i>
+            All Users
+          </button>
+
+          {selectedUserEmail && (
+            <>
+              <i className="fas fa-chevron-right text-[9px] text-gray-300 flex-shrink-0"></i>
+              <button
+                type="button"
+                onClick={() => setCurrentFolderId(null)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${!currentFolderId ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+              >
+                <i className="fas fa-user text-xs"></i>
+                {selectedUserEmail}
+              </button>
+            </>
+          )}
+
+          {/* Folder chain (only when inside a folder and user is selected) */}
+          {selectedUserEmail && currentFolderId && (() => {
+            const folderMap = {};
+            for (const f of allFolders) folderMap[f.id] = f;
+            const chain = [];
+            let cur = folderMap[currentFolderId];
+            while (cur) {
+              chain.unshift(cur);
+              cur = cur.parentId ? folderMap[cur.parentId] : null;
+            }
+            return chain.map((folder) => (
+              <div key={folder.id} className="flex items-center gap-1">
+                <i className="fas fa-chevron-right text-[9px] text-gray-300 flex-shrink-0"></i>
+                <button
+                  type="button"
+                  onClick={() => setCurrentFolderId(folder.id)}
+                  className={`px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${folder.id === currentFolderId ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+                >
+                  {folder.name}
+                </button>
+              </div>
+            ));
+          })()}
+        </div>
+      </div>
 
       {/* Bulk action bar */}
       {selectedCount > 0 && (
@@ -1467,6 +1563,55 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
           <p className="text-sm text-gray-text">Loading files...</p>
         </div>
+      ) : isAtVirtualRoot ? (
+        /* ── Virtual User Folders (admin root) ── */
+        virtualUserFolders.length === 0 ? (
+          <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <i className="fas fa-users text-primary text-xl"></i>
+            </div>
+            <p className="text-sm font-medium text-dark-text">No users have uploaded files yet</p>
+            <p className="text-xs text-gray-text mt-1">User folders will appear here once files are uploaded.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {virtualUserFolders.map((vu) => (
+              <button
+                key={vu.email}
+                type="button"
+                onClick={() => setSelectedUserEmail(vu.email)}
+                className="bg-white rounded-xl border border-gray-100 hover:border-primary/30 hover:shadow-md p-5 text-left transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 transition-colors">
+                    <i className="fas fa-user-folder text-lg"></i>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-dark-text truncate">{vu.email}</p>
+                    <p className="text-[11px] text-gray-text mt-0.5">
+                      {vu.fileCount} file{vu.fileCount !== 1 ? 's' : ''} &middot; {vu.folderCount} folder{vu.folderCount !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <i className="fas fa-chevron-right text-gray-300 text-xs group-hover:text-primary transition-colors"></i>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-gray-text">
+                  {vu.totalSize > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <i className="fas fa-database text-[9px]"></i>
+                      {formatSize(vu.totalSize)}
+                    </span>
+                  )}
+                  {vu.latestUpload && (
+                    <span className="inline-flex items-center gap-1">
+                      <i className="fas fa-clock text-[9px]"></i>
+                      {formatDate(vu.latestUpload.toISOString())}
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )
       ) : totalItems === 0 && !hasActiveFilters ? (
         <div className="text-center py-24 bg-white rounded-2xl border border-gray-100">
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -2360,7 +2505,7 @@ export default function AdminDashboardPage() {
   const [userMessage, setUserMessage] = useState(null);
 
   const { files: allFiles, loading: filesLoading, error: filesError } = useFirestoreFiles();
-  const { folders: allFolders, loading: foldersLoading } = useFolders();
+  const { folders: allFolders, loading: foldersLoading, refetch: refetchFolders } = useFolders();
   const folderActions = useFolderActions();
   const { users, loading: usersLoading, error: usersError, createUser, deleteUser, toggleAdmin } = useAdminUsers();
 
@@ -2471,6 +2616,7 @@ export default function AdminDashboardPage() {
               filesError={filesError}
               foldersLoading={foldersLoading}
               folderActions={folderActions}
+              refetchFolders={refetchFolders}
             />
           )}
           {activeTab === 'users' && (

@@ -1,6 +1,15 @@
 import path from 'path';
 
 /**
+ * Sanitise an email into a safe FTP directory name (username part only).
+ */
+function sanitizeEmail(email) {
+  return ((email || 'unknown').split('@')[0] || 'unknown')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_') || 'unknown';
+}
+
+/**
  * Sanitise a folder name for use as a safe FTP directory component.
  * Replaces anything that is not alphanumeric, space, underscore, hyphen, or period
  * with an underscore, then collapses consecutive underscores.
@@ -14,17 +23,20 @@ function sanitizeName(name) {
 
 /**
  * Resolves the full FTP directory path for a Firestore folder by walking up
- * the parentId chain.
+ * the parentId chain.  The top-level directory is always the root-ancestor
+ * folder creator's email (username part), giving a per-user FTP layout:
+ *   {email}/{FolderA}/{SubFolder}/...
  *
  * @param {string} folderId - Firestore folder document ID
  * @param {FirebaseFirestore.Firestore} db - Admin Firestore instance
- * @returns {Promise<string>} The folder path relative to FTP_BASE, e.g. "ProjectA/SubProject"
+ * @returns {Promise<string>} The folder path relative to FTP_BASE, e.g. "john/{FolderA}"
  */
 export async function resolveFolderFtpPath(folderId, db) {
   if (!folderId) return '';
   const parts = [];
   let currentId = folderId;
   const visited = new Set();
+  let rootEmail = '';
 
   while (currentId) {
     if (visited.has(currentId)) break; // guard against circular refs
@@ -33,16 +45,19 @@ export async function resolveFolderFtpPath(folderId, db) {
     if (!doc.exists) break;
     const data = doc.data();
     parts.unshift(sanitizeName(data.name));
+    // Keep updating — the last iteration is the root ancestor
+    rootEmail = data.createdByEmail || rootEmail;
     currentId = data.parentId || null;
   }
 
-  return parts.join('/');
+  const emailDir = sanitizeEmail(rootEmail);
+  return `${emailDir}/${parts.join('/')}`;
 }
 
 /**
  * Computes the FTP storage path for a file, given its folder (or null for root).
- * - Files in a folder: {folderPath}/{savedAs}
- * - Files at root: kept at their original storagePath (unchanged)
+ * - Files in a folder: {email}/{folderPath}/{savedAs}
+ * - Files at root (no folder): {email}/{savedAs}
  *
  * @param {object} fileData - Firestore file document data
  * @param {string|null} targetFolderId - Target folder ID (null = root)
@@ -53,15 +68,15 @@ export async function computeFileFtpPath(fileData, targetFolderId, db) {
   const fileName = fileData.savedAs || path.posix.basename(fileData.storagePath || '');
   if (!fileName) return fileData.storagePath || '';
 
+  const emailDir = sanitizeEmail(fileData.uploadedByEmail);
+
   if (!targetFolderId) {
-    // Moving to root — use the original service-category path if available,
-    // otherwise fall back to _root/{filename}
-    if (fileData.originalStoragePath) return fileData.originalStoragePath;
-    return fileData.storagePath || `_root/${fileName}`;
+    // Moving to root — file stays in user's top-level directory
+    return `${emailDir}/${fileName}`;
   }
 
   const folderPath = await resolveFolderFtpPath(targetFolderId, db);
-  return folderPath ? `${folderPath}/${fileName}` : fileName;
+  return folderPath ? `${folderPath}/${fileName}` : `${emailDir}/${fileName}`;
 }
 
 /**
@@ -118,4 +133,4 @@ export async function updateDescendantFilePaths(folderId, db) {
   }
 }
 
-export { sanitizeName };
+export { sanitizeName, sanitizeEmail };
