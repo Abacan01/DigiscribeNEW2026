@@ -7,7 +7,10 @@ export default function Footer() {
   const hideQuickLinks = ['/dashboard', '/admin/dashboard', '/upload'].includes(location.pathname);
 
   return (
-    <footer className="bg-gray-50 border-t border-gray-100 relative mt-6 pt-6">
+    <footer className="relative mt-6">
+      {/* Top blend into page */}
+      <div className="h-8 bg-gradient-to-b from-transparent to-[#f0f5fa]" />
+      <div className="bg-[#f0f5fa] pt-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className={`grid grid-cols-1 gap-4 ${hideQuickLinks ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'}`}>
           {/* Company Info */}
@@ -68,12 +71,13 @@ export default function Footer() {
       </div>
 
       {/* Copyright */}
-      <div className="border-t border-gray-200">
+      <div className="border-t border-gray-200/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
           <p className="text-center text-xs text-gray-400">
             Digiscribe Transcription Corp 2026 &copy; All Rights Reserved
           </p>
         </div>
+      </div>
       </div>
     </footer>
   );

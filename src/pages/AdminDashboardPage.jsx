@@ -1780,8 +1780,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   className="bg-white rounded-xl border border-gray-100 hover:border-primary/30 hover:shadow-md p-5 text-left transition-all group"
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-500 group-hover:bg-indigo-100 transition-colors">
-                      <i className="fas fa-user-folder text-lg"></i>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-sky-50 group-hover:bg-sky-100 transition-colors overflow-hidden">
+                      <img src="/favicon.png" alt="" className="w-6 h-6 object-contain" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-dark-text truncate">{vu.email}</p>
