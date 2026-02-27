@@ -874,12 +874,20 @@ export default function DashboardPage() {
 
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
+    const sourceHref = file.sourceReferenceUrl || file.sourceUrl || (isUrl ? file.url : '');
     const items = [];
 
     const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
 
     if (selCount <= 1) {
       items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      if (isUrl && sourceHref) {
+        items.push({
+          icon: 'fa-up-right-from-square',
+          label: 'Open Source Link',
+          onClick: () => window.open(sourceHref, '_blank', 'noopener,noreferrer'),
+        });
+      }
 
       // Users can only download when a transcription has been attached by admin
       if (file.transcriptionUrl) {

@@ -396,12 +396,87 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
   }
 
   try {
+    const effectiveUrl = normalizeUrlUploadTarget(url);
+
+    const createReferenceTextFile = async (displayName) => {
+      const parsedName = path.parse(displayName || 'URL_Link');
+      const safeBase = (parsedName.name || 'URL_Link').replace(/[^a-zA-Z0-9._-]/g, '_') || 'URL_Link';
+      const referenceFileName = `${safeBase}.txt`;
+      const referenceContent = [
+        `Source URL: ${url}`,
+        `Captured URL: ${effectiveUrl}`,
+        `Display Name: ${displayName || ''}`,
+        `Uploaded By: ${req.user.email || ''}`,
+        `Uploaded At: ${new Date().toISOString()}`,
+      ].join('\n');
+      const referenceBuffer = Buffer.from(referenceContent, 'utf8');
+
+      const emailDir = (req.user.email || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown';
+      const defaultReferencePath = `${emailDir}/${referenceFileName}`;
+
+      let referenceStoragePath = defaultReferencePath;
+      if (folderId) {
+        try {
+          const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
+          if (folderFtpPath) {
+            referenceStoragePath = `${folderFtpPath}/${referenceFileName}`;
+          }
+        } catch (e) {
+          console.warn('[upload/url] reference folder path resolution failed, using default path:', e.message);
+        }
+      }
+
+      await uploadBufferToFtp(referenceBuffer, referenceStoragePath);
+
+      return {
+        referenceFileName,
+        referenceStoragePath,
+        referenceSize: referenceBuffer.length,
+      };
+    };
+
+    const saveAsUrlLinkEntry = async (displayName, message) => {
+      const { referenceFileName, referenceStoragePath, referenceSize } = await createReferenceTextFile(displayName);
+      const referenceUrl = `/api/files/${encodeStorageUrl(referenceStoragePath)}`;
+
+      let fileId = null;
+      if (adminDb) {
+        const docRef = await adminDb.collection('files').add({
+          originalName: displayName,
+          savedAs: referenceFileName,
+          storagePath: referenceStoragePath,
+          size: referenceSize,
+          type: 'text/plain',
+          fileCategory: 'Document',
+          uploadedBy: req.user.uid,
+          uploadedByEmail: req.user.email || '',
+          uploadedAt: new Date(),
+          status: 'pending',
+          description: description || '',
+          serviceCategory: serviceCategory || '',
+          sourceType: 'url',
+          sourceUrl: url,
+          folderId: folderId || null,
+          url: referenceUrl,
+        });
+        fileId = docRef.id;
+      }
+
+      return res.json({
+        success: true,
+        embedded: true,
+        message,
+        file: { originalName: displayName, savedAs: referenceFileName, size: referenceSize, type: 'text/plain' },
+        fileId,
+      });
+    };
+
     let finalName, finalPath, contentType, originalName;
 
     // For video platforms, use yt-dlp to extract the actual media
     if (isVideoPlatformUrl(url)) {
       try {
-        const result = await downloadWithYtdlp(url, chunksDir);
+        const result = await downloadWithYtdlp(effectiveUrl, chunksDir);
         finalPath = result.filePath;
         finalName = result.fileName;
         contentType = result.mimeType;
@@ -411,43 +486,23 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
         // frontend can display an inline player instead of a downloadable file.
         console.warn('[upload/url] yt-dlp failed, falling back to embed:', ytErr.message);
         const displayName = customName?.trim() || url;
-        let fileId = null;
-        if (adminDb) {
-          const docRef = await adminDb.collection('files').add({
-            originalName: displayName,
-            savedAs: null,
-            storagePath: null,
-            size: 0,
-            type: null,
-            fileCategory: 'Video',
-            uploadedBy: req.user.uid,
-            uploadedByEmail: req.user.email || '',
-            uploadedAt: new Date(),
-            status: 'pending',
-            description: description || '',
-            serviceCategory: serviceCategory || '',
-            sourceType: 'url',
-            sourceUrl: url,
-            folderId: folderId || null,
-            url: null,
-          });
-          fileId = docRef.id;
-        }
-        return res.json({
-          success: true,
-          embedded: true,
-          message: `Saved as embedded link — direct download unavailable.`,
-          file: { originalName: displayName, savedAs: null, size: 0, type: null },
-          fileId,
-        });
+        return saveAsUrlLinkEntry(displayName, 'Saved as source link reference — direct download unavailable.');
       }
     } else {
       // Direct URL — just fetch normally
-      const fetched = await fetchUrlDirect(url, chunksDir);
-      finalPath = fetched.finalPath;
-      finalName = fetched.finalName;
-      contentType = fetched.contentType;
-      originalName = fetched.originalName;
+      try {
+        const fetched = await fetchUrlDirect(effectiveUrl, chunksDir);
+        finalPath = fetched.finalPath;
+        finalName = fetched.finalName;
+        contentType = fetched.contentType;
+        originalName = fetched.originalName;
+      } catch (directErr) {
+        if (directErr.code === 'HTML_RESPONSE') {
+          const displayName = customName?.trim() || path.basename(new URL(url).pathname) || url;
+          return saveAsUrlLinkEntry(displayName, 'Saved as source link reference — direct download unavailable.');
+        }
+        throw directErr;
+      }
     }
 
     const prefix = buildFilePrefix(serviceCategory);
@@ -476,6 +531,9 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
     await uploadToFtp(finalPath, storagePath);
     fs.unlinkSync(finalPath);
 
+    // Always upload a URL reference text file for URL uploads
+    const { referenceStoragePath } = await createReferenceTextFile(displayName);
+
     // Save metadata to Firestore
     let fileId = null;
     if (adminDb) {
@@ -495,6 +553,8 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
         serviceCategory: serviceCategory || '',
         sourceType: 'url',
         sourceUrl: url,
+        sourceReferenceStoragePath: referenceStoragePath,
+        sourceReferenceUrl: `/api/files/${encodeStorageUrl(referenceStoragePath)}`,
         folderId: folderId || null,
         url: `/api/files/${encodeStorageUrl(storagePath)}`,
       });
@@ -526,7 +586,9 @@ async function fetchUrlDirect(url, destDir) {
 
   // Reject HTML responses — the URL returned a web page, not a media file
   if (contentType.includes('text/html')) {
-    throw new Error('The URL returned an HTML page instead of a media file. Use a direct link to the file, or try a supported video platform URL.');
+    const htmlErr = new Error('The URL returned an HTML page instead of a media file. Use a direct link to the file, or try a supported video platform URL.');
+    htmlErr.code = 'HTML_RESPONSE';
+    throw htmlErr;
   }
   const urlPath = new URL(url).pathname;
   const originalName = path.basename(urlPath) || 'downloaded-file';
@@ -538,6 +600,28 @@ async function fetchUrlDirect(url, destDir) {
   fs.writeFileSync(finalPath, buffer);
 
   return { finalPath, finalName, contentType, originalName };
+}
+
+function normalizeUrlUploadTarget(inputUrl) {
+  try {
+    const parsed = new URL(inputUrl);
+    const hostname = parsed.hostname.replace('www.', '');
+
+    if (hostname === 'drive.google.com') {
+      const pathMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
+      const idFromPath = pathMatch?.[1] || null;
+      const idFromQuery = parsed.searchParams.get('id');
+      const fileId = idFromPath || idFromQuery;
+
+      if (fileId) {
+        return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+      }
+    }
+
+    return inputUrl;
+  } catch {
+    return inputUrl;
+  }
 }
 
 // POST /api/files/bulk-download - Download multiple files as a zip (auth required)

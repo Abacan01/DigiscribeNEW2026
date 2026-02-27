@@ -31,6 +31,8 @@ function isEmbeddableUrl(url) {
   const embeddable = [
     'youtube.com', 'youtu.be',
     'vimeo.com',
+    'dailymotion.com', 'dai.ly',
+    'tiktok.com',
     'streamable.com',
     'drive.google.com',
   ];
@@ -45,6 +47,18 @@ function isEmbeddableUrl(url) {
 function getVimeoEmbedUrl(url) {
   const match = url.match(/vimeo\.com\/(\d+)/);
   return match ? `https://player.vimeo.com/video/${match[1]}` : null;
+}
+
+function getDailymotionEmbedUrl(url) {
+  const fullMatch = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/);
+  if (fullMatch) return `https://www.dailymotion.com/embed/video/${fullMatch[1]}`;
+  const shortMatch = url.match(/dai\.ly\/([a-zA-Z0-9]+)/);
+  return shortMatch ? `https://www.dailymotion.com/embed/video/${shortMatch[1]}` : null;
+}
+
+function getTikTokEmbedUrl(url) {
+  const match = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+  return match ? `https://www.tiktok.com/embed/v2/${match[1]}` : null;
 }
 
 function formatSize(bytes) {
@@ -108,7 +122,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
       .finally(() => setTextLoading(false));
   }, [mediaType, file.url]);
 
-  const sourceUrl = file.sourceUrl || file.url;
+  const sourceUrl = file.sourceReferenceUrl || file.sourceUrl || file.url;
   const isUrlUpload = file.sourceType === 'url';
 
   // Determine embed strategy for URL uploads
@@ -127,6 +141,16 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
       return { type: 'vimeo', embedUrl: vimeoUrl };
     }
 
+    const dailymotionUrl = getDailymotionEmbedUrl(sourceUrl);
+    if (dailymotionUrl) {
+      return { type: 'dailymotion', embedUrl: dailymotionUrl };
+    }
+
+    const tiktokUrl = getTikTokEmbedUrl(sourceUrl);
+    if (tiktokUrl) {
+      return { type: 'tiktok', embedUrl: tiktokUrl };
+    }
+
     // Dailymotion/Facebook embeds are intentionally opened externally to avoid
     // browser policy and monetization/player-id warnings in iframe previews.
 
@@ -140,6 +164,8 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
   const iconInfo = useMemo(() => {
     if (embedInfo?.type === 'youtube') return { icon: 'fa-brands fa-youtube', color: 'text-red-500 bg-red-50' };
     if (embedInfo?.type === 'vimeo') return { icon: 'fa-brands fa-vimeo-v', color: 'text-cyan-600 bg-cyan-50' };
+    if (embedInfo?.type === 'dailymotion') return { icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' };
+    if (embedInfo?.type === 'tiktok') return { icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' };
     if (embedInfo?.type === 'facebook') return { icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' };
     if (mediaType === 'image') return { icon: 'fa-image', color: 'text-violet-600 bg-violet-50' };
     if (mediaType === 'audio') return { icon: 'fa-music', color: 'text-sky-600 bg-sky-50' };
@@ -154,7 +180,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
     // URL uploads with embeddable content
     if (embedInfo) {
       return (
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3">
           <iframe
             src={embedInfo.embedUrl}
             className="w-full max-w-3xl aspect-video rounded-lg shadow-sm"
@@ -162,6 +188,15 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
             allowFullScreen
             title={file.originalName}
           />
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-primary transition-colors"
+          >
+            <i className="fas fa-up-right-from-square text-[10px]"></i>
+            If preview does not load, open direct source link
+          </a>
         </div>
       );
     }
