@@ -833,6 +833,12 @@ export default function DashboardPage() {
     setContextMenu({ x: e.clientX, y: e.clientY, folder, type: 'folder' });
   }, []);
 
+  // Right-click handler for attached transcription sub-rows
+  const handleTranscriptionContextMenu = useCallback((e, file) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'transcription' });
+  }, []);
+
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
 
@@ -848,6 +854,21 @@ export default function DashboardPage() {
         { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
         { divider: true },
         { icon: 'fa-trash-alt', label: 'Delete Folder', danger: true, onClick: () => setDeleteFolderConfirm(folder.id) },
+      ];
+    }
+
+    if (contextMenu.type === 'transcription') {
+      const file = contextMenu.file;
+      return [
+        { icon: 'fa-eye', label: 'View Transcription', onClick: () => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize }) },
+        { icon: 'fa-download', label: 'Download Transcription', onClick: () => {
+          const a = document.createElement('a');
+          a.href = getDownloadUrl(file.transcriptionUrl);
+          a.download = file.transcriptionName || 'Transcription';
+          document.body.appendChild(a); a.click(); a.remove();
+        }},
+        { divider: true },
+        { icon: 'fa-link', label: 'Copy Link', onClick: () => { navigator.clipboard.writeText(window.location.origin + file.transcriptionUrl).catch(() => {}); } },
       ];
     }
 
@@ -1543,7 +1564,7 @@ export default function DashboardPage() {
                             </tr>
                             {/* Transcription sub-row */}
                             {file.transcriptionUrl && (
-                              <tr className="bg-emerald-50/30">
+                              <tr className="bg-emerald-50/30" onContextMenu={(e) => handleTranscriptionContextMenu(e, file)}>
                                 <td className="px-3 py-2"></td>
                                 <td className="px-4 py-2" colSpan={3}>
                                   <div className="flex items-center gap-2.5 pl-11">
@@ -1551,9 +1572,14 @@ export default function DashboardPage() {
                                     <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
                                       <i className="fas fa-file-circle-check text-emerald-500 text-[10px]"></i>
                                     </div>
-                                    <span className="text-[12px] font-medium text-dark-text truncate max-w-[220px]" title={file.transcriptionName}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                                      className="text-[12px] font-medium text-dark-text truncate max-w-[220px] hover:text-primary transition-colors text-left"
+                                      title={file.transcriptionName}
+                                    >
                                       {file.transcriptionName || 'Transcription'}
-                                    </span>
+                                    </button>
                                   </div>
                                 </td>
                                 <td className="px-4 py-2">

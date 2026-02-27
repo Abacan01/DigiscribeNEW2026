@@ -323,9 +323,16 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
     const fileData = doc.data();
     const ownerEmail = fileData.uploadedByEmail || 'unknown';
 
-    // Build a unique name: Transcribed_{timestamp}_{originalName}
-    const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const transcriptionFileName = `Transcribed_${Date.now()}_${safeName}`;
+    // Auto-name: Transcribed_{parentFileNameWithoutExt}.{transcriptionExt}
+    const parentName = fileData.originalName || req.file.originalname;
+    const parentExt = parentName.includes('.') ? parentName.slice(parentName.lastIndexOf('.')) : '';
+    const parentNameWithoutExt = parentExt ? parentName.slice(0, -parentExt.length) : parentName;
+    const transcriptionExt = req.file.originalname.includes('.')
+      ? req.file.originalname.slice(req.file.originalname.lastIndexOf('.'))
+      : '';
+    const safeParentBase = parentNameWithoutExt.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const displayName = `Transcribed_${parentNameWithoutExt}${transcriptionExt}`;
+    const transcriptionFileName = `Transcribed_${safeParentBase}${transcriptionExt}`;
     const ftpPath = buildTranscriptionFtpPath(ownerEmail, transcriptionFileName);
 
     // If a previous transcription exists, delete it from FTP
@@ -347,7 +354,7 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
     // Update Firestore
     await docRef.update({
       transcriptionUrl,
-      transcriptionName: req.file.originalname,
+      transcriptionName: displayName,
       transcriptionStoragePath: ftpPath,
       transcriptionSize: req.file.size,
       transcriptionType: req.file.mimetype || 'application/octet-stream',
@@ -359,7 +366,7 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
     res.json({
       success: true,
       transcriptionUrl,
-      transcriptionName: req.file.originalname,
+      transcriptionName: displayName,
       transcriptionSize: req.file.size,
     });
   } catch (err) {

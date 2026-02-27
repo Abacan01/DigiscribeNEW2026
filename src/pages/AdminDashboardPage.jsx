@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { fileUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
@@ -1198,6 +1198,23 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       ];
     }
 
+    if (contextMenu.type === 'transcription') {
+      const file = contextMenu.file;
+      return [
+        { icon: 'fa-eye', label: 'View Transcription', onClick: () => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize }) },
+        { icon: 'fa-download', label: 'Download Transcription', onClick: () => {
+          const a = document.createElement('a');
+          a.href = fileUrl(file.transcriptionUrl) + '?download=1';
+          a.download = file.transcriptionName || 'Transcription';
+          document.body.appendChild(a); a.click(); a.remove();
+        }},
+        { divider: true },
+        { icon: 'fa-link', label: 'Copy Link', onClick: () => { navigator.clipboard.writeText(window.location.origin + fileUrl(file.transcriptionUrl)).catch(() => {}); } },
+        { divider: true },
+        { icon: 'fa-trash-alt', label: 'Remove Transcription', danger: true, onClick: () => { handleRemoveTranscription(file.id); setContextMenu(null); } },
+      ];
+    }
+
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
     const items = [];
@@ -1990,8 +2007,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   const isSelected = selectedIds.has(file.id);
                   const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
                   return (
+                    <React.Fragment key={file.id}>
                     <tr
-                      key={file.id}
                       className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
                       draggable={renamingFileId !== file.id}
                       onDragStart={(e) => handleDragStart(e, file, 'file')}
@@ -2160,6 +2177,80 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                         </div>
                       </td>
                     </tr>
+                    {/* Transcription sub-row */}
+                    {file.transcriptionUrl && (
+                      <tr
+                        className="bg-emerald-50/30"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'transcription' });
+                        }}
+                      >
+                        <td className="px-3 py-2"></td>
+                        <td className="px-4 py-2" colSpan={4}>
+                          <div className="flex items-center gap-2.5 pl-11">
+                            <span className="text-gray-300 text-xs select-none">└─</span>
+                            <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                              <i className="fas fa-file-circle-check text-emerald-500 text-[10px]"></i>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                              className="text-[12px] font-medium text-dark-text truncate max-w-[220px] hover:text-primary transition-colors text-left"
+                              title={file.transcriptionName}
+                            >
+                              {file.transcriptionName || 'Transcription'}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className="text-[11px] text-gray-text">
+                            {file.transcriptionAttachedAt ? formatRelativeDate(typeof file.transcriptionAttachedAt === 'object' && file.transcriptionAttachedAt.toDate ? file.transcriptionAttachedAt.toDate().toISOString() : file.transcriptionAttachedAt) : '--'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className="text-[11px] text-gray-text">{file.transcriptionSize > 0 ? formatSize(file.transcriptionSize) : '--'}</span>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                              title="View transcription"
+                            >
+                              <i className="fas fa-eye text-[10px]"></i>
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const a = document.createElement('a');
+                                a.href = fileUrl(file.transcriptionUrl) + '?download=1';
+                                a.download = file.transcriptionName || 'Transcription';
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                              title="Download transcription"
+                            >
+                              <i className="fas fa-download text-[10px]"></i>
+                              Download
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTranscription(file.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Remove transcription"
+                            >
+                              <i className="fas fa-trash-alt text-[10px]"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
