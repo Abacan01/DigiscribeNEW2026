@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { fileUrl } from '../lib/fileUrl';
+import { fileUrl, fileDownloadUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
 import FolderRow from '../components/dashboard/FolderRow';
 import FolderCard from '../components/dashboard/FolderCard';
@@ -15,6 +15,9 @@ import ContextMenu from '../components/dashboard/ContextMenu';
 import DocumentViewerModal from '../components/dashboard/DocumentViewerModal';
 import FolderFilterToolbar from '../components/dashboard/FolderFilterToolbar';
 import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import RenameDialog from '../components/ui/RenameDialog';
+import { Button } from '../components/ui/button';
 import CreateUserForm from '../components/admin/CreateUserForm';
 import UserTable from '../components/admin/UserTable';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
@@ -22,6 +25,7 @@ import { useFolders } from '../hooks/useFolders';
 import { useFolderActions } from '../hooks/useFolderActions';
 import { useTranscriptions } from '../hooks/useTranscriptions';
 import { useAdminUsers } from '../hooks/useAdminUsers';
+import { useAppToast } from '../hooks/useAppToast';
 import { useAuth } from '../contexts/AuthContext';
 
 const TABS = [
@@ -135,6 +139,7 @@ function getFileIcon(type) {
   if (type.includes('excel') || type.includes('spreadsheet')) return 'fa-file-excel';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'fa-file-powerpoint';
   if (type === 'text/plain' || type === 'text/csv') return 'fa-file-alt';
+  if (type === 'application/x-url') return 'fa-link';
   return 'fa-file';
 }
 
@@ -147,18 +152,21 @@ function getFileIconColor(type) {
   if (type.includes('word') || type === 'application/msword') return 'text-blue-600 bg-blue-50';
   if (type.includes('excel') || type.includes('spreadsheet')) return 'text-green-600 bg-green-50';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'text-orange-600 bg-orange-50';
+  if (type === 'application/x-url') return 'text-indigo-600 bg-indigo-50';
   return 'text-gray-400 bg-gray-50';
 }
 
 const PLATFORM_MAP = [
-  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-youtube', color: 'text-red-600 bg-red-50' },
-  { pattern: /facebook\.com|fb\.com/i, label: 'Facebook', icon: 'fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
-  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-instagram', color: 'text-pink-600 bg-pink-50' },
-  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-tiktok', color: 'text-gray-900 bg-gray-100' },
-  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
-  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
-  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
-  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-twitch', color: 'text-violet-600 bg-violet-50' },
+  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-brands fa-youtube', color: 'text-red-600 bg-red-50' },
+  { pattern: /facebook\.com|fb\.com|fb\.watch/i, label: 'Facebook', icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
+  { pattern: /dailymotion\.com|dai\.ly/i, label: 'Dailymotion', icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /drive\.google\.com|docs\.google\.com/i, label: 'Google Drive', icon: 'fa-brands fa-google-drive', color: 'text-emerald-600 bg-emerald-50' },
+  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-brands fa-instagram', color: 'text-pink-600 bg-pink-50' },
+  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' },
+  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-brands fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
+  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-brands fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-brands fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
+  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-brands fa-twitch', color: 'text-violet-600 bg-violet-50' },
 ];
 
 function getUrlPlatform(sourceUrl) {
@@ -170,6 +178,7 @@ function getUrlPlatform(sourceUrl) {
 
 function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoading, folderActions, refetchFolders }) {
   const { user, getIdToken } = useAuth();
+  const toast = useAppToast();
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = folderActions;
 
   const [statusFilter, setStatusFilter] = useState('');
@@ -200,6 +209,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Selection state
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [deleteAllDevConfirm, setDeleteAllDevConfirm] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkMoveActive, setBulkMoveActive] = useState(false);
   const [bulkStatusTarget, setBulkStatusTarget] = useState(null); // status to apply in bulk
@@ -213,7 +223,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [userPage, setUserPage] = useState(1);
 
   // Root view mode: 'users' = per-user folders, 'general' = all files combined
-  const [rootViewMode, setRootViewMode] = useState('users');
+  const [rootViewMode, setRootViewMode] = useState('general');
 
   // Folder state
   const [currentFolderId, setCurrentFolderId] = useState(null);
@@ -233,6 +243,34 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [transcriptionTarget, setTranscriptionTarget] = useState(null); // file to attach transcription to
   const [docViewerFile, setDocViewerFile] = useState(null);
   const [transcriptionUploading, setTranscriptionUploading] = useState(false);
+  const [transcriptionRemoving, setTranscriptionRemoving] = useState(false);
+  const [removeTranscriptionConfirm, setRemoveTranscriptionConfirm] = useState(null);
+  const [renameModal, setRenameModal] = useState(null);
+
+  useEffect(() => {
+    if (!message) return;
+    if (message.type === 'success') {
+      toast.success(message.text);
+      return;
+    }
+    toast.error(message.text);
+  }, [message, toast]);
+
+  useEffect(() => {
+    if (!filesError) return;
+    toast.error(filesError, 'Unable to load files');
+  }, [filesError, toast]);
+
+  useEffect(() => {
+    if (!transcriptionTarget) return;
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      if (transcriptionUploading) return;
+      setTranscriptionTarget(null);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [transcriptionTarget, transcriptionUploading]);
 
   useEffect(() => {
     dashboardStateHydratedRef.current = false;
@@ -255,7 +293,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       if (typeof state.searchQuery === 'string') setSearchQuery(state.searchQuery);
       if (typeof state.currentFolderId === 'string' || state.currentFolderId === null) setCurrentFolderId(state.currentFolderId ?? null);
       if (typeof state.selectedUserEmail === 'string' || state.selectedUserEmail === null) setSelectedUserEmail(state.selectedUserEmail ?? null);
-      if (state.rootViewMode === 'users' || state.rootViewMode === 'general') setRootViewMode(state.rootViewMode);
       if (Number.isInteger(state.currentPage) && state.currentPage > 0) setCurrentPage(state.currentPage);
     } catch {
       // Ignore malformed cache entries
@@ -281,7 +318,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       searchQuery,
       currentFolderId,
       selectedUserEmail,
-      rootViewMode,
       currentPage,
       updatedAt: Date.now(),
     };
@@ -290,7 +326,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     } catch {
       // Ignore storage quota/private mode errors
     }
-  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, rootViewMode, currentPage]);
+  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, currentPage]);
 
   const applyNonStatusFilters = useCallback((files, { scopedToCurrentFolder }) => {
     let result = [...files];
@@ -305,6 +341,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       if (t.includes('excel') || t.includes('spreadsheet')) return 'Excel';
       if (t.includes('powerpoint') || t.includes('presentation')) return 'PowerPoint';
       if (t === 'text/plain' || t === 'text/csv') return 'Text';
+      if (t === 'application/x-url') return 'URL';
       return 'Other';
     };
 
@@ -748,6 +785,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Remove transcription from a file
   const handleRemoveTranscription = useCallback(async (fileId) => {
     setMessage(null);
+    setTranscriptionRemoving(true);
     try {
       const token = await getIdToken();
       const res = await fetch(`/api/files/metadata/${fileId}/transcription`, {
@@ -761,6 +799,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
+      setTranscriptionRemoving(false);
+      setRemoveTranscriptionConfirm(null);
       setTimeout(() => setMessage(null), 3000);
     }
   }, [getIdToken]);
@@ -825,25 +865,82 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setBulkLoading(true);
     setMessage(null);
     try {
-      let deletedFiles = 0;
-      let deletedFolders = 0;
-      let skippedFolders = 0;
+      const token = await getIdToken();
 
-      if (selectedFileIds.length > 0) {
-        const token = await getIdToken();
+      // Build selected folder subtree ids (selected folder + all descendants).
+      const folderMap = new Map(allFolders.map((folder) => [folder.id, folder]));
+      const childrenByParent = new Map();
+      for (const folder of allFolders) {
+        const parentId = folder.parentId || null;
+        if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+        childrenByParent.get(parentId).push(folder.id);
+      }
+
+      const folderIdsToDelete = new Set();
+      for (const rootId of selectedFolderIds) {
+        if (!folderMap.has(rootId)) continue;
+        const stack = [rootId];
+        while (stack.length > 0) {
+          const currentId = stack.pop();
+          if (folderIdsToDelete.has(currentId)) continue;
+          folderIdsToDelete.add(currentId);
+          const children = childrenByParent.get(currentId) || [];
+          for (const childId of children) stack.push(childId);
+        }
+      }
+
+      // Delete selected files + files inside selected folder subtrees.
+      const fileIdsToDelete = new Set(selectedFileIds);
+      for (const file of allFiles) {
+        const folderId = file.folderId || null;
+        if (folderId && folderIdsToDelete.has(folderId)) {
+          fileIdsToDelete.add(file.id);
+        }
+      }
+
+      let deletedFiles = 0;
+      const fileIdList = [...fileIdsToDelete];
+      for (let index = 0; index < fileIdList.length; index += 100) {
+        const batch = fileIdList.slice(index, index + 100);
+        if (batch.length === 0) continue;
         const res = await fetch('/api/files/bulk-delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ fileIds: selectedFileIds }),
+          body: JSON.stringify({ fileIds: batch }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'Bulk delete failed.');
-        deletedFiles = Number(data.deleted || 0);
+        deletedFiles += Number(data.deleted || 0);
       }
 
-      for (const folderId of selectedFolderIds) {
+      // Delete folders deepest-first so parents don't reparent descendants.
+      const depthCache = new Map();
+      const getDepth = (folderId) => {
+        if (depthCache.has(folderId)) return depthCache.get(folderId);
+        const folder = folderMap.get(folderId);
+        if (!folder || !folder.parentId || !folderMap.has(folder.parentId)) {
+          depthCache.set(folderId, 0);
+          return 0;
+        }
+        const depth = 1 + getDepth(folder.parentId);
+        depthCache.set(folderId, depth);
+        return depth;
+      };
+
+      const orderedFolders = [...folderIdsToDelete].sort((a, b) => getDepth(b) - getDepth(a));
+      let deletedFolders = 0;
+      let skippedFolders = 0;
+      for (const folderId of orderedFolders) {
         try {
-          await deleteFolder(folderId);
+          const res = await fetch(`/api/folders/${folderId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            skippedFolders++;
+            continue;
+          }
           deletedFolders++;
         } catch {
           skippedFolders++;
@@ -863,7 +960,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setBulkDeleteConfirm(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [selectedFileIds, selectedFolderIds, getIdToken, deleteFolder]);
+  }, [selectedFileIds, selectedFolderIds, getIdToken, allFiles, allFolders]);
 
   const copyFileUrl = useCallback((file) => {
     const url = fileUrl(file.url);
@@ -916,7 +1013,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     try {
       await deleteFolder(folderId);
       await refetchFolders();
-      setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
+      setMessage({ type: 'success', text: 'Folder and its contents deleted.' });
       setTimeout(() => setMessage(null), 3000);
       if (currentFolderId === folderId) {
         const folder = allFolders.find((f) => f.id === folderId);
@@ -1113,6 +1210,86 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [selectedFileIds, getIdToken]);
 
+  const handleDeleteAllDev = useCallback(async () => {
+    if (!import.meta.env.DEV) return;
+    if (bulkLoading) return;
+
+    const totalFiles = allFiles.length;
+    const totalFolders = allFolders.length;
+
+    if (totalFiles === 0 && totalFolders === 0) {
+      setMessage({ type: 'success', text: 'Nothing to delete.' });
+      setTimeout(() => setMessage(null), 2500);
+      return;
+    }
+
+    setBulkLoading(true);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const fileIds = allFiles.map((f) => f.id).filter(Boolean);
+
+      let deletedFiles = 0;
+      for (let index = 0; index < fileIds.length; index += 100) {
+        const chunk = fileIds.slice(index, index + 100);
+        if (chunk.length === 0) continue;
+
+        const res = await fetch('/api/files/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ fileIds: chunk }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed while deleting files.');
+        deletedFiles += Number(data.deleted || 0);
+      }
+
+      const folderMap = new Map(allFolders.map((folder) => [folder.id, folder]));
+      const depthCache = new Map();
+      const getDepth = (folderId) => {
+        if (depthCache.has(folderId)) return depthCache.get(folderId);
+        const folder = folderMap.get(folderId);
+        if (!folder || !folder.parentId || !folderMap.has(folder.parentId)) {
+          depthCache.set(folderId, 0);
+          return 0;
+        }
+        const depth = 1 + getDepth(folder.parentId);
+        depthCache.set(folderId, depth);
+        return depth;
+      };
+
+      const foldersByDepthDesc = [...allFolders]
+        .map((folder) => ({ id: folder.id, depth: getDepth(folder.id) }))
+        .sort((a, b) => b.depth - a.depth)
+        .map((folder) => folder.id);
+
+      let deletedFolders = 0;
+      let skippedFolders = 0;
+      for (const folderId of foldersByDepthDesc) {
+        const res = await fetch(`/api/folders/${folderId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          skippedFolders += 1;
+          continue;
+        }
+        deletedFolders += 1;
+      }
+
+      setSelectedIds(new Set());
+      const skippedText = skippedFolders > 0 ? `, ${skippedFolders} folder(s) skipped` : '';
+      setMessage({ type: 'success', text: `DEV reset done: ${deletedFiles} file(s), ${deletedFolders} folder(s) deleted${skippedText}.` });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to delete all data.' });
+    } finally {
+      setDeleteAllDevConfirm(false);
+      setBulkLoading(false);
+      setTimeout(() => setMessage(null), 3500);
+    }
+  }, [allFiles, allFolders, bulkLoading, getIdToken]);
+
   // Folder download as ZIP
   const handleFolderDownload = useCallback(async (folder) => {
     setMessage(null);
@@ -1152,7 +1329,12 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         if (allPageIds.size > 0) {
           setSelectedIds((prev) => {
             const next = new Set(prev);
-            for (const id of allPageIds) next.add(id);
+            const isAllSelected = [...allPageIds].every((id) => next.has(id));
+            if (isAllSelected) {
+              for (const id of allPageIds) next.delete(id);
+            } else {
+              for (const id of allPageIds) next.add(id);
+            }
             return next;
           });
         }
@@ -1179,6 +1361,21 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setContextMenu({ x: e.clientX, y: e.clientY, folder, type: 'folder' });
   }, []);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeContextMenu = () => setContextMenu(null);
+
+    window.addEventListener('scroll', closeContextMenu, true);
+    window.addEventListener('wheel', closeContextMenu, true);
+    window.addEventListener('touchmove', closeContextMenu, true);
+
+    return () => {
+      window.removeEventListener('scroll', closeContextMenu, true);
+      window.removeEventListener('wheel', closeContextMenu, true);
+      window.removeEventListener('touchmove', closeContextMenu, true);
+    };
+  }, [contextMenu]);
+
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
 
@@ -1186,10 +1383,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       const folder = contextMenu.folder;
       return [
         { icon: 'fa-folder-open', label: 'Open', onClick: () => setCurrentFolderId(folder.id) },
-        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
-          setRenamingFolder(folder.id);
-          setRenameValue(folder.name);
-        }},
+        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => setRenameModal({ type: 'folder', id: folder.id, value: folder.name || '' }) },
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
         { icon: 'fa-file-archive', label: 'Download as ZIP', onClick: () => handleFolderDownload(folder) },
         { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
@@ -1204,14 +1398,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         { icon: 'fa-eye', label: 'View Transcription', onClick: () => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize }) },
         { icon: 'fa-download', label: 'Download Transcription', onClick: () => {
           const a = document.createElement('a');
-          a.href = fileUrl(file.transcriptionUrl) + '?download=1';
+          a.href = fileDownloadUrl(file.transcriptionUrl);
           a.download = file.transcriptionName || 'Transcription';
           document.body.appendChild(a); a.click(); a.remove();
         }},
         { divider: true },
         { icon: 'fa-link', label: 'Copy Link', onClick: () => { navigator.clipboard.writeText(window.location.origin + fileUrl(file.transcriptionUrl)).catch(() => {}); } },
         { divider: true },
-        { icon: 'fa-trash-alt', label: 'Remove Transcription', danger: true, onClick: () => { handleRemoveTranscription(file.id); setContextMenu(null); } },
+        { icon: 'fa-trash-alt', label: 'Remove Transcription', danger: true, onClick: () => { setRemoveTranscriptionConfirm({ id: file.id, name: file.transcriptionName || 'Transcription' }); setContextMenu(null); } },
       ];
     }
 
@@ -1235,13 +1429,11 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         const name = file.originalName || '';
         const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
         const base = ext ? name.slice(0, -ext.length) : name;
-        setRenamingFileId(file.id);
-        setRenameFileExt(ext);
-        setRenameFileValue(base);
+        setRenameModal({ type: 'file', id: file.id, value: base, suffix: ext });
       } });
       items.push({ icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
         const a = document.createElement('a');
-        a.href = fileUrl(file.url) + '?download=1';
+        a.href = fileDownloadUrl(file.url);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -1262,9 +1454,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     if (selCount > 1) {
       items.push({ icon: 'fa-download', label: `Download ${selCount} Selected as ZIP`, onClick: () => handleBulkDownload() });
       items.push({ divider: true });
-      items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
+      items.push({ icon: 'fa-arrows-alt', label: 'Move Selected', onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
-      items.push({ icon: 'fa-trash-alt', label: `Delete ${selCount} Selected`, danger: true, onClick: () => setBulkDeleteConfirm(true) });
+      items.push({ icon: 'fa-trash-alt', label: 'Delete Selected', danger: true, onClick: () => setBulkDeleteConfirm(true) });
     }
 
     return items;
@@ -1333,22 +1525,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           </button>
         ))}
       </div>
-      )}
-
-      {/* Messages */}
-      {message && (
-        <div className={`p-3 rounded-xl border flex items-center gap-3 ${
-          message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-        }`}>
-          <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-          <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{message.text}</p>
-        </div>
-      )}
-      {filesError && (
-        <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-          <i className="fas fa-exclamation-triangle text-red-500"></i>
-          <p className="text-sm font-medium text-red-700">Error loading files: {filesError}</p>
-        </div>
       )}
 
       {/* Filter Bar – conditionally render based on root vs inside folder (hidden at virtual root) */}
@@ -1596,6 +1772,27 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         </div>
       </div>
 
+      {import.meta.env.DEV && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-3 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-red-700 bg-red-100 border border-red-200">
+            <i className="fas fa-flask text-[10px]"></i>
+            Development Only
+          </span>
+          <p className="text-xs text-red-700">Wipes all files and folders for testing.</p>
+          <Button
+            type="button"
+            onClick={() => setDeleteAllDevConfirm(true)}
+            disabled={bulkLoading}
+            variant="destructive"
+            size="sm"
+            className="ml-auto"
+          >
+            {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-trash-alt text-[10px]"></i>}
+            Delete All Files & Folders
+          </Button>
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selectedCount > 0 && (
         <div className="bg-white rounded-xl border border-primary/20 p-3 shadow-sm flex items-center gap-3 flex-wrap">
@@ -1608,22 +1805,26 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             </span>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <button
+            <Button
               onClick={handleBulkDownload}
               disabled={bulkLoading || selectedFileCount === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50"
+              variant="secondary"
+              size="sm"
+              className="text-primary bg-primary/5 hover:bg-primary/10"
             >
               {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-download text-[10px]"></i>}
               Download ZIP
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setBulkMoveActive(true)}
               disabled={bulkLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+              variant="secondary"
+              size="sm"
+              className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
             >
               <i className="fas fa-folder-open text-[10px]"></i>
               Move to Folder
-            </button>
+            </Button>
             {selectedFileCount > 0 && bulkStatusTarget ? (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-gray-500 font-medium">Set status:</span>
@@ -1642,73 +1843,35 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 </button>
               </div>
             ) : selectedFileCount > 0 ? (
-              <button
+              <Button
                 onClick={() => setBulkStatusTarget(true)}
                 disabled={bulkLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 transition-colors disabled:opacity-50"
+                variant="secondary"
+                size="sm"
+                className="text-sky-600 bg-sky-50 hover:bg-sky-100"
               >
                 <i className="fas fa-exchange-alt text-[10px]"></i>
                 Change Status
-              </button>
+              </Button>
             ) : null}
-            {bulkDeleteConfirm ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-red-600 font-medium">Delete {selectedCount} items?</span>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={bulkLoading}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                >
-                  {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-check text-[10px]"></i>}
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setBulkDeleteConfirm(false)}
-                  className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setBulkDeleteConfirm(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
-              >
-                <i className="fas fa-trash-alt text-[10px]"></i>
-                Delete All
-              </button>
-            )}
-            <button
+            <Button
+              onClick={() => setBulkDeleteConfirm(true)}
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:bg-red-50"
+            >
+              <i className="fas fa-trash-alt text-[10px]"></i>
+              Delete Selected
+            </Button>
+            <Button
               onClick={() => setSelectedIds(new Set())}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-50 transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-dark-text hover:bg-gray-50"
             >
               <i className="fas fa-times text-[10px]"></i>
               Clear
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete folder confirmation */}
-      {deleteFolderConfirm && (
-        <div className="p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
-          <i className="fas fa-exclamation-triangle text-red-500"></i>
-          <span className="text-sm font-medium text-red-700">
-            Delete this folder? Contents will be moved to the parent folder.
-          </span>
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => handleDeleteFolder(deleteFolderConfirm)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
-            >
-              Delete
-            </button>
-            <button
-              onClick={() => setDeleteFolderConfirm(null)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-            >
-              Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -2013,7 +2176,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 {paginatedFiles.map((file) => {
                   const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                   const isSelected = selectedIds.has(file.id);
-                  const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
+                  const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
+                  const fileIconClass = urlPlatform ? urlPlatform.icon : `fas ${getFileIcon(file.type)}`;
+                  const fileIconColor = urlPlatform ? urlPlatform.color : getFileIconColor(file.type);
                   return (
                     <React.Fragment key={file.id}>
                     <tr
@@ -2035,10 +2200,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                           <button
                             type="button"
                             onClick={() => setPreviewFile(file)}
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} hover:scale-105 transition-transform cursor-pointer`}
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${fileIconColor} hover:scale-105 transition-transform cursor-pointer`}
                             title="Preview file"
                           >
-                            <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
+                            <i className={`${fileIconClass} text-xs`}></i>
                           </button>
                           <div className="min-w-0">
                             {renamingFileId === file.id ? (
@@ -2087,17 +2252,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                                 {folderMap[file.folderId] || 'folder'}
                               </button>
                             )}
-                            {file.transcriptionUrl && (
-                              <button
-                                type="button"
-                                onClick={() => setTranscriptionTarget(file)}
-                                className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors"
-                                title={`Transcription: ${file.transcriptionName}`}
-                              >
-                                <i className="fas fa-file-circle-check text-[8px]"></i>
-                                {file.transcriptionName}
-                              </button>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -2141,47 +2295,32 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button
+                          <Button
                             type="button"
                             onClick={() => setPreviewFile(file)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5"
                             title="Preview file"
                           >
                             <i className="fas fa-eye text-[10px]"></i>
                             View
-                          </button>
-                          {deleteConfirm === file.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteFile(file.id)}
-                                disabled={deleteLoading === file.id}
-                                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                              >
-                                {deleteLoading === file.id ? (
-                                  <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                                ) : (
-                                  <i className="fas fa-check text-[10px]"></i>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteConfirm(null)}
-                                className="inline-flex items-center px-2 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                              >
-                                <i className="fas fa-times text-[10px]"></i>
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirm(file.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                              title="Delete file"
-                            >
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => setDeleteConfirm(file.id)}
+                            disabled={deleteLoading === file.id}
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Delete file"
+                          >
+                            {deleteLoading === file.id ? (
+                              <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                            ) : (
                               <i className="fas fa-trash-alt text-[10px]"></i>
-                            </button>
-                          )}
+                            )}
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -2234,7 +2373,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                               type="button"
                               onClick={() => {
                                 const a = document.createElement('a');
-                                a.href = fileUrl(file.transcriptionUrl) + '?download=1';
+                                a.href = fileDownloadUrl(file.transcriptionUrl);
                                 a.download = file.transcriptionName || 'Transcription';
                                 document.body.appendChild(a);
                                 a.click();
@@ -2248,7 +2387,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleRemoveTranscription(file.id)}
+                              onClick={() => setRemoveTranscriptionConfirm({ id: file.id, name: file.transcriptionName || 'Transcription' })}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                               title="Remove transcription"
                             >
@@ -2291,7 +2430,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             {paginatedFiles.map((file) => {
               const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
               const isSelected = selectedIds.has(file.id);
-              const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
+              const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
+              const fileIconClass = urlPlatform ? urlPlatform.icon : `fas ${getFileIcon(file.type)}`;
+              const fileIconColor = urlPlatform ? urlPlatform.color : getFileIconColor(file.type);
               return (
                 <div
                   key={file.id}
@@ -2310,9 +2451,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                     <button
                       type="button"
                       onClick={() => setPreviewFile(file)}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} cursor-pointer hover:scale-105 transition-transform`}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${fileIconColor} cursor-pointer hover:scale-105 transition-transform`}
                     >
-                      <i className={`fas ${getFileIcon(file.type)} text-sm`}></i>
+                      <i className={`${fileIconClass} text-sm`}></i>
                     </button>
                     <div className="flex-1 min-w-0">
                       {renamingFileId === file.id ? (
@@ -2374,38 +2515,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       <i className="fas fa-eye text-[10px]"></i>
                       View
                     </button>
-                    {deleteConfirm === file.id ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteFile(file.id)}
-                          disabled={deleteLoading === file.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                        >
-                          {deleteLoading === file.id ? (
-                            <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                          ) : (
-                            <><i className="fas fa-check text-[10px]"></i>Confirm</>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirm(null)}
-                          className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirm(file.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <i className="fas fa-trash-alt text-[10px]"></i>
-                        Delete
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm(file.id)}
+                      disabled={deleteLoading === file.id}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {deleteLoading === file.id ? (
+                        <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                      ) : (
+                        <><i className="fas fa-trash-alt text-[10px]"></i>Delete</>
+                      )}
+                    </button>
                     {statusLoading === file.id ? (
                       <i className="fas fa-spinner fa-spin text-primary text-sm ml-auto"></i>
                     ) : (
@@ -2430,14 +2551,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
           {/* Mobile select all bar */}
           <div className="lg:hidden px-4 pb-3">
-            <button
+            <Button
               onClick={toggleSelectAll}
-              className="w-full py-2.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-text hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              variant="outline"
+              size="sm"
+              className="w-full h-auto py-2.5 text-xs text-gray-text hover:bg-gray-50 gap-2"
             >
               <input type="checkbox" checked={allSelected} readOnly className="w-3.5 h-3.5 rounded border-gray-300 text-primary pointer-events-none" />
               {allSelected ? 'Deselect All' : 'Select All'}
               <span className="text-gray-300 font-mono text-[9px]">Ctrl+A</span>
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -2527,9 +2650,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   onSelect={toggleSelect}
                   onDelete={(id) => setDeleteConfirm(id)}
                   deleteLoading={deleteLoading === file.id}
-                  isDeleteConfirm={deleteConfirm === file.id}
-                  onDeleteConfirm={handleDeleteFile}
-                  onDeleteCancel={() => setDeleteConfirm(null)}
                   folderName={statusFilter && !isInsideFolder && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                   onOpenFolder={statusFilter && !isInsideFolder && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
                   onTranscription={(f) => setTranscriptionTarget(f)}
@@ -2677,6 +2797,80 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         />
       )}
 
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete File"
+        message="Delete this file permanently?"
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteLoading === deleteConfirm}
+        onConfirm={() => deleteConfirm && handleDeleteFile(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        title="Delete Selected Items"
+        message={`Delete ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''}?`}
+        confirmLabel="Delete Selected"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteFolderConfirm}
+        title="Delete Folder"
+        message="Delete this folder and all items inside it?"
+        confirmLabel="Delete Folder"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={() => deleteFolderConfirm && handleDeleteFolder(deleteFolderConfirm)}
+        onCancel={() => setDeleteFolderConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={deleteAllDevConfirm}
+        title="Delete All Files & Folders"
+        message={`DEV ONLY: Permanently delete ${allFiles.length} file(s) and ${allFolders.length} folder(s)?`}
+        confirmLabel="Delete Everything"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={handleDeleteAllDev}
+        onCancel={() => setDeleteAllDevConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!removeTranscriptionConfirm}
+        title="Remove Transcription"
+        message={`Remove transcription \"${removeTranscriptionConfirm?.name || 'Transcription'}\"?`}
+        confirmLabel="Remove"
+        tone="danger"
+        loading={transcriptionRemoving}
+        onConfirm={() => removeTranscriptionConfirm?.id && handleRemoveTranscription(removeTranscriptionConfirm.id)}
+        onCancel={() => setRemoveTranscriptionConfirm(null)}
+      />
+
+      <RenameDialog
+        open={!!renameModal}
+        title={renameModal?.type === 'file' ? 'Rename File' : 'Rename Folder'}
+        description={renameModal?.type === 'file' ? 'Enter a new file name.' : 'Enter a new folder name.'}
+        initialValue={renameModal?.value || ''}
+        suffix={renameModal?.type === 'file' ? (renameModal?.suffix || '') : ''}
+        confirmLabel="Save"
+        onConfirm={async (newName) => {
+          if (!renameModal?.id) return;
+          if (renameModal.type === 'file') {
+            await handleRenameFile(renameModal.id, newName);
+          } else {
+            await handleRenameFolder(renameModal.id, newName);
+          }
+          setRenameModal(null);
+        }}
+        onClose={() => setRenameModal(null)}
+      />
+
       {/* Attach Transcription Modal */}
       {transcriptionTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !transcriptionUploading && setTranscriptionTarget(null)}>
@@ -2725,7 +2919,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                         <i className="fas fa-eye text-xs"></i>
                       </button>
                       <button
-                        onClick={() => handleRemoveTranscription(transcriptionTarget.id)}
+                        onClick={() => setRemoveTranscriptionConfirm({ id: transcriptionTarget.id, name: transcriptionTarget.transcriptionName || 'Transcription' })}
                         className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors"
                         title="Remove transcription"
                       >
@@ -2816,12 +3010,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 /* ───────────────────── Transcriptions Tab ──────────────────────── */
 
 function TranscriptionsTab() {
+  const toast = useAppToast();
   const { transcriptions, loading, error, fetchTranscriptions } = useTranscriptions();
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchTranscriptions({});
   }, [fetchTranscriptions]);
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error, 'Unable to load transcriptions');
+  }, [error, toast]);
 
   const filteredTranscriptions = useMemo(() => {
     if (!searchQuery.trim()) return transcriptions;
@@ -2846,10 +3046,7 @@ function TranscriptionsTab() {
   if (error) {
     return (
       <div className="bg-white rounded-xl border border-gray-100 p-8">
-        <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-          <i className="fas fa-exclamation-circle text-red-500"></i>
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
+        <p className="text-sm text-gray-text text-center">Couldn’t load transcriptions.</p>
         <div className="mt-4 text-center">
           <button
             onClick={() => fetchTranscriptions({})}
@@ -3002,6 +3199,7 @@ function TranscriptionsTab() {
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
+  const toast = useAppToast();
   const [activeTab, setActiveTab] = useState('files');
   const [userMessage, setUserMessage] = useState(null);
 
@@ -3016,10 +3214,18 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (userMessage) {
-      const timer = setTimeout(() => setUserMessage(null), 5000);
-      return () => clearTimeout(timer);
+      if (userMessage.type === 'success') {
+        toast.success(userMessage.text);
+        return;
+      }
+      toast.error(userMessage.text);
     }
-  }, [userMessage]);
+  }, [userMessage, toast]);
+
+  useEffect(() => {
+    if (!usersError) return;
+    toast.error(usersError, 'Unable to load users');
+  }, [usersError, toast]);
 
   const handleCreateUser = async (data) => {
     setUserMessage(null);
@@ -3122,27 +3328,6 @@ export default function AdminDashboardPage() {
           )}
           {activeTab === 'users' && (
             <div className="space-y-6">
-              {usersError && (
-                <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm text-red-700">{usersError}</p>
-                </div>
-              )}
-              {userMessage && (
-                <div className={`p-4 rounded-xl border transition-all duration-300 ${
-                  userMessage.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <i className={`fas ${userMessage.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-                      <p className={`text-sm font-medium ${userMessage.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{userMessage.text}</p>
-                    </div>
-                    <button onClick={() => setUserMessage(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                      <i className="fas fa-times"></i>
-                    </button>
-                  </div>
-                </div>
-              )}
               <CreateUserForm onCreateUser={handleCreateUser} loading={usersLoading} />
               <UserTable users={users} onDeleteUser={handleDeleteUser} onToggleAdmin={handleToggleAdmin} loading={usersLoading} />
             </div>

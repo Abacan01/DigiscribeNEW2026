@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 
 export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, parentFolderId }) {
   const [name, setName] = useState('');
@@ -14,6 +16,17 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      if (loading) return;
+      onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, loading, onClose]);
 
   if (!isOpen) return null;
 
@@ -39,7 +52,7 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <Card className="relative rounded-2xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
             <i className="fas fa-folder-plus text-indigo-500"></i>
@@ -48,13 +61,15 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
             <h2 className="text-lg font-semibold text-dark-text">New Folder</h2>
             <p className="text-xs text-gray-text">Create a new folder to organize your files</p>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onClose}
-            className="ml-auto text-gray-400 hover:text-gray-600 transition-colors"
+            variant="ghost"
+            size="icon"
+            className="ml-auto text-gray-400 hover:text-gray-600"
           >
             <i className="fas fa-times"></i>
-          </button>
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -79,18 +94,19 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
           )}
 
           <div className="flex items-center gap-3 justify-end">
-            <button
+            <Button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-gray-text hover:text-dark-text transition-colors rounded-lg"
+              variant="ghost"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={loading || !name.trim()}
-              className="btn-gradient text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              variant="default"
+              className="inline-flex items-center gap-2"
             >
               {loading ? (
                 <i className="fas fa-spinner fa-spin text-xs"></i>
@@ -98,10 +114,10 @@ export default function CreateFolderModal({ isOpen, onClose, onCreateFolder, par
                 <i className="fas fa-plus text-xs"></i>
               )}
               Create Folder
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>,
     document.body
   );

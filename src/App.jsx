@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { Toaster } from 'sileo';
 import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/layout/ScrollToTop';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -183,6 +184,16 @@ function App() {
 
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        <Toaster
+          theme="system"
+          options={{
+            position: 'top-center',
+            roundness: 14,
+            duration: 8000,
+            visibleToasts: 5,
+            expand: true,
+          }}
+        />
         <FaqFloatingButton />
       </AuthProvider>
     </BrowserRouter>

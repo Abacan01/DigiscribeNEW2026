@@ -2,19 +2,20 @@ import 'dotenv/config';
 import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
-import { adminDb } from './firebaseAdmin.js';
+import { adminAuth, adminDb } from './firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from './middleware/authMiddleware.js';
 import usersRouter from './routes/users.js';
 import filesRouter from './routes/files.js';
 import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
-import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
 import { uploadToFtp, uploadBufferToFtp, appendBufferToFtp, moveOnFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 import { resolveFolderFtpPath, computeFileFtpPath, sanitizeName } from './services/ftpPathResolver.js';
 import { startFtpSync, reconcileOnce } from './services/ftpSync.js';
@@ -25,6 +26,8 @@ const __dirname = path.dirname(__filename);
 const IS_VERCEL = !!process.env.VERCEL;
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+app.set('trust proxy', 1);
 
 // Email transporter (optional — only active when SMTP_USER/PASS are configured)
 let emailTransporter = null;
@@ -86,8 +89,44 @@ const allowedOrigins = [
     ? process.env.FRONTEND_URL.split(',').map((u) => u.trim())
     : []),
 ].filter(Boolean);
-app.use(cors({ origin: allowedOrigins }));
-app.use(express.json());
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: false,
+}));
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'x-pipeline-key'],
+}));
+app.use(express.json({ limit: '1mb' }));
+
+const quoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many quote requests. Please try again later.' },
+});
+
+const uploadUrlLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many URL upload requests. Please try again later.' },
+});
+
+const pipelineLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many pipeline requests. Please try again later.' },
+});
 
 // Accept any image/*, audio/*, video/* MIME type.
 // Admins can also upload document types (PDF, Word, etc.)
@@ -167,6 +206,9 @@ const EXT_TO_MIME = {
 const chunkUpload = multer({ storage: multer.memoryStorage() });
 
 // Mount API routes
+app.use('/api/quote', quoteLimiter);
+app.use('/api/upload/url', uploadUrlLimiter);
+app.use('/api/pipeline', pipelineLimiter);
 app.use('/api/admin', usersRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/pipeline', pipelineRouter);
@@ -395,191 +437,73 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
     return res.status(400).json({ success: false, error: 'URL is required.' });
   }
 
+  let normalizedInputUrl = '';
   try {
-    const effectiveUrl = normalizeUrlUploadTarget(url);
+    const parsed = new URL(String(url).trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ success: false, error: 'Only HTTP(S) URLs are allowed.' });
+    }
+    normalizedInputUrl = parsed.toString();
+  } catch {
+    return res.status(400).json({ success: false, error: 'Invalid URL format.' });
+  }
 
-    const createReferenceTextFile = async (displayName) => {
-      const parsedName = path.parse(displayName || 'URL_Link');
-      const safeBase = (parsedName.name || 'URL_Link').replace(/[^a-zA-Z0-9._-]/g, '_') || 'URL_Link';
-      const referenceFileName = `${safeBase}.txt`;
-      const referenceContent = [
-        `Source URL: ${url}`,
-        `Captured URL: ${effectiveUrl}`,
-        `Display Name: ${displayName || ''}`,
-        `Uploaded By: ${req.user.email || ''}`,
-        `Uploaded At: ${new Date().toISOString()}`,
-      ].join('\n');
-      const referenceBuffer = Buffer.from(referenceContent, 'utf8');
+  if (normalizedInputUrl.length > 2048) {
+    return res.status(400).json({ success: false, error: 'URL is too long.' });
+  }
 
-      const emailDir = (req.user.email || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown';
-      const defaultReferencePath = `${emailDir}/${referenceFileName}`;
+  const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+  if (normalizedDescription.length > 2000) {
+    return res.status(400).json({ success: false, error: 'Description must be 2000 characters or less.' });
+  }
 
-      let referenceStoragePath = defaultReferencePath;
-      if (folderId) {
-        try {
-          const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
-          if (folderFtpPath) {
-            referenceStoragePath = `${folderFtpPath}/${referenceFileName}`;
-          }
-        } catch (e) {
-          console.warn('[upload/url] reference folder path resolution failed, using default path:', e.message);
-        }
-      }
+  try {
+    const effectiveUrl = await normalizeUrlUploadTarget(normalizedInputUrl);
+    const sourceUrlForMetadata = getSourceUrlForMetadata(normalizedInputUrl, effectiveUrl);
 
-      await uploadBufferToFtp(referenceBuffer, referenceStoragePath);
-
-      return {
-        referenceFileName,
-        referenceStoragePath,
-        referenceSize: referenceBuffer.length,
-      };
-    };
-
-    const saveAsUrlLinkEntry = async (displayName, message) => {
-      const { referenceFileName, referenceStoragePath, referenceSize } = await createReferenceTextFile(displayName);
-      const referenceUrl = `/api/files/${encodeStorageUrl(referenceStoragePath)}`;
-
-      let fileId = null;
-      if (adminDb) {
-        const docRef = await adminDb.collection('files').add({
-          originalName: displayName,
-          savedAs: referenceFileName,
-          storagePath: referenceStoragePath,
-          size: referenceSize,
-          type: 'text/plain',
-          fileCategory: 'Document',
-          uploadedBy: req.user.uid,
-          uploadedByEmail: req.user.email || '',
-          uploadedAt: new Date(),
-          status: 'pending',
-          description: description || '',
-          serviceCategory: serviceCategory || '',
-          sourceType: 'url',
-          sourceUrl: url,
-          folderId: folderId || null,
-          url: referenceUrl,
-        });
-        fileId = docRef.id;
-      }
-
-      return res.json({
-        success: true,
-        embedded: true,
-        message,
-        file: { originalName: displayName, savedAs: referenceFileName, size: referenceSize, type: 'text/plain' },
-        fileId,
-      });
-    };
-
-    let finalName, finalPath, contentType, originalName;
-
-    // For video platforms, use yt-dlp to extract the actual media
-    if (isVideoPlatformUrl(url)) {
+    let displayName = customName?.trim();
+    if (!displayName) {
       try {
-        const result = await downloadWithYtdlp(effectiveUrl, chunksDir);
-        finalPath = result.filePath;
-        finalName = result.fileName;
-        contentType = result.mimeType;
-        originalName = result.originalName;
-      } catch (ytErr) {
-        // yt-dlp unavailable or download failed — save as embed-only entry so the
-        // frontend can display an inline player instead of a downloadable file.
-        console.warn('[upload/url] yt-dlp failed, falling back to embed:', ytErr.message);
-        const displayName = customName?.trim() || url;
-        return saveAsUrlLinkEntry(displayName, 'Saved as source link reference — direct download unavailable.');
-      }
-    } else {
-      // Direct URL — just fetch normally
-      try {
-        const fetched = await fetchUrlDirect(effectiveUrl, chunksDir);
-        finalPath = fetched.finalPath;
-        finalName = fetched.finalName;
-        contentType = fetched.contentType;
-        originalName = fetched.originalName;
-      } catch (directErr) {
-        let displayName = customName?.trim();
-        if (!displayName) {
-          try {
-            displayName = path.basename(new URL(url).pathname) || url;
-          } catch {
-            displayName = url;
-          }
+        const parsed = new URL(sourceUrlForMetadata || url);
+        const baseName = path.basename(parsed.pathname || '').trim();
+        if (baseName && baseName.toLowerCase() !== 'uc') {
+          displayName = baseName;
+        } else {
+          displayName = parsed.hostname.replace(/^www\./i, '') || url;
         }
-
-        const isHtmlLikeError = directErr?.code === 'HTML_RESPONSE'
-          || /html page instead of a media file/i.test(String(directErr?.message || ''));
-
-        const fallbackMessage = isHtmlLikeError
-          ? 'Saved as source link reference — direct media download unavailable for this URL.'
-          : `Saved as source link reference — direct download failed (${directErr?.message || 'unknown error'}).`;
-
-        console.warn('[upload/url] direct fetch failed, saving source reference:', directErr?.message || directErr);
-        return saveAsUrlLinkEntry(displayName, fallbackMessage);
+      } catch {
+        displayName = url;
       }
     }
 
-    const prefix = buildFilePrefix(serviceCategory);
-    // Prepend service prefix to the finalName
-    finalName = `${prefix}_${finalName}`;
-    // Per-user directory: {email}/{filename}
-    const emailDir = (req.user.email || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown';
-    const defaultStoragePath = `${emailDir}/${finalName}`;
-    const stats = fs.statSync(finalPath);
-    const displayName = customName?.trim() || originalName;
-
-    // If uploading into a folder, place the file inside the folder FTP path (already includes email dir)
-    let storagePath = defaultStoragePath;
-    if (folderId) {
-      try {
-        const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
-        if (folderFtpPath) {
-          storagePath = `${folderFtpPath}/${finalName}`;
-        }
-      } catch (e) {
-        console.warn('[upload/url] folder path resolution failed, using default path:', e.message);
-      }
-    }
-
-    // Upload to FTP, then remove local temp
-    await uploadToFtp(finalPath, storagePath);
-    fs.unlinkSync(finalPath);
-
-    // Always upload a URL reference text file for URL uploads
-    const { referenceStoragePath } = await createReferenceTextFile(displayName);
-
-    // Save metadata to Firestore
     let fileId = null;
     if (adminDb) {
-      console.log('[upload/url] Writing metadata to Firestore for:', finalName);
       const docRef = await adminDb.collection('files').add({
         originalName: displayName,
-        savedAs: finalName,
-        storagePath,
-        size: stats.size,
-        type: contentType,
-        fileCategory: getFileCategory(contentType),
+        savedAs: null,
+        storagePath: null,
+        size: 0,
+        type: 'application/x-url',
+        fileCategory: 'URL',
         uploadedBy: req.user.uid,
         uploadedByEmail: req.user.email || '',
         uploadedAt: new Date(),
         status: 'pending',
-        description: description || '',
+        description: normalizedDescription,
         serviceCategory: serviceCategory || '',
         sourceType: 'url',
-        sourceUrl: url,
-        sourceReferenceStoragePath: referenceStoragePath,
-        sourceReferenceUrl: `/api/files/${encodeStorageUrl(referenceStoragePath)}`,
+        sourceUrl: sourceUrlForMetadata,
         folderId: folderId || null,
-        url: `/api/files/${encodeStorageUrl(storagePath)}`,
+        url: sourceUrlForMetadata,
       });
       fileId = docRef.id;
-      console.log('[upload/url] Firestore doc created:', fileId);
-    } else {
-      console.error('[upload/url] adminDb is null — metadata not saved for:', finalName);
     }
 
     res.json({
       success: true,
-      file: { originalName, savedAs: finalName, size: stats.size, type: contentType },
+      embedded: true,
+      message: 'Saved as URL entry (metadata only).',
+      file: { originalName: displayName, savedAs: null, size: 0, type: 'application/x-url' },
       fileId,
     });
   } catch (err) {
@@ -588,37 +512,11 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
   }
 });
 
-// Helper: direct HTTP fetch for non-platform URLs
-async function fetchUrlDirect(url, destDir) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download: ${response.statusText}`);
-  }
-
-  const contentType = response.headers.get('content-type') || 'application/octet-stream';
-
-  // Reject HTML responses — the URL returned a web page, not a media file
-  if (contentType.includes('text/html')) {
-    const htmlErr = new Error('The URL returned an HTML page instead of a media file. Use a direct link to the file, or try a supported video platform URL.');
-    htmlErr.code = 'HTML_RESPONSE';
-    throw htmlErr;
-  }
-  const urlPath = new URL(url).pathname;
-  const originalName = path.basename(urlPath) || 'downloaded-file';
-  const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const finalName = `${Date.now()}-${safeName}`;
-  const finalPath = path.join(destDir, finalName);
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(finalPath, buffer);
-
-  return { finalPath, finalName, contentType, originalName };
-}
-
-function normalizeUrlUploadTarget(inputUrl) {
+async function normalizeUrlUploadTarget(inputUrl) {
   try {
     const parsed = new URL(inputUrl);
-    const hostname = parsed.hostname.replace('www.', '');
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname || '';
 
     if (hostname === 'drive.google.com') {
       const pathMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
@@ -631,10 +529,142 @@ function normalizeUrlUploadTarget(inputUrl) {
       }
     }
 
+    if ((hostname === 'facebook.com' && pathname.startsWith('/share/')) || hostname === 'fb.watch') {
+      const resolved = await resolveRedirectUrl(inputUrl);
+      return resolved || inputUrl;
+    }
+
     return inputUrl;
   } catch {
     return inputUrl;
   }
+}
+
+async function resolveRedirectUrl(inputUrl) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(inputUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; DigiScribeURLResolver/1.0)',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+    clearTimeout(timeout);
+
+    const finalUrl = res?.url || inputUrl;
+
+    try {
+      const finalParsed = new URL(finalUrl);
+      const next = finalParsed.searchParams.get('next');
+      if (next && finalParsed.hostname.includes('facebook.com')) {
+        return decodeURIComponent(next);
+      }
+    } catch {
+      // ignore
+    }
+
+    return finalUrl;
+  } catch {
+    return inputUrl;
+  }
+}
+
+function getSourceUrlForMetadata(originalUrl, effectiveUrl) {
+  try {
+    const parsed = new URL(originalUrl);
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname || '';
+
+    // Preserve original URL for most providers, but store resolved URL for
+    // Facebook share wrappers so frontend embeds receive canonical targets.
+    if ((hostname === 'facebook.com' && pathname.startsWith('/share/')) || hostname === 'fb.watch') {
+      return effectiveUrl || originalUrl;
+    }
+
+    return originalUrl;
+  } catch {
+    return originalUrl;
+  }
+}
+
+function normalizeRole(decodedToken = {}) {
+  if (!decodedToken.role) {
+    return decodedToken.admin ? 'admin' : 'user';
+  }
+  if (decodedToken.role === 'superAdmin' || decodedToken.role === 'lguAdmin') {
+    return 'admin';
+  }
+  return decodedToken.role;
+}
+
+function encodeStoragePath(storagePath) {
+  return String(storagePath || '').split('/').map(encodeURIComponent).join('/');
+}
+
+async function getAuthenticatedFileUser(req) {
+  if (!adminAuth) return null;
+
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const queryToken = typeof req.query?.access_token === 'string' ? req.query.access_token.trim() : '';
+  const token = bearerToken || queryToken;
+  if (!token) return null;
+
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    return {
+      ...decoded,
+      role: normalizeRole(decoded),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function canAccessStoragePath(user, normalizedPath) {
+  if (!user || !normalizedPath || !adminDb) return false;
+  if (user.role === 'admin') return true;
+
+  const filePathFields = ['storagePath', 'savedAs', 'sourceReferenceStoragePath', 'transcriptionStoragePath'];
+  for (const field of filePathFields) {
+    try {
+      const snap = await adminDb.collection('files').where(field, '==', normalizedPath).limit(5).get();
+      if (!snap.empty) {
+        const ownsAny = snap.docs.some((doc) => doc.data()?.uploadedBy === user.uid);
+        if (ownsAny) return true;
+      }
+    } catch {
+      // ignore and continue with fallback checks
+    }
+  }
+
+  const deliveryPathVariants = [
+    `/api/files/${normalizedPath}`,
+    `/api/files/${encodeURIComponent(normalizedPath)}`,
+    `/api/files/${encodeStoragePath(normalizedPath)}`,
+  ];
+
+  try {
+    const uniqueVariants = [...new Set(deliveryPathVariants)].slice(0, 10);
+    const transcriptionsSnap = await adminDb
+      .collection('transcriptions')
+      .where('deliveryFileUrl', 'in', uniqueVariants)
+      .limit(10)
+      .get();
+    if (!transcriptionsSnap.empty) {
+      const ownsDelivery = transcriptionsSnap.docs.some((doc) => doc.data()?.uploadedBy === user.uid);
+      if (ownsDelivery) return true;
+    }
+  } catch {
+    // ignore and deny by default
+  }
+
+  return false;
 }
 
 // POST /api/files/bulk-download - Download multiple files as a zip (auth required)
@@ -875,14 +905,28 @@ app.post('/api/quote', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and message are required.' });
     }
 
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedMessage = String(message).trim();
+    const normalizedFirstName = String(firstName || '').trim();
+    const normalizedLastName = String(lastName || '').trim();
+    const normalizedPhone = String(phone || '').trim();
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    if (!emailOk) {
+      return res.status(400).json({ success: false, error: 'A valid email address is required.' });
+    }
+    if (normalizedMessage.length === 0 || normalizedMessage.length > 5000) {
+      return res.status(400).json({ success: false, error: 'Message must be between 1 and 5000 characters.' });
+    }
+
     // Store in Firestore
     await adminDb.collection('quotes').add({
-      firstName: firstName || '',
-      lastName: lastName || '',
-      email,
-      phone: phone || '',
+      firstName: normalizedFirstName.slice(0, 120),
+      lastName: normalizedLastName.slice(0, 120),
+      email: normalizedEmail,
+      phone: normalizedPhone.slice(0, 40),
       subject: subject || 'service-details',
-      message,
+      message: normalizedMessage,
       submittedAt: new Date().toISOString(),
     });
 
@@ -905,24 +949,24 @@ app.post('/api/quote', async (req, res) => {
       'transcription': 'Transcription',
     };
     const subjectLabel = subjectLabels[subject] || subject || 'General';
-    const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+    const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim() || 'Unknown';
 
     try {
       await emailTransporter.sendMail({
         from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
         to: notificationEmail,
-        replyTo: email,
+        replyTo: normalizedEmail,
         subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
-        text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
+        text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${normalizedEmail}\nPhone: ${normalizedPhone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${normalizedMessage}`,
         html: `<h2 style="color:#0284c7">New Quote Request</h2>
 <table style="border-collapse:collapse;width:100%;max-width:600px;font-family:sans-serif;font-size:14px">
 <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${fullName}</td></tr>
-<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${email}" style="color:#0284c7">${email}</a></td></tr>
-<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${phone || 'N/A'}</td></tr>
+      <tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${normalizedEmail}" style="color:#0284c7">${normalizedEmail}</a></td></tr>
+      <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${normalizedPhone || 'N/A'}</td></tr>
 <tr><td style="padding:10px 14px;font-weight:600;color:#374151">Subject</td><td style="padding:10px 14px;color:#111">${subjectLabel}</td></tr>
 </table>
 <h3 style="color:#374151;font-family:sans-serif;margin-top:20px">Message</h3>
-<p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
+      <p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${normalizedMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
       });
       console.log('[quote] Email sent to', notificationEmail);
     } catch (emailErr) {
@@ -971,6 +1015,16 @@ app.get('/api/files/*path', async (req, res) => {
 
   // Prevent path traversal
   const normalized = path.posix.normalize(requestPath).replace(/^(\.\.(\/|$))+/, '');
+
+  const authenticatedUser = await getAuthenticatedFileUser(req);
+  if (!authenticatedUser) {
+    return res.status(401).json({ success: false, error: 'Authentication required.' });
+  }
+
+  const canAccess = await canAccessStoragePath(authenticatedUser, normalized);
+  if (!canAccess) {
+    return res.status(403).json({ success: false, error: 'Access denied.' });
+  }
 
   const safeName = path.basename(normalized);
   const ext = path.extname(safeName).toLowerCase();

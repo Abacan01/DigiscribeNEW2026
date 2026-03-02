@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppToast } from '../hooks/useAppToast';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -354,6 +355,7 @@ export default function UploadPage() {
   const [searchParams] = useSearchParams();
   const folderId = searchParams.get('folderId') || null;
   const { getIdToken, role } = useAuth();
+  const toast = useAppToast();
   const fileInputRef = useRef(null);
 
   const handleBackNavigation = () => {
@@ -397,6 +399,15 @@ export default function UploadPage() {
   useEffect(() => {
     document.title = 'Upload Files - DigiScribe Transcription Corp.';
   }, []);
+
+  useEffect(() => {
+    if (!result?.message) return;
+    if (result.type === 'success') {
+      toast.success(result.message);
+      return;
+    }
+    toast.error(result.message, 'Upload Failed');
+  }, [result, toast]);
 
   // Warn users before closing tab while uploading
   useEffect(() => {
@@ -715,9 +726,21 @@ export default function UploadPage() {
           headers: { ...authHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urls[i], customName: urlNames[i] || '', description, serviceCategory, folderId }),
         });
-        const data = await res.json();
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            data = { error: raw.slice(0, 180) };
+          }
+        }
+
         if (!res.ok || !data.success) {
-          errors.push(`${urls[i]}: ${data.error || 'Failed'}`);
+          const fallback = raw
+            ? `Request failed (${res.status} ${res.statusText}).`
+            : `Request failed (${res.status} ${res.statusText}) with empty response.`;
+          errors.push(`${urls[i]}: ${data.error || fallback}`);
         } else {
           results.push(data.file);
         }

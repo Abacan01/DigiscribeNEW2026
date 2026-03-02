@@ -13,11 +13,15 @@ import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import DocumentViewerModal from '../components/dashboard/DocumentViewerModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import RenameDialog from '../components/ui/RenameDialog';
+import { Button } from '../components/ui/button';
 import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
 import { useFolders } from '../hooks/useFolders';
 import { useFolderActions } from '../hooks/useFolderActions';
 import { useTranscriptions } from '../hooks/useTranscriptions';
+import { useAppToast } from '../hooks/useAppToast';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_CONFIG = {
@@ -72,6 +76,7 @@ function getFileIcon(type) {
   if (type.includes('excel') || type.includes('spreadsheet')) return 'fa-file-excel';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'fa-file-powerpoint';
   if (type === 'text/plain' || type === 'text/csv') return 'fa-file-alt';
+  if (type === 'application/x-url') return 'fa-link';
   return 'fa-file';
 }
 
@@ -84,7 +89,26 @@ function getFileIconColor(type) {
   if (type.includes('word') || type === 'application/msword') return 'text-blue-600 bg-blue-50';
   if (type.includes('excel') || type.includes('spreadsheet')) return 'text-green-600 bg-green-50';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'text-orange-600 bg-orange-50';
+  if (type === 'application/x-url') return 'text-indigo-600 bg-indigo-50';
   return 'text-gray-400 bg-gray-50';
+}
+
+const PLATFORM_MAP = [
+  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-brands fa-youtube', color: 'text-red-600 bg-red-50' },
+  { pattern: /facebook\.com|fb\.com|fb\.watch/i, label: 'Facebook', icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
+  { pattern: /dailymotion\.com|dai\.ly/i, label: 'Dailymotion', icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /drive\.google\.com|docs\.google\.com/i, label: 'Google Drive', icon: 'fa-brands fa-google-drive', color: 'text-emerald-600 bg-emerald-50' },
+  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-brands fa-instagram', color: 'text-pink-600 bg-pink-50' },
+  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' },
+  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-brands fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
+  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-brands fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-brands fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
+  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-brands fa-twitch', color: 'text-violet-600 bg-violet-50' },
+];
+
+function getUrlPlatform(sourceUrl) {
+  if (!sourceUrl) return null;
+  return PLATFORM_MAP.find((p) => p.pattern.test(sourceUrl)) || null;
 }
 
 function getPageNumbers(current, total) {
@@ -102,6 +126,7 @@ function getPageNumbers(current, total) {
 
 export default function DashboardPage() {
   const { user, isAdmin, getIdToken } = useAuth();
+  const toast = useAppToast();
   const [activeTab, setActiveTab] = useState('files');
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window === 'undefined') return 'list';
@@ -112,7 +137,6 @@ export default function DashboardPage() {
   const [serviceFilter, setServiceFilter] = useState([]);
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusError, setStatusError] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
   const [docViewerFile, setDocViewerFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
@@ -140,11 +164,31 @@ export default function DashboardPage() {
   const [renameValue, setRenameValue] = useState('');
   const [dragOverFolder, setDragOverFolder] = useState(null);
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+  const [renameFolderModal, setRenameFolderModal] = useState(null);
 
   const { files: allFiles, loading, error } = useFirestoreFiles();
   const { folders: allFolders, loading: foldersLoading, refetch: refetchFolders } = useFolders();
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = useFolderActions();
   const { transcriptions, loading: transLoading, error: transError, fetchTranscriptions } = useTranscriptions();
+
+  useEffect(() => {
+    if (!message) return;
+    if (message.type === 'success') {
+      toast.success(message.text);
+      return;
+    }
+    toast.error(message.text);
+  }, [message, toast]);
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error, 'Unable to load files');
+  }, [error, toast]);
+
+  useEffect(() => {
+    if (!transError) return;
+    toast.error(transError, 'Unable to load transcriptions');
+  }, [transError, toast]);
 
   useEffect(() => {
     document.title = 'Dashboard - DigiScribe Transcription Corp.';
@@ -386,7 +430,6 @@ export default function DashboardPage() {
   }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId]);
 
   const handleStatusChange = useCallback(async (fileId, newStatus) => {
-    setStatusError(null);
     try {
       const token = await getIdToken();
       const res = await fetch(`/api/files/metadata/${fileId}/status`, {
@@ -397,10 +440,9 @@ export default function DashboardPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update status.');
     } catch (err) {
-      setStatusError(err.message);
-      setTimeout(() => setStatusError(null), 4000);
+      toast.error(err.message, 'Status update failed');
     }
-  }, [getIdToken]);
+  }, [getIdToken, toast]);
 
   const handleDeleteFile = useCallback(async (fileId) => {
     setDeleteLoading(fileId);
@@ -492,7 +534,12 @@ export default function DashboardPage() {
         if (allPageIds.size > 0) {
           setSelectedIds((prev) => {
             const next = new Set(prev);
-            for (const id of allPageIds) next.add(id);
+            const isAllSelected = [...allPageIds].every((id) => next.has(id));
+            if (isAllSelected) {
+              for (const id of allPageIds) next.delete(id);
+            } else {
+              for (const id of allPageIds) next.add(id);
+            }
             return next;
           });
         }
@@ -700,7 +747,7 @@ export default function DashboardPage() {
     try {
       await deleteFolder(folderId);
       await refetchFolders();
-      setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
+      setMessage({ type: 'success', text: 'Folder and its contents deleted.' });
       setTimeout(() => setMessage(null), 3000);
       // If we're inside the deleted folder, navigate to parent
       if (currentFolderId === folderId) {
@@ -839,6 +886,21 @@ export default function DashboardPage() {
     setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'transcription' });
   }, []);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeContextMenu = () => setContextMenu(null);
+
+    window.addEventListener('scroll', closeContextMenu, true);
+    window.addEventListener('wheel', closeContextMenu, true);
+    window.addEventListener('touchmove', closeContextMenu, true);
+
+    return () => {
+      window.removeEventListener('scroll', closeContextMenu, true);
+      window.removeEventListener('wheel', closeContextMenu, true);
+      window.removeEventListener('touchmove', closeContextMenu, true);
+    };
+  }, [contextMenu]);
+
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
 
@@ -846,10 +908,7 @@ export default function DashboardPage() {
       const folder = contextMenu.folder;
       return [
         { icon: 'fa-folder-open', label: 'Open', onClick: () => setCurrentFolderId(folder.id) },
-        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
-          setRenamingFolder(folder.id);
-          setRenameValue(folder.name);
-        }},
+        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => setRenameFolderModal({ id: folder.id, name: folder.name || '' }) },
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
         { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
         { divider: true },
@@ -918,9 +977,9 @@ export default function DashboardPage() {
     }
 
     if (selCount > 1) {
-      items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
+      items.push({ icon: 'fa-arrows-alt', label: 'Move Selected', onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
-      items.push({ icon: 'fa-trash-alt', label: `Delete ${selCount} Selected`, danger: true, onClick: () => setBulkDeleteConfirm(true) });
+      items.push({ icon: 'fa-trash-alt', label: 'Delete Selected', danger: true, onClick: () => setBulkDeleteConfirm(true) });
     }
 
     return items;
@@ -1058,33 +1117,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Messages */}
-              {message && (
-                <div
-                  className={`mb-4 p-3 rounded-xl border flex items-center gap-3 ${
-                    message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-                  }`}
-                >
-                  <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-                  <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-                    {message.text}
-                  </p>
-                </div>
-              )}
-
-              {statusError && (
-                <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm font-medium text-red-700">{statusError}</p>
-                </div>
-              )}
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-triangle text-red-500"></i>
-                  <p className="text-sm font-medium text-red-700">Error loading files: {error}</p>
-                </div>
-              )}
-
               {/* Filter Bar */}
               <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 shadow-sm">
                 <div className="flex flex-col lg:flex-row gap-3">
@@ -1217,48 +1249,34 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 ml-auto">
-                    <button
+                    <Button
                       onClick={() => setBulkMoveActive(true)}
                       disabled={bulkLoading}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                      variant="secondary"
+                      size="sm"
+                      className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
                     >
                       <i className="fas fa-folder-open text-[10px]"></i>
                       Move to Folder
-                    </button>
-                    {bulkDeleteConfirm ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-red-600 font-medium">Delete {selectedCount} items?</span>
-                        <button
-                          onClick={handleBulkDelete}
-                          disabled={bulkLoading}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                        >
-                          {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-check text-[10px]"></i>}
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => setBulkDeleteConfirm(false)}
-                          className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setBulkDeleteConfirm(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <i className="fas fa-trash-alt text-[10px]"></i>
-                        Delete All
-                      </button>
-                    )}
-                    <button
+                    </Button>
+                    <Button
+                      onClick={() => setBulkDeleteConfirm(true)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:bg-red-50"
+                    >
+                      <i className="fas fa-trash-alt text-[10px]"></i>
+                      Delete All
+                    </Button>
+                    <Button
                       onClick={() => setSelectedIds(new Set())}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-50 transition-colors"
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400 hover:text-dark-text hover:bg-gray-50"
                     >
                       <i className="fas fa-times text-[10px]"></i>
                       Clear
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1266,9 +1284,11 @@ export default function DashboardPage() {
               {/* Select All bar */}
               {(filteredFiles.length > 0 || currentSubfolders.length > 0) && (
                 <div className="flex items-center gap-3 mb-4">
-                  <button
+                  <Button
                     onClick={toggleSelectAll}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-text hover:text-dark-text hover:bg-white border border-gray-200 transition-colors"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs text-gray-text hover:text-dark-text hover:bg-white"
                   >
                     <input
                       type="checkbox"
@@ -1279,64 +1299,11 @@ export default function DashboardPage() {
                     />
                     {allSelected ? 'Deselect All' : 'Select All'}
                     <span className="text-gray-300 font-mono text-[9px]">Ctrl+A</span>
-                  </button>
+                  </Button>
                   <span className="text-xs text-gray-400">
                     {currentSubfolders.length > 0 && `${currentSubfolders.length} folder${currentSubfolders.length !== 1 ? 's' : ''}, `}
                     {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''}
                   </span>
-                </div>
-              )}
-
-              {/* Delete file confirmation — only shown in list mode; grid uses inline card confirmation */}
-              {viewMode === 'list' && deleteConfirm && (
-                <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
-                  <i className="fas fa-exclamation-triangle text-red-500"></i>
-                  <span className="text-sm font-medium text-red-700">
-                    Delete this file?
-                  </span>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      onClick={() => handleDeleteFile(deleteConfirm)}
-                      disabled={deleteLoading === deleteConfirm}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                    >
-                      {deleteLoading === deleteConfirm ? (
-                        <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                      ) : (
-                        'Delete'
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(null)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Delete folder confirmation */}
-              {deleteFolderConfirm && (
-                <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
-                  <i className="fas fa-exclamation-triangle text-red-500"></i>
-                  <span className="text-sm font-medium text-red-700">
-                    Delete this folder? Contents will be moved to the parent folder.
-                  </span>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      onClick={() => handleDeleteFolder(deleteFolderConfirm)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => setDeleteFolderConfirm(null)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -1474,6 +1441,9 @@ export default function DashboardPage() {
                           const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                           const isSelected = selectedIds.has(file.id);
                           const isUrl = file.sourceType === 'url';
+                          const urlPlatform = isUrl ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
+                          const fileIconClass = urlPlatform ? urlPlatform.icon : `fas ${getFileIcon(file.type)}`;
+                          const fileIconColor = urlPlatform ? urlPlatform.color : getFileIconColor(file.type);
                           return (
                             <React.Fragment key={file.id}>
                             <tr
@@ -1495,10 +1465,10 @@ export default function DashboardPage() {
                                   <button
                                     type="button"
                                     onClick={() => setPreviewFile(file)}
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} hover:scale-105 transition-transform cursor-pointer`}
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${fileIconColor} hover:scale-105 transition-transform cursor-pointer`}
                                     title="Preview file"
                                   >
-                                    <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
+                                    <i className={`${fileIconClass} text-xs`}></i>
                                   </button>
                                   <div className="min-w-0">
                                     <span
@@ -1526,9 +1496,13 @@ export default function DashboardPage() {
                                 </div>
                               </td>
                               <td className="px-4 py-3.5">
-                                <span className="text-xs text-gray-text">
-                                  {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
-                                </span>
+                                {isUrl ? (
+                                  <span className="text-xs text-gray-text">{urlPlatform?.label || 'URL'}</span>
+                                ) : (
+                                  <span className="text-xs text-gray-text">
+                                    {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-3.5">
                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
@@ -1544,20 +1518,24 @@ export default function DashboardPage() {
                               </td>
                               <td className="px-4 py-3.5 text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  <button
+                                  <Button
                                     type="button"
                                     onClick={() => setPreviewFile(file)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5"
                                     title="Preview file"
                                   >
                                     <i className="fas fa-eye text-[10px]"></i>
                                     View
-                                  </button>
-                                  <button
+                                  </Button>
+                                  <Button
                                     type="button"
                                     onClick={() => setDeleteConfirm(file.id)}
                                     disabled={deleteLoading === file.id}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 text-[11px] font-medium text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Delete file"
                                   >
                                     {deleteLoading === file.id ? (
@@ -1566,7 +1544,7 @@ export default function DashboardPage() {
                                       <i className="fas fa-trash-alt text-[10px]"></i>
                                     )}
                                     Delete
-                                  </button>
+                                  </Button>
                                 </div>
                               </td>
                             </tr>
@@ -1724,9 +1702,6 @@ export default function DashboardPage() {
                           onSelect={toggleSelect}
                           onDelete={(id) => setDeleteConfirm(id)}
                           deleteLoading={deleteLoading === file.id}
-                          isDeleteConfirm={deleteConfirm === file.id}
-                          onDeleteConfirm={handleDeleteFile}
-                          onDeleteCancel={() => setDeleteConfirm(null)}
                           folderName={statusFilter && currentFolderId === null && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                           onOpenFolder={statusFilter && currentFolderId === null && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
                           onViewTranscription={file.transcriptionUrl ? (f) => setDocViewerFile({ url: f.transcriptionUrl, name: f.transcriptionName || 'Transcription', type: f.transcriptionType, size: f.transcriptionSize }) : undefined}
@@ -1796,17 +1771,6 @@ export default function DashboardPage() {
           ) : (
             /* Transcriptions Tab */
             <>
-              {transError && (
-                <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm font-medium text-red-700">{transError}</p>
-                  <button onClick={() => fetchTranscriptions()} className="ml-auto text-sm text-red-600 hover:text-red-700 font-medium flex items-center gap-1.5">
-                    <i className="fas fa-sync-alt text-xs"></i>
-                    Retry
-                  </button>
-                </div>
-              )}
-
               {transLoading ? (
                 <div className="text-center py-24">
                   <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
@@ -1950,6 +1914,53 @@ export default function DashboardPage() {
           title={`Move ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''} to folder`}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete File"
+        message="Delete this file permanently?"
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteLoading === deleteConfirm}
+        onConfirm={() => deleteConfirm && handleDeleteFile(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        title="Delete Selected Items"
+        message={`Delete ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''}?`}
+        confirmLabel="Delete Selected"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteFolderConfirm}
+        title="Delete Folder"
+        message="Delete this folder and all items inside it?"
+        confirmLabel="Delete Folder"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={() => deleteFolderConfirm && handleDeleteFolder(deleteFolderConfirm)}
+        onCancel={() => setDeleteFolderConfirm(null)}
+      />
+
+      <RenameDialog
+        open={!!renameFolderModal}
+        title="Rename Folder"
+        description="Enter a new folder name."
+        initialValue={renameFolderModal?.name || ''}
+        confirmLabel="Save"
+        onConfirm={async (newName) => {
+          if (!renameFolderModal?.id || !newName.trim()) return;
+          await handleRenameFolder(renameFolderModal.id, newName.trim());
+          setRenameFolderModal(null);
+        }}
+        onClose={() => setRenameFolderModal(null)}
+      />
     </Layout>
   );
 }

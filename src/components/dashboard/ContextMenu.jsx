@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '../ui/button';
 
 export default function ContextMenu({ x, y, items, onClose }) {
   const menuRef = useRef(null);
@@ -34,14 +35,14 @@ export default function ContextMenu({ x, y, items, onClose }) {
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[100] bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 min-w-[180px]"
+      className="fixed z-[100] bg-white rounded-xl shadow-xl border border-gray-200 py-1 min-w-[180px] w-56 max-w-[70vw] max-h-[58vh] overflow-y-auto"
       style={{ top: y, left: x }}
     >
       {items.map((item, i) =>
         item.divider ? (
           <div key={i} className="my-1.5 border-t border-gray-100" />
         ) : (
-          <button
+          <Button
             key={i}
             type="button"
             onClick={() => {
@@ -49,7 +50,9 @@ export default function ContextMenu({ x, y, items, onClose }) {
               onClose();
             }}
             disabled={item.disabled}
-            className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors ${
+            variant="ghost"
+            size="sm"
+            className={`w-full justify-start text-left px-3 py-1.5 text-sm gap-2 transition-colors ${
               item.danger
                 ? 'text-red-600 hover:bg-red-50'
                 : 'text-gray-700 hover:bg-gray-50 hover:text-dark-text'
@@ -58,11 +61,11 @@ export default function ContextMenu({ x, y, items, onClose }) {
             {item.icon && (
               <i className={`fas ${item.icon} text-xs w-4 text-center ${item.danger ? 'text-red-400' : 'text-gray-400'}`}></i>
             )}
-            <span className="flex-1">{item.label}</span>
+            <span className="flex-1 truncate" title={item.label}>{item.label}</span>
             {item.shortcut && (
               <span className="text-[10px] text-gray-300 font-mono">{item.shortcut}</span>
             )}
-          </button>
+          </Button>
         )
       )}
     </div>,

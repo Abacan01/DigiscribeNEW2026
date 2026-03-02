@@ -66,8 +66,8 @@ function fileServerPlugin() {
             if (fs.existsSync(flatPath)) {
               resolvedPath = flatPath
             } else {
-              res.writeHead(404)
-              return res.end('Not found')
+              // File is not in local dev uploads; allow proxy/backend to handle it.
+              return next()
             }
           }
 
@@ -119,7 +119,7 @@ function fileServerPlugin() {
 
 // https://vite.dev/config/
 const serverPort = process.env.PORT || 3001
-const serverOrigin = `http://localhost:${serverPort}`
+const serverOrigin = process.env.VITE_API_BASE || `http://localhost:${serverPort}`
 
 export default defineConfig({
   plugins: [fileServerPlugin(), react()],
@@ -128,6 +128,7 @@ export default defineConfig({
       '/api/upload': serverOrigin,
       '/api/admin': serverOrigin,
       '/api/quote': serverOrigin,
+      '/api/files': serverOrigin,
       '/api/files/metadata': serverOrigin,
       '/api/files/bulk-download': serverOrigin,
       '/api/files/bulk-delete': serverOrigin,

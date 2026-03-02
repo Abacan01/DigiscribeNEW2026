@@ -1,8 +1,11 @@
+'use client';
+
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { fileUrl } from '../../lib/fileUrl';
+import { TikTokEmbed, FacebookEmbed } from 'react-social-media-embed';
+import { fileUrl, fileDownloadUrl } from '../../lib/fileUrl';
 
-function getMediaType(type) {
+function getFileMediaType(type) {
   if (!type) return 'unknown';
   if (type.startsWith('image/')) return 'image';
   if (type.startsWith('audio/')) return 'audio';
@@ -12,71 +15,154 @@ function getMediaType(type) {
   return 'unknown';
 }
 
+export function getMediaType(url) {
+  if (!url) return 'unknown';
+
+  const lowered = String(url).toLowerCase();
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+
+    if (hostname.includes('tiktok.com')) return 'tiktok';
+    if (extractYouTubeId(url)) return 'youtube';
+    if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) return 'facebook';
+    if (extractDailymotionId(url)) return 'dailymotion';
+    if (extractGoogleDriveId(url)) return 'google-drive';
+
+    const videoExt = ['.mp4', '.webm', '.mov', '.mkv', '.m4v', '.avi'];
+    const audioExt = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.opus'];
+    if (videoExt.some((ext) => pathname.endsWith(ext))) return 'direct-video';
+    if (audioExt.some((ext) => pathname.endsWith(ext))) return 'direct-audio';
+
+    return 'unknown';
+  } catch {
+    if (/youtube\.com|youtu\.be/.test(lowered)) return 'youtube';
+    if (/tiktok\.com/.test(lowered)) return 'tiktok';
+    if (/facebook\.com|fb\.watch/.test(lowered)) return 'facebook';
+    if (/dailymotion\.com|dai\.ly/.test(lowered)) return 'dailymotion';
+    if (/\.(mp4|webm|mov|mkv|m4v|avi)(\?|#|$)/.test(lowered)) return 'direct-video';
+    if (/\.(mp3|wav|ogg|m4a|aac|flac|opus)(\?|#|$)/.test(lowered)) return 'direct-audio';
+    return 'unknown';
+  }
+}
+
 function extractYouTubeId(url) {
   if (!url) return null;
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname;
+
+    if (hostname.includes('youtu.be')) {
+      const id = pathname.split('/').filter(Boolean)[0];
+      return id && id.length >= 10 ? id : null;
+    }
+
+    if (hostname.includes('youtube.com')) {
+      const byQuery = parsed.searchParams.get('v');
+      if (byQuery) return byQuery;
+      const shorts = pathname.match(/\/shorts\/([a-zA-Z0-9_-]{10,})/i)?.[1];
+      if (shorts) return shorts;
+      const embed = pathname.match(/\/embed\/([a-zA-Z0-9_-]{10,})/i)?.[1];
+      if (embed) return embed;
+    }
+  } catch {
+    return null;
   }
   return null;
 }
 
-function isEmbeddableUrl(url) {
-  if (!url) return false;
-  // Common video/media platforms that can be embedded via iframe
-  const embeddable = [
-    'youtube.com', 'youtu.be',
-    'vimeo.com',
-    'dailymotion.com', 'dai.ly',
-    'tiktok.com',
-    'facebook.com', 'fb.watch',
-    'streamable.com',
-    'drive.google.com',
-  ];
-  try {
-    const hostname = new URL(url).hostname.replace('www.', '');
-    return embeddable.some((domain) => hostname.includes(domain));
-  } catch {
-    return false;
-  }
-}
-
-function getVimeoEmbedUrl(url) {
-  const match = url.match(/vimeo\.com\/(\d+)/);
-  return match ? `https://player.vimeo.com/video/${match[1]}` : null;
-}
-
-function getDailymotionEmbedUrl(url) {
-  const fullMatch = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/);
-  if (fullMatch) return `https://www.dailymotion.com/embed/video/${fullMatch[1]}`;
-  const shortMatch = url.match(/dai\.ly\/([a-zA-Z0-9]+)/);
-  return shortMatch ? `https://www.dailymotion.com/embed/video/${shortMatch[1]}` : null;
-}
-
-function getTikTokEmbedUrl(url) {
-  const match = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
-  return match ? `https://www.tiktok.com/embed/v2/${match[1]}` : null;
-}
-
-function getFacebookEmbedUrl(url) {
+function extractDailymotionId(url) {
   if (!url) return null;
   try {
     const parsed = new URL(url);
-    const href = encodeURIComponent(url);
-    const pathname = parsed.pathname || '';
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname;
 
-    if (/\/posts\//i.test(pathname) || /\/permalink\//i.test(pathname)) {
-      return `https://www.facebook.com/plugins/post.php?href=${href}&show_text=true&width=560`;
+    if (hostname.includes('dai.ly')) {
+      return pathname.split('/').filter(Boolean)[0] || null;
     }
 
-    return `https://www.facebook.com/plugins/video.php?href=${href}&show_text=false&width=560`;
+    if (hostname.includes('dailymotion.com')) {
+      return pathname.match(/\/(?:video|embed\/video)\/([a-zA-Z0-9]+)/i)?.[1] || null;
+    }
   } catch {
     return null;
   }
+  return null;
+}
+
+function extractGoogleDriveId(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    if (!hostname.includes('drive.google.com')) return null;
+
+    const pathMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/i)?.[1];
+    const queryId = parsed.searchParams.get('id');
+    return pathMatch || queryId || null;
+  } catch {
+    return null;
+  }
+}
+
+function getYouTubeEmbedUrl(url) {
+  const id = extractYouTubeId(url);
+  return id ? `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1` : null;
+}
+
+function getDailymotionEmbedUrl(url) {
+  const id = extractDailymotionId(url);
+  return id ? `https://www.dailymotion.com/embed/video/${id}` : null;
+}
+
+function getPlatformLabel(mediaType) {
+  if (mediaType === 'youtube') return 'YouTube';
+  if (mediaType === 'facebook') return 'Facebook';
+  if (mediaType === 'tiktok') return 'TikTok';
+  if (mediaType === 'dailymotion') return 'Dailymotion';
+  if (mediaType === 'google-drive') return 'Google Drive';
+  return 'URL';
+}
+
+function toFacebookEmbedUrl(sourceUrl) {
+  if (!sourceUrl) return sourceUrl;
+
+  try {
+    const parsed = new URL(sourceUrl);
+    const videoId = parsed.searchParams.get('v');
+
+    if (videoId) {
+      return `https://www.facebook.com/watch/?v=${videoId}`;
+    }
+
+    return sourceUrl;
+  } catch {
+    return sourceUrl;
+  }
+}
+
+function PreviewFailedFallback({ sourceUrl }) {
+  return (
+    <div className="text-center py-10 px-6">
+      <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3">
+        <i className="fas fa-exclamation-triangle text-amber-500 text-xl"></i>
+      </div>
+      <p className="text-sm font-medium text-dark-text mb-1">Preview failed</p>
+      <p className="text-xs text-gray-text">
+        <a
+          href={sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
+          Watch on original site
+        </a>
+      </p>
+    </div>
+  );
 }
 
 function formatSize(bytes) {
@@ -96,6 +182,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
   const [descriptionValue, setDescriptionValue] = useState(file.description || '');
   const [descriptionSaving, setDescriptionSaving] = useState(false);
   const [descriptionMessage, setDescriptionMessage] = useState(null);
+  const [referenceSourceUrl, setReferenceSourceUrl] = useState(null);
 
   useEffect(() => {
     setDescriptionValue(file.description || '');
@@ -118,7 +205,31 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
     if (e.target === overlayRef.current) onClose();
   };
 
-  const mediaType = getMediaType(file.type);
+  const mediaType = getFileMediaType(file.type);
+  const isUrlUpload = file.sourceType === 'url';
+
+  useEffect(() => {
+    setReferenceSourceUrl(null);
+  }, [file.id]);
+
+  useEffect(() => {
+    if (!isUrlUpload || file.sourceUrl || mediaType !== 'text' || !file.url) return;
+
+    fetch(fileUrl(file.url))
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load URL reference');
+        return res.text();
+      })
+      .then((text) => {
+        const match = text.match(/Source URL:\s*(https?:\/\/\S+)/i);
+        if (match?.[1]) {
+          setReferenceSourceUrl(match[1].trim());
+        }
+      })
+      .catch(() => {
+        // ignore parsing failures; fallback link remains available
+      });
+  }, [isUrlUpload, file.sourceUrl, mediaType, file.url]);
 
   useEffect(() => {
     setMediaError(null);
@@ -128,6 +239,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
   // Fetch text file content for preview
   useEffect(() => {
     if (mediaType !== 'text' || !file.url) return;
+    if (file.sourceType === 'url' && file.sourceUrl) return;
     setTextLoading(true);
     setTextError(null);
     fetch(fileUrl(file.url))
@@ -140,56 +252,44 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
       .finally(() => setTextLoading(false));
   }, [mediaType, file.url]);
 
-  const sourceUrl = file.sourceUrl || file.sourceReferenceUrl || file.url;
-  const isUrlUpload = file.sourceType === 'url';
+  const sourceUrl = file.sourceUrl || referenceSourceUrl || file.sourceReferenceUrl || file.url;
+  const embeddableSourceUrl = file.sourceUrl || referenceSourceUrl || null;
+  const isUrlReferenceEntry = isUrlUpload && !!file.sourceUrl;
 
-  // Determine embed strategy for URL uploads
-  // Only use embeds when we DON'T have a local downloaded copy
-  const hasLocalFile = file.url && file.url.startsWith('/api/files/');
-  const embedInfo = useMemo(() => {
-    if (!isUrlUpload || !sourceUrl || hasLocalFile) return null;
+  // Only use platform embeds when we DON'T have a local downloaded copy.
+  const hasLocalFile = file.url && file.url.startsWith('/api/files/') && !isUrlReferenceEntry;
+  const urlMediaType = useMemo(() => getMediaType(embeddableSourceUrl), [embeddableSourceUrl]);
+  const previewMode = useMemo(() => {
+    if (!isUrlUpload || !embeddableSourceUrl || hasLocalFile) return null;
 
-    const ytId = extractYouTubeId(sourceUrl);
-    if (ytId) {
-      return { type: 'youtube', embedUrl: `https://www.youtube.com/embed/${ytId}?autoplay=0&rel=0` };
-    }
-
-    const vimeoUrl = getVimeoEmbedUrl(sourceUrl);
-    if (vimeoUrl) {
-      return { type: 'vimeo', embedUrl: vimeoUrl };
-    }
-
-    const dailymotionUrl = getDailymotionEmbedUrl(sourceUrl);
-    if (dailymotionUrl) {
-      return { type: 'dailymotion', embedUrl: dailymotionUrl };
-    }
-
-    const tiktokUrl = getTikTokEmbedUrl(sourceUrl);
-    if (tiktokUrl) {
-      return { type: 'tiktok', embedUrl: tiktokUrl };
-    }
-
-    const facebookUrl = getFacebookEmbedUrl(sourceUrl);
-    if (facebookUrl) {
-      return { type: 'facebook', embedUrl: facebookUrl };
-    }
-
-    // Dailymotion/Facebook embeds are intentionally opened externally to avoid
-    // browser policy and monetization/player-id warnings in iframe previews.
-
-    if (isEmbeddableUrl(sourceUrl)) {
-      return { type: 'iframe', embedUrl: sourceUrl };
-    }
+    if (urlMediaType === 'youtube') return 'youtube';
+    if (urlMediaType === 'dailymotion') return 'dailymotion';
+    if (urlMediaType === 'tiktok') return 'tiktok';
+    if (urlMediaType === 'facebook') return 'facebook';
+    if (urlMediaType === 'google-drive') return 'google-drive';
+    if (urlMediaType === 'direct-audio') return 'direct-audio';
+    if (urlMediaType === 'direct-video') return 'direct-video';
 
     return null;
-  }, [isUrlUpload, sourceUrl, hasLocalFile]);
+  }, [isUrlUpload, embeddableSourceUrl, hasLocalFile, urlMediaType]);
+  const showInlineSourceFallback = isUrlUpload && sourceUrl && (mediaError || (!previewMode && !hasLocalFile));
+  const youtubeEmbedUrl = useMemo(() => getYouTubeEmbedUrl(embeddableSourceUrl), [embeddableSourceUrl]);
+  const dailymotionEmbedUrl = useMemo(() => getDailymotionEmbedUrl(embeddableSourceUrl), [embeddableSourceUrl]);
+  const facebookEmbedUrl = useMemo(() => toFacebookEmbedUrl(embeddableSourceUrl), [embeddableSourceUrl]);
+  const googleDrivePreviewUrl = useMemo(() => {
+    const fileId = extractGoogleDriveId(embeddableSourceUrl);
+    return fileId ? `https://drive.google.com/file/d/${fileId}/preview` : null;
+  }, [embeddableSourceUrl]);
+
+  useEffect(() => {
+    setMediaError(null);
+  }, [file.id, previewMode]);
 
   const iconInfo = useMemo(() => {
-    if (embedInfo?.type === 'youtube') return { icon: 'fa-brands fa-youtube', color: 'text-red-500 bg-red-50' };
-    if (embedInfo?.type === 'vimeo') return { icon: 'fa-brands fa-vimeo-v', color: 'text-cyan-600 bg-cyan-50' };
-    if (embedInfo?.type === 'dailymotion') return { icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' };
-    if (embedInfo?.type === 'tiktok') return { icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' };
-    if (embedInfo?.type === 'facebook') return { icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' };
+    if (urlMediaType === 'youtube') return { icon: 'fa-brands fa-youtube', color: 'text-red-500 bg-red-50' };
+    if (urlMediaType === 'dailymotion') return { icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' };
+    if (urlMediaType === 'tiktok') return { icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' };
+    if (urlMediaType === 'facebook') return { icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' };
     if (mediaType === 'image') return { icon: 'fa-image', color: 'text-violet-600 bg-violet-50' };
     if (mediaType === 'audio') return { icon: 'fa-music', color: 'text-sky-600 bg-sky-50' };
     if (mediaType === 'video') return { icon: 'fa-video', color: 'text-rose-500 bg-rose-50' };
@@ -197,73 +297,122 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
     if (mediaType === 'text') return { icon: 'fa-file-alt', color: 'text-gray-600 bg-gray-50' };
     if (isUrlUpload) return { icon: 'fa-link', color: 'text-indigo-600 bg-indigo-50' };
     return { icon: 'fa-file', color: 'text-gray-400 bg-gray-50' };
-  }, [embedInfo, mediaType, isUrlUpload]);
+  }, [urlMediaType, mediaType, isUrlUpload]);
 
   const renderContent = () => {
-    // URL uploads with embeddable content
-    if (embedInfo) {
+    if (isUrlUpload && sourceUrl && mediaError) {
+      return <PreviewFailedFallback sourceUrl={sourceUrl} />;
+    }
+
+    // URL uploads with supported platform/direct media previews
+    if (isUrlUpload && sourceUrl && previewMode === 'youtube' && youtubeEmbedUrl) {
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-3">
-          <iframe
-            src={embedInfo.embedUrl}
-            className="w-full max-w-3xl aspect-video rounded-lg shadow-sm"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            title={file.originalName}
-          />
-          {['dailymotion', 'tiktok', 'facebook'].includes(embedInfo.type) && (
-            <p className="text-[11px] text-gray-400 text-center max-w-2xl">
-              Some platforms may log third-party player warnings in DevTools. If playback is blocked, use the direct source link.
-            </p>
-          )}
-          <a
-            href={sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-primary transition-colors"
-          >
-            <i className="fas fa-up-right-from-square text-[10px]"></i>
-            If preview does not load, open direct source link
-          </a>
+        <iframe
+          src={youtubeEmbedUrl}
+          className="w-full max-w-4xl mx-auto aspect-video rounded-lg shadow-sm"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          title={file.originalName}
+          onError={() => setMediaError('Preview failed')}
+        />
+      );
+    }
+
+    if (isUrlUpload && sourceUrl && previewMode === 'dailymotion' && dailymotionEmbedUrl) {
+      return (
+        <iframe
+          src={dailymotionEmbedUrl}
+          className="w-full max-w-4xl mx-auto aspect-video rounded-lg shadow-sm"
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+          title={file.originalName}
+          onError={() => setMediaError('Preview failed')}
+        />
+      );
+    }
+
+    if (isUrlUpload && sourceUrl && previewMode === 'tiktok') {
+      return (
+        <div className="w-full flex justify-center">
+          <TikTokEmbed url={embeddableSourceUrl} width={325} />
         </div>
       );
     }
 
-    // URL uploads without embed — show link + download
-    if (isUrlUpload && mediaType === 'unknown') {
+    if (isUrlUpload && sourceUrl && previewMode === 'facebook') {
       return (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i className="fas fa-link text-indigo-500 text-2xl"></i>
-          </div>
-          <p className="text-sm font-medium text-dark-text mb-1">External URL</p>
-          <p className="text-xs text-gray-text mb-5 max-w-sm mx-auto truncate" title={sourceUrl}>
-            {sourceUrl}
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <a
-              href={sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-medium text-dark-text rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <i className="fas fa-external-link-alt text-xs"></i>
-              Open Source URL
-            </a>
-            {file.url && (
-              <a
-                href={fileUrl(file.url)}
-                download={file.originalName}
-                className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
-              >
-                <i className="fas fa-download text-xs"></i>
-                Download
-              </a>
-            )}
+        <div className="w-full flex justify-center">
+          <FacebookEmbed url={facebookEmbedUrl} width={560} />
+        </div>
+      );
+    }
+
+    if (isUrlUpload && sourceUrl && previewMode === 'google-drive' && googleDrivePreviewUrl) {
+      return (
+        <iframe
+          src={googleDrivePreviewUrl}
+          className="w-full border-0 rounded-lg"
+          style={{ minHeight: '70vh' }}
+          title={file.originalName}
+          allow="autoplay; encrypted-media"
+        />
+      );
+    }
+
+    if (isUrlUpload && sourceUrl && previewMode === 'direct-audio') {
+      return (
+        <div className="w-full max-w-lg">
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 text-center">
+            <div className="w-20 h-20 bg-sky-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-music text-sky-500 text-2xl"></i>
+            </div>
+            <p className="text-sm font-medium text-dark-text mb-6 truncate">{file.originalName}</p>
+            <audio controls className="w-full" preload="metadata" onError={() => setMediaError('Preview failed')}>
+              <source src={embeddableSourceUrl} />
+              Your browser does not support the audio element.
+            </audio>
           </div>
         </div>
       );
+    }
+
+    if (isUrlUpload && sourceUrl && previewMode === 'direct-video') {
+      return (
+        <div className="relative">
+          <video
+            controls
+            className="max-w-full max-h-[70vh] rounded-lg shadow-sm"
+            preload="metadata"
+            playsInline
+            onLoadedData={() => setMediaLoading(false)}
+            onCanPlay={() => setMediaLoading(false)}
+            onWaiting={() => setMediaLoading(true)}
+            onPlaying={() => setMediaLoading(false)}
+            onError={() => {
+              setMediaLoading(false);
+              setMediaError('Preview failed');
+            }}
+          >
+            <source src={embeddableSourceUrl} />
+            Your browser does not support the video element.
+          </video>
+
+          {mediaLoading && (
+            <div className="absolute inset-0 rounded-lg bg-black/25 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/90 text-xs font-medium text-gray-700 shadow">
+                <i className="fas fa-spinner fa-spin text-primary"></i>
+                Loading video preview...
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (isUrlUpload && sourceUrl && !hasLocalFile) {
+      return <PreviewFailedFallback sourceUrl={sourceUrl} />;
     }
 
     // Direct file uploads — use stored URL
@@ -319,7 +468,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
               )}
               {file.url && (
                 <a
-                  href={fileUrl(file.url) + '?download=1'}
+                  href={fileDownloadUrl(file.url)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
                 >
                   <i className="fas fa-download text-xs"></i>
@@ -410,7 +559,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
         <p className="text-xs text-gray-text mb-5">This file type cannot be previewed in the browser.</p>
         {file.url && (
           <a
-            href={fileUrl(file.url) + '?download=1'}
+            href={fileDownloadUrl(file.url)}
             className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
           >
             <i className="fas fa-download text-xs"></i>
@@ -453,7 +602,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
                 {file.originalName}
               </h3>
               <div className="flex items-center gap-2 text-[11px] text-gray-400">
-                {file.type && <span>{file.type}</span>}
+                {(isUrlUpload ? getPlatformLabel(urlMediaType) : file.type) && <span>{isUrlUpload ? getPlatformLabel(urlMediaType) : file.type}</span>}
                 {formatSize(file.size) && (
                   <>
                     <span className="text-gray-200">·</span>
@@ -535,7 +684,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
                 {file.serviceCategory}
               </span>
             )}
-            {isUrlUpload && sourceUrl && (
+            {isUrlUpload && sourceUrl && !showInlineSourceFallback && (
               <a
                 href={sourceUrl}
                 target="_blank"
@@ -551,7 +700,7 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
           <div className="flex items-center gap-2">
             {file.url && (
               <a
-                href={fileUrl(file.url) + '?download=1'}
+                href={fileDownloadUrl(file.url)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-text hover:text-dark-text hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <i className="fas fa-download text-[10px]"></i>

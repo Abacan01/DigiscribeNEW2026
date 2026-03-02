@@ -155,12 +155,16 @@ async function importFromFtp(db) {
   ]);
 
   const existingFilesByStoragePath = new Map();
+  const knownUrlReferencePaths = new Set();
   const ownerFallbackByEmailDir = new Map();
 
   for (const doc of filesSnapshot.docs) {
     const data = doc.data();
     const storagePath = data.storagePath || data.savedAs;
     if (storagePath) existingFilesByStoragePath.set(storagePath, doc.id);
+
+    const sourceReferenceStoragePath = data.sourceReferenceStoragePath;
+    if (sourceReferenceStoragePath) knownUrlReferencePaths.add(sourceReferenceStoragePath);
 
     const uploaderEmail = String(data.uploadedByEmail || '').trim();
     if (uploaderEmail.includes('@') && data.uploadedBy) {
@@ -215,6 +219,7 @@ async function importFromFtp(db) {
   for (const file of tree.files) {
     if (!shouldImportPath(file.path)) continue;
     if (existingFilesByStoragePath.has(file.path)) continue;
+    if (knownUrlReferencePaths.has(file.path)) continue;
 
     const segments = file.path.split('/');
     if (segments.length < 2) continue;

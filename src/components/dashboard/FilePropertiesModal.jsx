@@ -1,8 +1,12 @@
 import { createPortal } from 'react-dom';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 
 const PLATFORM_MAP = [
   { pattern: /youtu\.?be/i, label: 'YouTube' },
-  { pattern: /facebook\.com|fb\.com/i, label: 'Facebook' },
+  { pattern: /facebook\.com|fb\.com|fb\.watch/i, label: 'Facebook' },
+  { pattern: /dailymotion\.com|dai\.ly/i, label: 'Dailymotion' },
+  { pattern: /drive\.google\.com|docs\.google\.com/i, label: 'Google Drive' },
   { pattern: /instagram\.com/i, label: 'Instagram' },
   { pattern: /tiktok\.com/i, label: 'TikTok' },
   { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X' },
@@ -40,9 +44,11 @@ function formatDate(dateStr) {
 export default function FilePropertiesModal({ file, onClose }) {
   if (!file) return null;
 
+  const platformSourceUrl = file.sourceUrl || file.sourceReferenceUrl || file.url;
+
   const rows = [
     { label: 'File Name', value: file.originalName },
-    { label: 'Type', value: file.sourceType === 'url' ? getUrlPlatformLabel(file.url) : (file.type || '--') },
+    { label: 'Type', value: file.sourceType === 'url' ? getUrlPlatformLabel(platformSourceUrl) : (file.type || '--') },
     { label: 'Size', value: formatSize(file.size) },
     { label: 'Status', value: file.status || '--' },
     { label: 'Category', value: file.serviceCategory || '--' },
@@ -59,7 +65,7 @@ export default function FilePropertiesModal({ file, onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+      <Card className="rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
@@ -67,12 +73,14 @@ export default function FilePropertiesModal({ file, onClose }) {
             </div>
             <h3 className="text-sm font-semibold text-dark-text">Properties</h3>
           </div>
-          <button
+          <Button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 text-gray-400 hover:text-dark-text hover:bg-gray-100"
           >
             <i className="fas fa-times"></i>
-          </button>
+          </Button>
         </div>
 
         <div className="px-6 py-4 max-h-[60vh] overflow-auto">
@@ -87,14 +95,14 @@ export default function FilePropertiesModal({ file, onClose }) {
         </div>
 
         <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
-          <button
+          <Button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-text hover:text-dark-text hover:bg-gray-50 rounded-lg transition-colors"
+            variant="ghost"
           >
             Close
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>,
     document.body
   );

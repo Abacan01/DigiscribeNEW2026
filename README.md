@@ -28,6 +28,26 @@ VITE_UPLOAD_CHUNK_SIZE_MB=1
 - When not set, uploads use same-origin `/api/*` routes.
 - `VITE_UPLOAD_CHUNK_SIZE_MB` is optional; useful when uploading through shared-host proxies with low `post_max_size`/`upload_max_filesize` limits.
 
+## Local Development
+
+Run both frontend and backend together with:
+
+```bash
+npm run dev
+```
+
+- Frontend runs on `http://localhost:5173`
+- Backend API runs on `http://localhost:3001`
+- Frontend `/api/*` calls are proxied to the backend during development
+
+If you want dev/Codespaces to use your deployed backend instead of local API, set this in `.env`:
+
+```dotenv
+VITE_API_BASE=https://digiscribe.vercel.app
+```
+
+Then restart `npm run dev`.
+
 ## Quote Page (EmailJS)
 
 The `/quote` page sends form submissions through EmailJS from the frontend.

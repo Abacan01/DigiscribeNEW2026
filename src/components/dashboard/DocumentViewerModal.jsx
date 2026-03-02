@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fileUrl } from '../../lib/fileUrl';
+import { fileUrl, fileDownloadUrl } from '../../lib/fileUrl';
 
 function getViewerType(mimeType, fileName) {
   if (!mimeType && !fileName) return 'unsupported';
@@ -40,7 +40,7 @@ export default function DocumentViewerModal({ file, onClose }) {
 
   const downloadUrl = useCallback(() => {
     if (!url) return;
-    const resolved = url.includes('?') ? `${url}&download=1` : `${url}?download=1`;
+    const resolved = fileDownloadUrl(url);
     const a = document.createElement('a');
     a.href = resolved;
     a.download = file?.name || 'download';
