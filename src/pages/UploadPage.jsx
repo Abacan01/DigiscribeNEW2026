@@ -1552,7 +1552,7 @@ export default function UploadPage() {
   );
 
   return (
-    <Layout heroContent={heroContent}>
+    <Layout heroContent={heroContent} hideFooter>
       <div ref={animationRef} />
     </Layout>
   );

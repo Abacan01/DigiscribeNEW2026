@@ -9,6 +9,7 @@ import Breadcrumbs from '../components/dashboard/Breadcrumbs';
 import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
+import FileNoteModal from '../components/dashboard/FileNoteModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
@@ -48,7 +49,7 @@ const STATUS_CONFIG = {
   },
   'in-progress': {
     label: 'In Progress',
-    icon: 'fa-spinner',
+    icon: 'fa-arrows-rotate',
     bg: 'bg-sky-50',
     text: 'text-sky-600',
     border: 'border-sky-200',
@@ -201,6 +202,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
+  const [noteFile, setNoteFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [propertiesFolder, setPropertiesFolder] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1452,12 +1454,14 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
     const sourceHref = file.sourceUrl || file.sourceReferenceUrl || (isUrl ? file.url : '');
+    const hasNote = !!(file.description && file.description.trim().length > 0);
     const items = [];
 
     const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
 
     if (selCount <= 1) {
       items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      items.push({ icon: 'fa-sticky-note', label: 'View Note', disabled: !hasNote, onClick: () => setNoteFile(file) });
       if (isUrl && sourceHref) {
         items.push({
           icon: 'fa-up-right-from-square',
@@ -1927,7 +1931,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           {globalStats['in-progress'] > 0 && (
             <div className="bg-sky-50 rounded-xl border border-sky-100 px-4 py-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">
-                <i className="fas fa-spinner text-sky-600 text-sm"></i>
+                <i className="fas fa-arrows-rotate text-sky-600 text-sm"></i>
               </div>
               <p className="text-sm text-sky-700 font-medium">
                 {globalStats['in-progress']} file{globalStats['in-progress'] !== 1 ? 's' : ''} currently in progress
@@ -2762,6 +2766,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         />
       )}
 
+      {noteFile && (
+        <FileNoteModal
+          file={noteFile}
+          onClose={() => setNoteFile(null)}
+        />
+      )}
+
       {/* Document Viewer Modal (transcription view) */}
       {docViewerFile && (
         <DocumentViewerModal
@@ -3166,7 +3177,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   onClick={() => { handleStatusChange(transcriptionTarget.id, 'in-progress'); setTranscriptionTarget((prev) => prev ? { ...prev, status: 'in-progress' } : null); }}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 transition-colors"
                 >
-                  <i className="fas fa-spinner text-xs"></i>
+                  <i className="fas fa-arrows-rotate text-xs"></i>
                   Mark as In Progress
                 </button>
               )}
@@ -3463,10 +3474,6 @@ export default function AdminDashboardPage() {
             </h1>
             <div className="flex items-center gap-3 mt-1">
               <p className="text-sm text-gray-text">{user?.email || 'Admin'}</p>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                <i className="fas fa-shield-alt text-[8px]"></i>
-                Admin
-              </span>
             </div>
           </div>
 
@@ -3502,7 +3509,7 @@ export default function AdminDashboardPage() {
   );
 
   return (
-    <Layout heroContent={heroContent}>
+    <Layout heroContent={heroContent} hideFooter>
       <div className="min-h-screen bg-[#f8fafc]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {activeTab === 'files' && (

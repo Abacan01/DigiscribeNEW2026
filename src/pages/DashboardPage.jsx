@@ -9,6 +9,7 @@ import Breadcrumbs from '../components/dashboard/Breadcrumbs';
 import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
+import FileNoteModal from '../components/dashboard/FileNoteModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
@@ -26,7 +27,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_CONFIG = {
   pending: { label: 'Pending', icon: 'fa-clock', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', ring: 'ring-amber-400', iconBg: 'bg-amber-100' },
-  'in-progress': { label: 'In Progress', icon: 'fa-spinner', bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200', ring: 'ring-sky-400', iconBg: 'bg-sky-100' },
+  'in-progress': { label: 'In Progress', icon: 'fa-arrows-rotate', bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200', ring: 'ring-sky-400', iconBg: 'bg-sky-100' },
   transcribed: { label: 'Transcribed', icon: 'fa-check-circle', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', ring: 'ring-emerald-400', iconBg: 'bg-emerald-100' },
 };
 
@@ -138,6 +139,7 @@ export default function DashboardPage() {
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [previewFile, setPreviewFile] = useState(null);
+  const [noteFile, setNoteFile] = useState(null);
   const [docViewerFile, setDocViewerFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [propertiesFolder, setPropertiesFolder] = useState(null);
@@ -934,12 +936,14 @@ export default function DashboardPage() {
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
     const sourceHref = file.sourceUrl || file.sourceReferenceUrl || (isUrl ? file.url : '');
+    const hasNote = !!(file.description && file.description.trim().length > 0);
     const items = [];
 
     const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
 
     if (selCount <= 1) {
       items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      items.push({ icon: 'fa-sticky-note', label: 'View Note', disabled: !hasNote, onClick: () => setNoteFile(file) });
       if (isUrl && sourceHref) {
         items.push({
           icon: 'fa-up-right-from-square',
@@ -1029,7 +1033,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <Layout heroContent={heroContent}>
+    <Layout heroContent={heroContent} hideFooter>
       <div className="min-h-screen bg-[#f8fafc]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
@@ -1849,6 +1853,13 @@ export default function DashboardPage() {
           onClose={() => setPreviewFile(null)}
           canEditDescription={!isAdmin}
           onSaveDescription={handleUpdateDescription}
+        />
+      )}
+
+      {noteFile && (
+        <FileNoteModal
+          file={noteFile}
+          onClose={() => setNoteFile(null)}
         />
       )}
 

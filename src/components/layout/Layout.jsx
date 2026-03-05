@@ -2,7 +2,7 @@ import BackgroundBlobs from './BackgroundBlobs';
 import Navbar from './Navbar';
 import Footer from './Footer';
 
-export default function Layout({ children, heroContent }) {
+export default function Layout({ children, heroContent, hideFooter = false }) {
   return (
     <div className="font-poppins">
       <BackgroundBlobs />
@@ -11,7 +11,7 @@ export default function Layout({ children, heroContent }) {
         {heroContent}
       </div>
       {children}
-      <Footer />
+      {!hideFooter && <Footer />}
     </div>
   );
 }
