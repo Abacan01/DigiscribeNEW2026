@@ -722,9 +722,25 @@ export default function UploadPage() {
     }
 
     setEta('');
+
+    // Warn if any uploaded video is larger than 280 MB
+    const LARGE_VIDEO_THRESHOLD = 280 * 1024 * 1024;
+    const largeVideos = files.filter(
+      (f) => f.type && f.type.startsWith('video/') && f.size > LARGE_VIDEO_THRESHOLD
+    );
+    if (largeVideos.length > 0) {
+      setTimeout(() => {
+        toast.warning(
+          `${largeVideos.length > 1 ? `${largeVideos.length} videos are` : `"${fileNames[files.indexOf(largeVideos[0])] || largeVideos[0].name}" is`} over 280 MB and cannot be watched directly in the browser. Please download the file to view it.`,
+          'Large Video Notice'
+        );
+      }, 800);
+    }
+
     setResult({
       type: 'success',
       message: `${results.length} file${results.length !== 1 ? 's' : ''} uploaded successfully.`,
+      hasLargeVideo: largeVideos.length > 0,
     });
     setCurrentStep(5);
   };
@@ -912,6 +928,7 @@ export default function UploadPage() {
               <li><i className="fas fa-check text-primary mr-2"></i><strong>Images:</strong> JPG, PNG, GIF, WebP, BMP, SVG, HEIC, AVIF, JFIF, etc.</li>
               <li><i className="fas fa-check text-primary mr-2"></i><strong>Audio:</strong> MP3, WAV, OGG, AAC, FLAC, M4A, OPUS, AIFF, etc.</li>
               <li><i className="fas fa-check text-primary mr-2"></i><strong>Video:</strong> MP4, WebM, MOV, AVI, MKV, WMV, FLV, etc.</li>
+              <li><i className="fas fa-triangle-exclamation text-amber-500 mr-2"></i><strong>Videos over 280 MB</strong> cannot be streamed in-browser &mdash; you&apos;ll need to download them to view.</li>
               {role === 'admin' && (
                 <li><i className="fas fa-check text-primary mr-2"></i><strong>Documents (admin):</strong> PDF, DOC/DOCX, XLS/XLSX, TXT, CSV</li>
               )}
@@ -1461,6 +1478,14 @@ export default function UploadPage() {
           <p className="text-sm text-gray-text max-w-md mx-auto whitespace-pre-wrap">
             {result.message}
           </p>
+          {result.hasLargeVideo && (
+            <div className="mt-5 mx-auto max-w-md flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left">
+              <i className="fas fa-triangle-exclamation text-amber-500 text-sm mt-0.5 flex-shrink-0"></i>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                <strong>Large video notice:</strong> One or more of your videos is over 280 MB and cannot be streamed directly in the browser. You&apos;ll need to <strong>download the file</strong> to watch it.
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <>

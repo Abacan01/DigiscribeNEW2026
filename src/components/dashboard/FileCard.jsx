@@ -141,7 +141,15 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
     <Card className={`rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 group ${
       isSelected ? 'border-primary/40'
       : 'border-gray-100 hover:border-gray-200'
-    }`}>
+    }`}
+      onClick={(e) => {
+        if ((e.ctrlKey || e.metaKey || e.shiftKey) && onSelect) {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelect(file.id, e);
+        }
+      }}
+    >
       {/* Top accent bar */}
       <div className={`h-0.5 ${status.dot}`} />
 

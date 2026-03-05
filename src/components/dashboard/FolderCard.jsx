@@ -35,6 +35,7 @@ export default function FolderCard({
   itemCount,
   totalSize,
   showOwner,
+  onDelete,
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -69,7 +70,14 @@ export default function FolderCard({
         if (onDrop) onDrop(e, folder.id);
       }}
       onDoubleClick={() => onOpen(folder.id)}
-      onClick={() => onOpen(folder.id)}
+      onClick={(e) => {
+        if ((e.ctrlKey || e.metaKey || e.shiftKey) && onSelect) {
+          e.preventDefault();
+          onSelect(folder.id, e);
+        } else {
+          onOpen(folder.id);
+        }
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         if (onContextMenu) onContextMenu(e, folder);
@@ -127,8 +135,18 @@ export default function FolderCard({
             )}
           </div>
 
-          <div className="flex-shrink-0 text-gray-300 group-hover:text-gray-400 transition-colors">
-            <i className="fas fa-chevron-right text-xs"></i>
+          <div className="flex-shrink-0 flex items-center gap-1">
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(folder.id); }}
+                className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded-md flex items-center justify-center text-red-500 hover:bg-red-50 transition-all duration-150"
+                title="Delete folder"
+              >
+                <i className="fas fa-trash-alt text-[10px]"></i>
+              </button>
+            )}
+            <i className="fas fa-chevron-right text-xs text-gray-300 group-hover:text-gray-400 transition-colors"></i>
           </div>
         </div>
       </div>

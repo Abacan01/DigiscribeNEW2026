@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 
-export default function Breadcrumbs({ folders, currentFolderId, onNavigate, onDrop }) {
+export default function Breadcrumbs({ folders, currentFolderId, onNavigate, onDrop, isDraggingAny = false }) {
   const [dragOverId, setDragOverId] = useState(null); // 'root' | folder.id | null
 
   // Build breadcrumb path by walking up parentId chain
@@ -45,12 +45,31 @@ export default function Breadcrumbs({ folders, currentFolderId, onNavigate, onDr
   };
 
   const isDragging = dragOverId !== null;
+  // Show idle hint when something is being dragged anywhere on the page but not yet over the bar
+  const showIdleHint = isDraggingAny && !isDragging;
 
   return (
     <div
-      className={`bg-white rounded-xl border px-4 py-3 mb-4 shadow-sm transition-all ${isDragging ? 'border-primary/30 bg-primary/[0.02]' : 'border-gray-100'}`}
+      className={`bg-white rounded-xl border px-4 py-3 mb-4 shadow-sm transition-all duration-200 ${
+        isDragging
+          ? 'border-primary/40 bg-primary/[0.02] shadow-md'
+          : showIdleHint
+          ? 'border-dashed border-primary/50 bg-primary/[0.015] shadow-sm'
+          : 'border-gray-100'
+      }`}
       onDragLeave={handleDragLeave}
     >
+      {/* Idle hint — shown as soon as any drag starts before user reaches the bar */}
+      {showIdleHint && (
+        <div className="flex items-center gap-2 mb-2 px-0.5 animate-pulse">
+          <span className="flex items-center justify-center w-5 h-5 rounded-md bg-primary/10 flex-shrink-0">
+            <i className="fas fa-location-arrow text-primary text-[9px] -rotate-45"></i>
+          </span>
+          <p className="text-[11px] text-primary/80 font-medium leading-tight">
+            Drag here to move to <span className="font-semibold">My Files</span> or a parent folder
+          </p>
+        </div>
+      )}
       {isDragging && (
         <p className="text-[10px] text-primary/70 font-medium mb-1.5 flex items-center gap-1">
           <i className="fas fa-arrows-alt text-[9px]"></i>
@@ -64,7 +83,11 @@ export default function Breadcrumbs({ folders, currentFolderId, onNavigate, onDr
           onClick={() => onNavigate(null)}
           onDragOver={(e) => handleDragOver(e, 'root')}
           onDrop={(e) => handleDrop(e, null)}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${crumbClass(!currentFolderId, dragOverId === 'root')}`}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${
+            isDraggingAny && !isDragging && !currentFolderId
+              ? 'ring-1 ring-primary/20'
+              : ''
+          } ${crumbClass(!currentFolderId, dragOverId === 'root')}`}
         >
           <i className={`fas fa-hdd text-xs ${dragOverId === 'root' ? 'text-primary' : ''}`}></i>
           My Files

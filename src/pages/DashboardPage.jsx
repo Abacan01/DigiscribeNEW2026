@@ -148,6 +148,7 @@ export default function DashboardPage() {
   const [deleteLoading, setDeleteLoading] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const dashboardStateHydratedRef = useRef(false);
+  const lastAnchorId = useRef(null);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -166,6 +167,7 @@ export default function DashboardPage() {
   const [renameValue, setRenameValue] = useState('');
   const [dragOverFolder, setDragOverFolder] = useState(null);
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+  const [isDraggingAny, setIsDraggingAny] = useState(false);
   const [renameFolderModal, setRenameFolderModal] = useState(null);
 
   const { files: allFiles, loading, error } = useFirestoreFiles();
@@ -526,13 +528,53 @@ export default function DashboardPage() {
     });
   };
 
-  // Ctrl+A → select all files in current view
+  // Ordered list of visible page items for range selection (folders first, then files)
+  const orderedPageItems = useMemo(
+    () => [...paginatedFolders.map((f) => f.id), ...paginatedFiles.map((f) => f.id)],
+    [paginatedFolders, paginatedFiles],
+  );
+
+  // Smart select: handles Shift+click (range), Ctrl/Cmd+click (toggle), plain toggle
+  const handleSelectClick = useCallback(
+    (id, e) => {
+      if (e?.shiftKey && lastAnchorId.current != null) {
+        const start = orderedPageItems.indexOf(lastAnchorId.current);
+        const end = orderedPageItems.indexOf(id);
+        if (start !== -1 && end !== -1) {
+          const [from, to] = start <= end ? [start, end] : [end, start];
+          const rangeIds = orderedPageItems.slice(from, to + 1);
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const rid of rangeIds) next.add(rid);
+            return next;
+          });
+        }
+        // Shift+click does not move the anchor
+        return;
+      }
+      // Ctrl/Meta+click or plain toggle — always updates anchor
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      lastAnchorId.current = id;
+    },
+    [orderedPageItems],
+  );
+
+  // Keyboard shortcuts (Ctrl+A, Escape, Delete, Ctrl+I)
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && activeTab === 'files') {
-        // Only intercept when not typing in an input
-        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (activeTab !== 'files') return;
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+A — toggle select all on page
+      if (ctrl && e.key === 'a') {
         e.preventDefault();
+        window.getSelection()?.removeAllRanges();
         if (allPageIds.size > 0) {
           setSelectedIds((prev) => {
             const next = new Set(prev);
@@ -545,11 +587,42 @@ export default function DashboardPage() {
             return next;
           });
         }
+        return;
+      }
+
+      // Ctrl+I — invert selection on current page
+      if (ctrl && e.key === 'i') {
+        e.preventDefault();
+        if (allPageIds.size > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const id of allPageIds) {
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+            }
+            return next;
+          });
+        }
+        return;
+      }
+
+      // Escape — deselect all
+      if (e.key === 'Escape') {
+        setSelectedIds(new Set());
+        lastAnchorId.current = null;
+        return;
+      }
+
+      // Delete — bulk delete if items are selected
+      if (e.key === 'Delete' && selectedCount > 0) {
+        e.preventDefault();
+        setBulkDeleteConfirm(true);
+        return;
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [activeTab, allPageIds]);
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [activeTab, allPageIds, selectedCount]);
 
   // Bulk move to folder
   const handleBulkMove = useCallback(async (targetFolderId) => {
@@ -761,6 +834,20 @@ export default function DashboardPage() {
     }
     setDeleteFolderConfirm(null);
   }, [deleteFolder, refetchFolders, currentFolderId, allFolders]);
+
+  // Track whether any drag is in progress (used to light up breadcrumb drop zone)
+  useEffect(() => {
+    const onStart = () => setIsDraggingAny(true);
+    const onEnd = () => setIsDraggingAny(false);
+    document.addEventListener('dragstart', onStart);
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    return () => {
+      document.removeEventListener('dragstart', onStart);
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+    };
+  }, []);
 
   // Drag-start handler — supports multi-select dragging
   const handleDragStart = useCallback((e, item, itemType) => {
@@ -1239,6 +1326,7 @@ export default function DashboardPage() {
                 currentFolderId={currentFolderId}
                 onNavigate={setCurrentFolderId}
                 onDrop={handleDrop}
+                isDraggingAny={isDraggingAny}
               />
 
               {/* Bulk action bar */}
@@ -1428,7 +1516,7 @@ export default function DashboardPage() {
                               onOpen={(id) => setCurrentFolderId(id)}
                               onContextMenu={handleFolderContextMenu}
                               isSelected={selectedIds.has(folder.id)}
-                              onSelect={toggleSelect}
+                              onSelect={handleSelectClick}
                               isDragOver={dragOverFolder === folder.id}
                               onDragOver={setDragOverFolder}
                               onDragLeave={() => setDragOverFolder(null)}
@@ -1437,6 +1525,7 @@ export default function DashboardPage() {
                               itemCount={folderItemCounts[folder.id] || 0}
                               totalSize={folderSizes[folder.id] || 0}
                               showUploadedBy={false}
+                              onDelete={(id) => setDeleteFolderConfirm(id)}
                             />
                           );
                         })}
@@ -1451,16 +1540,22 @@ export default function DashboardPage() {
                           return (
                             <React.Fragment key={file.id}>
                             <tr
-                              className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
+                              className={`transition-colors cursor-pointer ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
                               draggable
                               onDragStart={(e) => handleDragStart(e, file, 'file')}
                               onContextMenu={(e) => handleFileContextMenu(e, file)}
+                              onClick={(e) => {
+                                if ((e.ctrlKey || e.metaKey || e.shiftKey) && !['INPUT', 'BUTTON', 'A'].includes(e.target.tagName)) {
+                                  e.preventDefault();
+                                  handleSelectClick(file.id, e);
+                                }
+                              }}
                             >
                               <td className="text-center px-3 py-3.5">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={() => toggleSelect(file.id)}
+                                  onChange={() => handleSelectClick(file.id)}
                                   className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                                 />
                               </td>
@@ -1674,7 +1769,7 @@ export default function DashboardPage() {
                         onOpen={(id) => setCurrentFolderId(id)}
                         onContextMenu={handleFolderContextMenu}
                         isSelected={selectedIds.has(folder.id)}
-                        onSelect={toggleSelect}
+                        onSelect={handleSelectClick}
                         isDragOver={dragOverFolder === folder.id}
                         onDragOver={setDragOverFolder}
                         onDragLeave={() => setDragOverFolder(null)}
@@ -1682,6 +1777,7 @@ export default function DashboardPage() {
                         onDragStart={handleDragStart}
                         itemCount={folderItemCounts[folder.id] || 0}
                         totalSize={folderSizes[folder.id] || 0}
+                        onDelete={(id) => setDeleteFolderConfirm(id)}
                       />
                     );
                   })}
@@ -1703,7 +1799,7 @@ export default function DashboardPage() {
                           onStatusChange={handleStatusChange}
                           onPreview={setPreviewFile}
                           isSelected={isSelected}
-                          onSelect={toggleSelect}
+                          onSelect={handleSelectClick}
                           onDelete={(id) => setDeleteConfirm(id)}
                           deleteLoading={deleteLoading === file.id}
                           folderName={statusFilter && currentFolderId === null && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}

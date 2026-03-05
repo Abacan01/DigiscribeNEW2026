@@ -454,28 +454,6 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
             <p className="text-xs text-gray-text mb-5">
               The file may be very large, still processing, or not supported by this browser codec.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {file.url && (
-                <a
-                  href={fileUrl(file.url)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-sm font-medium text-dark-text rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <i className="fas fa-up-right-from-square text-xs"></i>
-                  Open Direct
-                </a>
-              )}
-              {file.url && (
-                <a
-                  href={fileDownloadUrl(file.url)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 btn-gradient text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/40 transition-all"
-                >
-                  <i className="fas fa-download text-xs"></i>
-                  Download Video
-                </a>
-              )}
-            </div>
           </div>
         );
       }
@@ -698,6 +676,17 @@ export default function FilePreviewModal({ file, onClose, canEditDescription = f
             )}
           </div>
           <div className="flex items-center gap-2">
+            {mediaType === 'video' && file.url && (
+              <a
+                href={fileUrl(file.url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-text hover:text-dark-text hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <i className="fas fa-up-right-from-square text-[10px]"></i>
+                Open Direct
+              </a>
+            )}
             {file.url && (
               <a
                 href={fileDownloadUrl(file.url)}
