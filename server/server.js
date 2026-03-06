@@ -171,11 +171,6 @@ function encodeStorageUrl(storagePath) {
   return storagePath.split('/').map(encodeURIComponent).join('/');
 }
 
-function getTempChunkRemotePath(uploadId, chunkIndex) {
-  const safeUploadId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
-  return `_chunks/${safeUploadId}/chunk-${chunkIndex}`;
-}
-
 function getAssemblingRemotePath(uploadId) {
   const safeUploadId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
   return `_assembling/${safeUploadId}.bin`;
@@ -219,30 +214,42 @@ app.use('/api/folders', foldersRouter);
 app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, error: 'No chunk received.' });
 
-  const { uploadId, chunkIndex } = req.body || {};
-  if (!uploadId || chunkIndex === undefined) {
-    return res.status(400).json({ success: false, error: 'Missing uploadId or chunkIndex.' });
+  const { uploadId, chunkIndex, chunkStart } = req.body || {};
+  if (!uploadId || chunkIndex === undefined || chunkStart === undefined) {
+    return res.status(400).json({ success: false, error: 'Missing uploadId, chunkIndex, or chunkStart.' });
   }
 
   try {
     if (IS_VERCEL) {
-      const remoteChunkPath = getTempChunkRemotePath(uploadId, chunkIndex);
-
-      // Idempotency guard: if this chunk already exists remotely, treat as success.
-      try {
-        await ftpFileSize(remoteChunkPath);
-        return res.json({ success: true, dedup: true });
-      } catch {
-        // chunk not found remotely; continue
+      const startOffset = Number.parseInt(String(chunkStart), 10);
+      if (!Number.isFinite(startOffset) || startOffset < 0) {
+        return res.status(400).json({ success: false, error: 'Invalid chunkStart.' });
       }
 
       const assemblingPath = getAssemblingRemotePath(uploadId);
+      let assembledSize = 0;
+      try {
+        assembledSize = await ftpFileSize(assemblingPath);
+      } catch {
+        assembledSize = 0;
+      }
 
-      // Store chunk artifact for validation/retry
-      await uploadBufferToFtp(req.file.buffer, remoteChunkPath);
+      // If current assembled size is already past this chunk start, this is a retry and
+      // we can acknowledge success without appending duplicate bytes.
+      if (assembledSize > startOffset) {
+        return res.json({ success: true, dedup: true });
+      }
 
-      // Build remote assembled file incrementally to make /complete fast.
-      if (Number(chunkIndex) === 0) {
+      // Reject out-of-order chunks in production so byte order remains correct.
+      if (assembledSize < startOffset) {
+        return res.status(409).json({
+          success: false,
+          error: `Chunk out of order. Expected offset ${assembledSize}, received ${startOffset}.`,
+        });
+      }
+
+      // Build remote assembled file incrementally to make /complete constant-time.
+      if (Number(chunkIndex) === 0 && assembledSize === 0) {
         await uploadBufferToFtp(req.file.buffer, assemblingPath);
       } else {
         await appendBufferToFtp(req.file.buffer, assemblingPath);
@@ -298,27 +305,11 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     let finalSize = 0;
 
     if (IS_VERCEL) {
-      // Ensure all chunks were received remotely before finalizing.
-      for (let i = 0; i < totalChunks; i++) {
-        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-        try {
-          await ftpFileSize(remoteChunkPath);
-        } catch {
-          return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
-        }
-      }
-
       const assemblingPath = getAssemblingRemotePath(uploadId);
       finalSize = await ftpFileSize(assemblingPath);
 
       // Move assembled temp file into final structured storage path (no re-upload copy).
       await moveOnFtp(assemblingPath, storagePath);
-
-      // Clean up remote chunk artifacts
-      for (let i = 0; i < totalChunks; i++) {
-        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-        await deleteFromFtp(remoteChunkPath);
-      }
     } else {
       const storageDir = path.join(chunksDir, 'assemble-tmp');
       if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });

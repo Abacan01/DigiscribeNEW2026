@@ -617,6 +617,7 @@ export default function UploadPage() {
         formData.append('chunk', blob);
         formData.append('uploadId', uploadId);
         formData.append('chunkIndex', String(chunkIndex));
+        formData.append('chunkStart', String(start));
 
         const chunkRes = await fetch('/api/upload/chunk', {
           method: 'POST',
@@ -643,7 +644,7 @@ export default function UploadPage() {
       return 0;
     };
 
-    const completeUploadWithRetry = async ({ uploadId, file, fileName, totalChunks, mimeType }) => {
+    const completeUploadWithRetry = async ({ uploadId, fileName, totalChunks, mimeType }) => {
       for (let attempt = 0; attempt <= COMPLETE_RETRIES; attempt++) {
         const completeRes = await fetch('/api/upload/complete', {
           method: 'POST',
@@ -665,23 +666,16 @@ export default function UploadPage() {
           return completeData;
         }
 
-        const message = completeData.error || `Assembly failed for "${fileName}".`;
-        const missingMatch = message.match(/Missing chunk\s+(\d+)/i);
-
-        if (!missingMatch || attempt === COMPLETE_RETRIES) {
+        const message = completeData.error || `Finalize failed for "${fileName}".`;
+        if (attempt === COMPLETE_RETRIES) {
           throw new Error(message);
         }
 
-        const missingChunkIndex = Number(missingMatch[1]);
-        await uploadChunkWithRetry({
-          file,
-          uploadId,
-          chunkIndex: missingChunkIndex,
-          customName: fileName,
-        });
+        const backoff = CHUNK_RETRY_BASE_DELAY_MS * (attempt + 1);
+        await wait(backoff);
       }
 
-      throw new Error(`Assembly failed for "${fileName}".`);
+      throw new Error(`Finalize failed for "${fileName}".`);
     };
 
     for (let idx = 0; idx < filesToUpload.length; idx++) {
@@ -713,7 +707,6 @@ export default function UploadPage() {
 
       const completeData = await completeUploadWithRetry({
         uploadId,
-        file,
         fileName: customName,
         totalChunks,
         mimeType: file.type,
