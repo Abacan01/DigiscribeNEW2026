@@ -118,32 +118,6 @@ function formatRelativeDate(dateString) {
   }
 }
 
-const ALLOWED_TRANSCRIPTION_EXTENSIONS = new Set(['.pdf', '.txt', '.csv', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.rtf', '.odt']);
-const ALLOWED_TRANSCRIPTION_MIME_TYPES = new Set([
-  'application/pdf',
-  'text/plain',
-  'text/csv',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/rtf',
-  'application/vnd.oasis.opendocument.text',
-]);
-const TRANSCRIPTION_FORMAT_ERROR = 'Unsupported transcription format. Only PDF, TXT/CSV, DOC/DOCX, XLS/XLSX, PPT/PPTX, RTF, and ODT are allowed.';
-
-function isAllowedTranscriptionSourceFile(file) {
-  if (!file) return false;
-  const mime = typeof file.type === 'string' ? file.type.toLowerCase().trim() : '';
-  if (mime && ALLOWED_TRANSCRIPTION_MIME_TYPES.has(mime)) return true;
-  const name = String(file.originalName || file.savedAs || '');
-  const dot = name.lastIndexOf('.');
-  const ext = dot >= 0 ? name.slice(dot).toLowerCase() : '';
-  return !!ext && ALLOWED_TRANSCRIPTION_EXTENSIONS.has(ext);
-}
-
 function getPageNumbers(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages = [];
@@ -282,11 +256,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
   // Change-status popup state
   const [statusChangeTarget, setStatusChangeTarget] = useState(null);
-
-  // "Use as Transcription for..." modal state
-  const [attachAsTranscriptionSource, setAttachAsTranscriptionSource] = useState(null);
-  const [attachAsTranscriptionLoading, setAttachAsTranscriptionLoading] = useState(false);
-  const [attachTargetSearch, setAttachTargetSearch] = useState('');
 
   useEffect(() => {
     if (!message) return;
@@ -877,81 +846,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setTranscriptionRemoving(false);
       setRemoveTranscriptionConfirm(null);
       setTimeout(() => setMessage(null), 3000);
-    }
-  }, [getIdToken]);
-
-  // Attach an already-uploaded file as the transcription for another file
-  const handleAttachFromExistingFile = useCallback(async (sourceFile, targetFile) => {
-    setAttachAsTranscriptionLoading(true);
-    setMessage(null);
-    try {
-      if (!isAllowedTranscriptionSourceFile(sourceFile)) {
-        throw new Error(TRANSCRIPTION_FORMAT_ERROR);
-      }
-
-      const token = await getIdToken();
-
-      const runLegacyMoveFallback = async () => {
-        const downloadRes = await fetch(fileDownloadUrl(sourceFile.url), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!downloadRes.ok) throw new Error('Failed to fetch source file.');
-
-        const blob = await downloadRes.blob();
-        const uploadFile = new File([blob], sourceFile.originalName || 'transcription', { type: blob.type });
-        const formData = new FormData();
-        formData.append('transcription', uploadFile);
-
-        const attachRes = await fetch(`/api/files/metadata/${targetFile.id}/transcription`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-        const attachData = await attachRes.json().catch(() => ({}));
-        if (!attachRes.ok || !attachData.success) throw new Error(attachData.error || 'Failed to attach transcription.');
-
-        const deleteSourceRes = await fetch(`/api/files/metadata/${sourceFile.id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const deleteSourceData = await deleteSourceRes.json().catch(() => ({}));
-        if (!deleteSourceRes.ok || !deleteSourceData.success) {
-          throw new Error('Transcription attached, but failed to remove source file. Please delete the source file manually.');
-        }
-
-        setMessage({ type: 'success', text: `Transcription moved to "${targetFile.originalName}" successfully.` });
-      };
-
-      const res = await fetch(`/api/files/metadata/${targetFile.id}/transcription/from-file`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ sourceFileId: sourceFile.id }),
-      });
-
-      if (res.status === 404) {
-        await runLegacyMoveFallback();
-        setAttachAsTranscriptionSource(null);
-        setAttachTargetSearch('');
-        return;
-      }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to attach transcription.');
-      if (Array.isArray(data.warnings) && data.warnings.length > 0) {
-        setMessage({ type: 'error', text: data.warnings[0] });
-      } else {
-        setMessage({ type: 'success', text: `Transcription moved to "${targetFile.originalName}" successfully.` });
-      }
-      setAttachAsTranscriptionSource(null);
-      setAttachTargetSearch('');
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message });
-    } finally {
-      setAttachAsTranscriptionLoading(false);
-      setTimeout(() => setMessage(null), 4000);
     }
   }, [getIdToken]);
 
@@ -1601,13 +1495,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         onClick: () => setTranscriptionTarget(file),
       });
       items.push({ icon: 'fa-sliders-h', label: 'Change Status', onClick: () => { setStatusChangeTarget(file); setContextMenu(null); } });
-      if (!isUrl) {
-        if (isAllowedTranscriptionSourceFile(file)) {
-          items.push({ icon: 'fa-file-import', label: 'Use as Transcription for...', onClick: () => { setAttachAsTranscriptionSource(file); setAttachTargetSearch(''); setContextMenu(null); } });
-        } else {
-          items.push({ icon: 'fa-file-import', label: 'Use as Transcription for... (Unsupported format)', disabled: true, onClick: () => {} });
-        }
-      }
       items.push({ divider: true });
       items.push({ icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) });
       items.push({ icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => { setDeleteConfirm(file.id); } });
@@ -3194,109 +3081,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 type="button"
                 onClick={() => setStatusChangeTarget(null)}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Use as Transcription For... Modal */}
-      {attachAsTranscriptionSource && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-          onClick={() => !attachAsTranscriptionLoading && setAttachAsTranscriptionSource(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden"
-            style={{ maxHeight: '80vh' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-              <div className="min-w-0">
-                <h3 className="text-base font-semibold text-dark-text">Use as Transcription for...</h3>
-                <p className="text-xs text-gray-text mt-0.5 truncate max-w-[320px]" title={attachAsTranscriptionSource.originalName}>
-                  Attaching: <span className="font-medium text-dark-text">{attachAsTranscriptionSource.originalName}</span>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => !attachAsTranscriptionLoading && setAttachAsTranscriptionSource(null)}
-                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-3"
-              >
-                <i className="fas fa-times text-sm"></i>
-              </button>
-            </div>
-            <div className="px-5 pt-4 pb-2 flex-shrink-0">
-              <div className="relative">
-                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
-                <input
-                  type="text"
-                  placeholder="Search files by name or email..."
-                  value={attachTargetSearch}
-                  onChange={(e) => setAttachTargetSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="overflow-y-auto flex-1 px-5 pb-4 space-y-1.5 min-h-0">
-              {(() => {
-                const q = attachTargetSearch.toLowerCase().trim();
-                const candidates = allFiles.filter(
-                  (f) =>
-                    f.id !== attachAsTranscriptionSource.id &&
-                    (!q ||
-                      (f.originalName && f.originalName.toLowerCase().includes(q)) ||
-                      (f.uploadedByEmail && f.uploadedByEmail.toLowerCase().includes(q)))
-                );
-                if (candidates.length === 0) {
-                  return (
-                    <p className="text-center text-sm text-gray-text py-8">
-                      <i className="fas fa-search text-gray-300 block text-2xl mb-2"></i>
-                      No files found.
-                    </p>
-                  );
-                }
-                return candidates.map((f) => {
-                  const fcfg = STATUS_CONFIG[f.status] || STATUS_CONFIG.pending;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      disabled={attachAsTranscriptionLoading}
-                      onClick={() => handleAttachFromExistingFile(attachAsTranscriptionSource, f)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-100 hover:border-primary/30 hover:bg-primary/[0.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-left group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                        <i className={`fas ${getFileIcon(f.type)} text-xs text-gray-500`}></i>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-dark-text truncate">{f.originalName}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{f.uploadedByEmail || '--'}</p>
-                      </div>
-                      <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${fcfg.bg} ${fcfg.text} ${fcfg.border}`}>
-                        <i className={`fas ${fcfg.icon} text-[8px]`}></i>
-                        {fcfg.label}
-                      </span>
-                      {attachAsTranscriptionLoading ? (
-                        <i className="fas fa-spinner fa-spin text-primary text-xs flex-shrink-0"></i>
-                      ) : (
-                        <i className="fas fa-chevron-right text-gray-300 group-hover:text-primary text-xs flex-shrink-0 transition-colors"></i>
-                      )}
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between flex-shrink-0">
-              <p className="text-xs text-gray-text">Click a file to move the selected file as its transcription. The original source file will be removed.</p>
-              <button
-                type="button"
-                onClick={() => !attachAsTranscriptionLoading && setAttachAsTranscriptionSource(null)}
-                disabled={attachAsTranscriptionLoading}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
