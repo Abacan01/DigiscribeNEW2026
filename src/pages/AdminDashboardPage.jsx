@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { fileUrl } from '../lib/fileUrl';
+import { fileUrl, fileDownloadUrl } from '../lib/fileUrl';
 import Layout from '../components/layout/Layout';
 import FolderRow from '../components/dashboard/FolderRow';
 import FolderCard from '../components/dashboard/FolderCard';
@@ -9,12 +9,17 @@ import Breadcrumbs from '../components/dashboard/Breadcrumbs';
 import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
+import FileNoteModal from '../components/dashboard/FileNoteModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import DocumentViewerModal from '../components/dashboard/DocumentViewerModal';
 import FolderFilterToolbar from '../components/dashboard/FolderFilterToolbar';
 import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import RenameDialog from '../components/ui/RenameDialog';
+import { Button } from '../components/ui/button';
+import { Dialog, DialogContent } from '../components/ui/dialog';
 import CreateUserForm from '../components/admin/CreateUserForm';
 import UserTable from '../components/admin/UserTable';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
@@ -22,6 +27,7 @@ import { useFolders } from '../hooks/useFolders';
 import { useFolderActions } from '../hooks/useFolderActions';
 import { useTranscriptions } from '../hooks/useTranscriptions';
 import { useAdminUsers } from '../hooks/useAdminUsers';
+import { useAppToast } from '../hooks/useAppToast';
 import { useAuth } from '../contexts/AuthContext';
 
 const TABS = [
@@ -44,7 +50,7 @@ const STATUS_CONFIG = {
   },
   'in-progress': {
     label: 'In Progress',
-    icon: 'fa-spinner',
+    icon: 'fa-arrows-rotate',
     bg: 'bg-sky-50',
     text: 'text-sky-600',
     border: 'border-sky-200',
@@ -135,6 +141,7 @@ function getFileIcon(type) {
   if (type.includes('excel') || type.includes('spreadsheet')) return 'fa-file-excel';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'fa-file-powerpoint';
   if (type === 'text/plain' || type === 'text/csv') return 'fa-file-alt';
+  if (type === 'application/x-url') return 'fa-link';
   return 'fa-file';
 }
 
@@ -147,18 +154,21 @@ function getFileIconColor(type) {
   if (type.includes('word') || type === 'application/msword') return 'text-blue-600 bg-blue-50';
   if (type.includes('excel') || type.includes('spreadsheet')) return 'text-green-600 bg-green-50';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'text-orange-600 bg-orange-50';
+  if (type === 'application/x-url') return 'text-indigo-600 bg-indigo-50';
   return 'text-gray-400 bg-gray-50';
 }
 
 const PLATFORM_MAP = [
-  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-youtube', color: 'text-red-600 bg-red-50' },
-  { pattern: /facebook\.com|fb\.com/i, label: 'Facebook', icon: 'fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
-  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-instagram', color: 'text-pink-600 bg-pink-50' },
-  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-tiktok', color: 'text-gray-900 bg-gray-100' },
-  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
-  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
-  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
-  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-twitch', color: 'text-violet-600 bg-violet-50' },
+  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-brands fa-youtube', color: 'text-red-600 bg-red-50' },
+  { pattern: /facebook\.com|fb\.com|fb\.watch/i, label: 'Facebook', icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
+  { pattern: /dailymotion\.com|dai\.ly/i, label: 'Dailymotion', icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /drive\.google\.com|docs\.google\.com/i, label: 'Google Drive', icon: 'fa-brands fa-google-drive', color: 'text-emerald-600 bg-emerald-50' },
+  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-brands fa-instagram', color: 'text-pink-600 bg-pink-50' },
+  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' },
+  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-brands fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
+  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-brands fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-brands fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
+  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-brands fa-twitch', color: 'text-violet-600 bg-violet-50' },
 ];
 
 function getUrlPlatform(sourceUrl) {
@@ -170,6 +180,7 @@ function getUrlPlatform(sourceUrl) {
 
 function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoading, folderActions, refetchFolders }) {
   const { user, getIdToken } = useAuth();
+  const toast = useAppToast();
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = folderActions;
 
   const [statusFilter, setStatusFilter] = useState('');
@@ -191,15 +202,19 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [statusLoading, setStatusLoading] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(null);
+  const [downloadLoadingKey, setDownloadLoadingKey] = useState('');
   const [previewFile, setPreviewFile] = useState(null);
+  const [noteFile, setNoteFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [propertiesFolder, setPropertiesFolder] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const dashboardStateHydratedRef = useRef(false);
+  const lastAnchorId = useRef(null);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [deleteAllDevConfirm, setDeleteAllDevConfirm] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkMoveActive, setBulkMoveActive] = useState(false);
   const [bulkStatusTarget, setBulkStatusTarget] = useState(null); // status to apply in bulk
@@ -213,7 +228,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [userPage, setUserPage] = useState(1);
 
   // Root view mode: 'users' = per-user folders, 'general' = all files combined
-  const [rootViewMode, setRootViewMode] = useState('users');
+  const [rootViewMode, setRootViewMode] = useState('general');
 
   // Folder state
   const [currentFolderId, setCurrentFolderId] = useState(null);
@@ -222,7 +237,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [renamingFolder, setRenamingFolder] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [dragOverFolder, setDragOverFolder] = useState(null);
+  const [dragOverBreadcrumb, setDragOverBreadcrumb] = useState(null); // 'root' | 'user' | folderId
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+  const [isDraggingAny, setIsDraggingAny] = useState(false);
 
   // File rename state
   const [renamingFileId, setRenamingFileId] = useState(null);
@@ -233,6 +250,37 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const [transcriptionTarget, setTranscriptionTarget] = useState(null); // file to attach transcription to
   const [docViewerFile, setDocViewerFile] = useState(null);
   const [transcriptionUploading, setTranscriptionUploading] = useState(false);
+  const [transcriptionRemoving, setTranscriptionRemoving] = useState(false);
+  const [removeTranscriptionConfirm, setRemoveTranscriptionConfirm] = useState(null);
+  const [renameModal, setRenameModal] = useState(null);
+
+  // Change-status popup state
+  const [statusChangeTarget, setStatusChangeTarget] = useState(null);
+
+  useEffect(() => {
+    if (!message) return;
+    if (message.type === 'success') {
+      toast.success(message.text);
+      return;
+    }
+    toast.error(message.text);
+  }, [message, toast]);
+
+  useEffect(() => {
+    if (!filesError) return;
+    toast.error(filesError, 'Unable to load files');
+  }, [filesError, toast]);
+
+  useEffect(() => {
+    if (!transcriptionTarget) return;
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      if (transcriptionUploading) return;
+      setTranscriptionTarget(null);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [transcriptionTarget, transcriptionUploading]);
 
   useEffect(() => {
     dashboardStateHydratedRef.current = false;
@@ -255,7 +303,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       if (typeof state.searchQuery === 'string') setSearchQuery(state.searchQuery);
       if (typeof state.currentFolderId === 'string' || state.currentFolderId === null) setCurrentFolderId(state.currentFolderId ?? null);
       if (typeof state.selectedUserEmail === 'string' || state.selectedUserEmail === null) setSelectedUserEmail(state.selectedUserEmail ?? null);
-      if (state.rootViewMode === 'users' || state.rootViewMode === 'general') setRootViewMode(state.rootViewMode);
       if (Number.isInteger(state.currentPage) && state.currentPage > 0) setCurrentPage(state.currentPage);
     } catch {
       // Ignore malformed cache entries
@@ -281,7 +328,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       searchQuery,
       currentFolderId,
       selectedUserEmail,
-      rootViewMode,
       currentPage,
       updatedAt: Date.now(),
     };
@@ -290,7 +336,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     } catch {
       // Ignore storage quota/private mode errors
     }
-  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, rootViewMode, currentPage]);
+  }, [user?.uid, viewMode, statusFilter, serviceFilter, sortBy, searchQuery, currentFolderId, selectedUserEmail, currentPage]);
 
   const applyNonStatusFilters = useCallback((files, { scopedToCurrentFolder }) => {
     let result = [...files];
@@ -305,6 +351,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       if (t.includes('excel') || t.includes('spreadsheet')) return 'Excel';
       if (t.includes('powerpoint') || t.includes('presentation')) return 'PowerPoint';
       if (t === 'text/plain' || t === 'text/csv') return 'Text';
+      if (t === 'application/x-url') return 'URL';
       return 'Other';
     };
 
@@ -699,6 +746,40 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     });
   };
 
+  // Ordered list of visible page items for range selection (folders first, then files)
+  const orderedPageItems = useMemo(
+    () => [...paginatedFolders.map((f) => f.id), ...paginatedFiles.map((f) => f.id)],
+    [paginatedFolders, paginatedFiles],
+  );
+
+  // Smart select: handles Shift+click (range), Ctrl/Cmd+click (toggle), plain toggle
+  const handleSelectClick = useCallback(
+    (id, e) => {
+      if (e?.shiftKey && lastAnchorId.current != null) {
+        const start = orderedPageItems.indexOf(lastAnchorId.current);
+        const end = orderedPageItems.indexOf(id);
+        if (start !== -1 && end !== -1) {
+          const [from, to] = start <= end ? [start, end] : [end, start];
+          const rangeIds = orderedPageItems.slice(from, to + 1);
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const rid of rangeIds) next.add(rid);
+            return next;
+          });
+        }
+        return;
+      }
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      lastAnchorId.current = id;
+    },
+    [orderedPageItems],
+  );
+
   const handleStatusChange = useCallback(async (fileId, newStatus) => {
     setStatusLoading(fileId);
     setMessage(null);
@@ -748,6 +829,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   // Remove transcription from a file
   const handleRemoveTranscription = useCallback(async (fileId) => {
     setMessage(null);
+    setTranscriptionRemoving(true);
     try {
       const token = await getIdToken();
       const res = await fetch(`/api/files/metadata/${fileId}/transcription`, {
@@ -761,6 +843,8 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
+      setTranscriptionRemoving(false);
+      setRemoveTranscriptionConfirm(null);
       setTimeout(() => setMessage(null), 3000);
     }
   }, [getIdToken]);
@@ -825,25 +909,82 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setBulkLoading(true);
     setMessage(null);
     try {
-      let deletedFiles = 0;
-      let deletedFolders = 0;
-      let skippedFolders = 0;
+      const token = await getIdToken();
 
-      if (selectedFileIds.length > 0) {
-        const token = await getIdToken();
+      // Build selected folder subtree ids (selected folder + all descendants).
+      const folderMap = new Map(allFolders.map((folder) => [folder.id, folder]));
+      const childrenByParent = new Map();
+      for (const folder of allFolders) {
+        const parentId = folder.parentId || null;
+        if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+        childrenByParent.get(parentId).push(folder.id);
+      }
+
+      const folderIdsToDelete = new Set();
+      for (const rootId of selectedFolderIds) {
+        if (!folderMap.has(rootId)) continue;
+        const stack = [rootId];
+        while (stack.length > 0) {
+          const currentId = stack.pop();
+          if (folderIdsToDelete.has(currentId)) continue;
+          folderIdsToDelete.add(currentId);
+          const children = childrenByParent.get(currentId) || [];
+          for (const childId of children) stack.push(childId);
+        }
+      }
+
+      // Delete selected files + files inside selected folder subtrees.
+      const fileIdsToDelete = new Set(selectedFileIds);
+      for (const file of allFiles) {
+        const folderId = file.folderId || null;
+        if (folderId && folderIdsToDelete.has(folderId)) {
+          fileIdsToDelete.add(file.id);
+        }
+      }
+
+      let deletedFiles = 0;
+      const fileIdList = [...fileIdsToDelete];
+      for (let index = 0; index < fileIdList.length; index += 100) {
+        const batch = fileIdList.slice(index, index + 100);
+        if (batch.length === 0) continue;
         const res = await fetch('/api/files/bulk-delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ fileIds: selectedFileIds }),
+          body: JSON.stringify({ fileIds: batch }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'Bulk delete failed.');
-        deletedFiles = Number(data.deleted || 0);
+        deletedFiles += Number(data.deleted || 0);
       }
 
-      for (const folderId of selectedFolderIds) {
+      // Delete folders deepest-first so parents don't reparent descendants.
+      const depthCache = new Map();
+      const getDepth = (folderId) => {
+        if (depthCache.has(folderId)) return depthCache.get(folderId);
+        const folder = folderMap.get(folderId);
+        if (!folder || !folder.parentId || !folderMap.has(folder.parentId)) {
+          depthCache.set(folderId, 0);
+          return 0;
+        }
+        const depth = 1 + getDepth(folder.parentId);
+        depthCache.set(folderId, depth);
+        return depth;
+      };
+
+      const orderedFolders = [...folderIdsToDelete].sort((a, b) => getDepth(b) - getDepth(a));
+      let deletedFolders = 0;
+      let skippedFolders = 0;
+      for (const folderId of orderedFolders) {
         try {
-          await deleteFolder(folderId);
+          const res = await fetch(`/api/folders/${folderId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            skippedFolders++;
+            continue;
+          }
           deletedFolders++;
         } catch {
           skippedFolders++;
@@ -863,7 +1004,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       setBulkDeleteConfirm(false);
       setTimeout(() => setMessage(null), 3000);
     }
-  }, [selectedFileIds, selectedFolderIds, getIdToken, deleteFolder]);
+  }, [selectedFileIds, selectedFolderIds, getIdToken, allFiles, allFolders]);
 
   const copyFileUrl = useCallback((file) => {
     const url = fileUrl(file.url);
@@ -916,7 +1057,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     try {
       await deleteFolder(folderId);
       await refetchFolders();
-      setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
+      setMessage({ type: 'success', text: 'Folder and its contents deleted.' });
       setTimeout(() => setMessage(null), 3000);
       if (currentFolderId === folderId) {
         const folder = allFolders.find((f) => f.id === folderId);
@@ -927,6 +1068,20 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
     setDeleteFolderConfirm(null);
   }, [deleteFolder, refetchFolders, currentFolderId, allFolders]);
+
+  // Track whether any drag is in progress (used to light up breadcrumb drop zone)
+  useEffect(() => {
+    const onStart = () => setIsDraggingAny(true);
+    const onEnd = () => setIsDraggingAny(false);
+    document.addEventListener('dragstart', onStart);
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    return () => {
+      document.removeEventListener('dragstart', onStart);
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+    };
+  }, []);
 
   // Drag-start handler — supports multi-select dragging
   const handleDragStart = useCallback((e, item, itemType) => {
@@ -1113,6 +1268,86 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [selectedFileIds, getIdToken]);
 
+  const handleDeleteAllDev = useCallback(async () => {
+    if (!import.meta.env.DEV) return;
+    if (bulkLoading) return;
+
+    const totalFiles = allFiles.length;
+    const totalFolders = allFolders.length;
+
+    if (totalFiles === 0 && totalFolders === 0) {
+      setMessage({ type: 'success', text: 'Nothing to delete.' });
+      setTimeout(() => setMessage(null), 2500);
+      return;
+    }
+
+    setBulkLoading(true);
+    setMessage(null);
+    try {
+      const token = await getIdToken();
+      const fileIds = allFiles.map((f) => f.id).filter(Boolean);
+
+      let deletedFiles = 0;
+      for (let index = 0; index < fileIds.length; index += 100) {
+        const chunk = fileIds.slice(index, index + 100);
+        if (chunk.length === 0) continue;
+
+        const res = await fetch('/api/files/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ fileIds: chunk }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed while deleting files.');
+        deletedFiles += Number(data.deleted || 0);
+      }
+
+      const folderMap = new Map(allFolders.map((folder) => [folder.id, folder]));
+      const depthCache = new Map();
+      const getDepth = (folderId) => {
+        if (depthCache.has(folderId)) return depthCache.get(folderId);
+        const folder = folderMap.get(folderId);
+        if (!folder || !folder.parentId || !folderMap.has(folder.parentId)) {
+          depthCache.set(folderId, 0);
+          return 0;
+        }
+        const depth = 1 + getDepth(folder.parentId);
+        depthCache.set(folderId, depth);
+        return depth;
+      };
+
+      const foldersByDepthDesc = [...allFolders]
+        .map((folder) => ({ id: folder.id, depth: getDepth(folder.id) }))
+        .sort((a, b) => b.depth - a.depth)
+        .map((folder) => folder.id);
+
+      let deletedFolders = 0;
+      let skippedFolders = 0;
+      for (const folderId of foldersByDepthDesc) {
+        const res = await fetch(`/api/folders/${folderId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          skippedFolders += 1;
+          continue;
+        }
+        deletedFolders += 1;
+      }
+
+      setSelectedIds(new Set());
+      const skippedText = skippedFolders > 0 ? `, ${skippedFolders} folder(s) skipped` : '';
+      setMessage({ type: 'success', text: `DEV reset done: ${deletedFiles} file(s), ${deletedFolders} folder(s) deleted${skippedText}.` });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message || 'Failed to delete all data.' });
+    } finally {
+      setDeleteAllDevConfirm(false);
+      setBulkLoading(false);
+      setTimeout(() => setMessage(null), 3500);
+    }
+  }, [allFiles, allFolders, bulkLoading, getIdToken]);
+
   // Folder download as ZIP
   const handleFolderDownload = useCallback(async (folder) => {
     setMessage(null);
@@ -1143,24 +1378,25 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     }
   }, [getIdToken]);
 
-  // Ctrl+A → select all files + folders in current view
-  useEffect(() => {
-    const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
-        e.preventDefault();
-        if (allPageIds.size > 0) {
-          setSelectedIds((prev) => {
-            const next = new Set(prev);
-            for (const id of allPageIds) next.add(id);
-            return next;
-          });
-        }
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [allPageIds]);
+  const triggerDirectDownload = useCallback((rawUrl, fileName, key) => {
+    const resolved = fileDownloadUrl(rawUrl);
+    if (!resolved) return;
+
+    const loadingKey = key || `download-${Date.now()}`;
+    setDownloadLoadingKey(loadingKey);
+    try {
+      const a = document.createElement('a');
+      a.href = resolved;
+      if (fileName) a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      setTimeout(() => {
+        setDownloadLoadingKey((prev) => (prev === loadingKey ? '' : prev));
+      }, 1200);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1179,17 +1415,31 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
     setContextMenu({ x: e.clientX, y: e.clientY, folder, type: 'folder' });
   }, []);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeContextMenu = () => setContextMenu(null);
+
+    window.addEventListener('scroll', closeContextMenu, true);
+    window.addEventListener('wheel', closeContextMenu, true);
+    window.addEventListener('touchmove', closeContextMenu, true);
+
+    return () => {
+      window.removeEventListener('scroll', closeContextMenu, true);
+      window.removeEventListener('wheel', closeContextMenu, true);
+      window.removeEventListener('touchmove', closeContextMenu, true);
+    };
+  }, [contextMenu]);
+
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
 
     if (contextMenu.type === 'folder') {
       const folder = contextMenu.folder;
       return [
+        { icon: 'fa-check-square', label: selectedIds.has(folder.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(folder.id) },
+        { divider: true },
         { icon: 'fa-folder-open', label: 'Open', onClick: () => setCurrentFolderId(folder.id) },
-        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
-          setRenamingFolder(folder.id);
-          setRenameValue(folder.name);
-        }},
+        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => setRenameModal({ type: 'folder', id: folder.id, value: folder.name || '' }) },
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
         { icon: 'fa-file-archive', label: 'Download as ZIP', onClick: () => handleFolderDownload(folder) },
         { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
@@ -1198,29 +1448,45 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       ];
     }
 
+    if (contextMenu.type === 'transcription') {
+      const file = contextMenu.file;
+      return [
+        { icon: 'fa-eye', label: 'View Transcription', onClick: () => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize }) },
+        { icon: 'fa-download', label: 'Download Transcription', onClick: () => triggerDirectDownload(file.transcriptionUrl, file.transcriptionName || 'Transcription', `trans-${file.id}`) },
+        { divider: true },
+        { icon: 'fa-link', label: 'Copy Link', onClick: () => { navigator.clipboard.writeText(window.location.origin + fileUrl(file.transcriptionUrl)).catch(() => {}); } },
+        { divider: true },
+        { icon: 'fa-trash-alt', label: 'Remove Transcription', danger: true, onClick: () => { setRemoveTranscriptionConfirm({ id: file.id, name: file.transcriptionName || 'Transcription' }); setContextMenu(null); } },
+      ];
+    }
+
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
+    const sourceHref = file.sourceUrl || file.sourceReferenceUrl || (isUrl ? file.url : '');
+    const hasNote = !!(file.description && file.description.trim().length > 0);
     const items = [];
 
     const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
 
     if (selCount <= 1) {
+      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ divider: true });
       items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      items.push({ icon: 'fa-sticky-note', label: 'View Note', disabled: !hasNote, onClick: () => setNoteFile(file) });
+      if (isUrl && sourceHref) {
+        items.push({
+          icon: 'fa-up-right-from-square',
+          label: 'Open Source Link',
+          onClick: () => window.open(sourceHref, '_blank', 'noopener,noreferrer'),
+        });
+      }
       items.push({ icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
         const name = file.originalName || '';
         const ext = name.includes('.') ? '.' + name.split('.').pop() : '';
         const base = ext ? name.slice(0, -ext.length) : name;
-        setRenamingFileId(file.id);
-        setRenameFileExt(ext);
-        setRenameFileValue(base);
+        setRenameModal({ type: 'file', id: file.id, value: base, suffix: ext });
       } });
-      items.push({ icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => {
-        const a = document.createElement('a');
-        a.href = fileUrl(file.url) + '?download=1';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }});
+      items.push({ icon: 'fa-download', label: 'Download', disabled: isUrl, onClick: isUrl ? () => {} : () => triggerDirectDownload(file.url, file.originalName || 'download', `file-${file.id}`) });
       items.push({ divider: true });
       items.push({ icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) });
       items.push({
@@ -1228,22 +1494,25 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         label: file.transcriptionUrl ? 'Manage Transcription' : 'Attach Transcription',
         onClick: () => setTranscriptionTarget(file),
       });
-      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ icon: 'fa-sliders-h', label: 'Change Status', onClick: () => { setStatusChangeTarget(file); setContextMenu(null); } });
       items.push({ divider: true });
       items.push({ icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) });
       items.push({ icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => { setDeleteConfirm(file.id); } });
     }
 
     if (selCount > 1) {
+      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ divider: true });
       items.push({ icon: 'fa-download', label: `Download ${selCount} Selected as ZIP`, onClick: () => handleBulkDownload() });
       items.push({ divider: true });
-      items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
+      items.push({ icon: 'fa-sliders-h', label: `Change Status of ${selCount} Selected`, onClick: () => { setStatusChangeTarget({ bulkMode: true, count: selCount }); setContextMenu(null); } });
+      items.push({ icon: 'fa-arrows-alt', label: 'Move Selected', onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
-      items.push({ icon: 'fa-trash-alt', label: `Delete ${selCount} Selected`, danger: true, onClick: () => setBulkDeleteConfirm(true) });
+      items.push({ icon: 'fa-trash-alt', label: 'Delete Selected', danger: true, onClick: () => setBulkDeleteConfirm(true) });
     }
 
     return items;
-  }, [contextMenu, selectedIds, filteredIds, handleBulkDownload, handleFolderDownload]);
+  }, [contextMenu, selectedIds, filteredIds, handleBulkDownload, handleFolderDownload, triggerDirectDownload]);
 
   const clearFilters = () => {
     setStatusFilter('');
@@ -1265,6 +1534,62 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
   const isSearching = searchQuery.trim().length > 0;
   const selectedCount = selectedFileCount + selectedFolderCount;
   const totalItems = isAtVirtualRoot ? virtualUserFolders.length : currentSubfolders.length + filteredFiles.length;
+
+  // Keyboard shortcuts (Ctrl+A, Escape, Delete, Ctrl+I)
+  useEffect(() => {
+    const handler = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      if (ctrl && e.key === 'a') {
+        e.preventDefault();
+        window.getSelection()?.removeAllRanges();
+        if (allPageIds.size > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            const isAllSelected = [...allPageIds].every((id) => next.has(id));
+            if (isAllSelected) {
+              for (const id of allPageIds) next.delete(id);
+            } else {
+              for (const id of allPageIds) next.add(id);
+            }
+            return next;
+          });
+        }
+        return;
+      }
+
+      if (ctrl && e.key === 'i') {
+        e.preventDefault();
+        if (allPageIds.size > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const id of allPageIds) {
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+            }
+            return next;
+          });
+        }
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        setSelectedIds(new Set());
+        lastAnchorId.current = null;
+        return;
+      }
+
+      if (e.key === 'Delete' && selectedCount > 0) {
+        e.preventDefault();
+        setBulkDeleteConfirm(true);
+        return;
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPageIds, selectedCount]);
   const isLoading = filesLoading || foldersLoading;
 
   return (
@@ -1308,22 +1633,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           </button>
         ))}
       </div>
-      )}
-
-      {/* Messages */}
-      {message && (
-        <div className={`p-3 rounded-xl border flex items-center gap-3 ${
-          message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-        }`}>
-          <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-          <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{message.text}</p>
-        </div>
-      )}
-      {filesError && (
-        <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-          <i className="fas fa-exclamation-triangle text-red-500"></i>
-          <p className="text-sm font-medium text-red-700">Error loading files: {filesError}</p>
-        </div>
       )}
 
       {/* Filter Bar – conditionally render based on root vs inside folder (hidden at virtual root) */}
@@ -1497,7 +1806,34 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
       ))}
 
       {/* Breadcrumbs */}
-      <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 mb-4 shadow-sm">
+      <div
+        className={`bg-white rounded-xl border px-4 py-3 mb-4 shadow-sm transition-all duration-200 ${
+          dragOverBreadcrumb === 'root'
+            ? 'border-primary/40 bg-primary/[0.02] shadow-md'
+            : isDraggingAny
+            ? 'border-dashed border-primary/50 bg-primary/[0.015] shadow-sm'
+            : 'border-gray-100'
+        }`}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBreadcrumb(null);
+        }}
+      >
+        {isDraggingAny && dragOverBreadcrumb === null && (
+          <div className="flex items-center gap-2 mb-2 px-0.5 animate-pulse">
+            <span className="flex items-center justify-center w-5 h-5 rounded-md bg-primary/10 flex-shrink-0">
+              <i className="fas fa-location-arrow text-primary text-[9px] -rotate-45"></i>
+            </span>
+            <p className="text-[11px] text-primary/80 font-medium leading-tight">
+              Drag here to move to <span className="font-semibold">All Files</span> or a parent folder
+            </p>
+          </div>
+        )}
+        {dragOverBreadcrumb !== null && (
+          <p className="text-[10px] text-primary/70 font-medium mb-1.5 flex items-center gap-1">
+            <i className="fas fa-arrows-alt text-[9px]"></i>
+            Drop to move here
+          </p>
+        )}
         <div className="flex items-center gap-1 text-sm overflow-x-auto">
           {/* Root view toggle: General / Per User */}
           {!selectedUserEmail && !currentFolderId && (
@@ -1525,10 +1861,19 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           <button
             type="button"
             onClick={() => { setSelectedUserEmail(null); setCurrentFolderId(null); }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${!selectedUserEmail && !currentFolderId ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setDragOverBreadcrumb('root'); }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverBreadcrumb(null); handleDrop(e, null); }}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${
+              dragOverBreadcrumb === 'root'
+                ? 'bg-primary/10 text-primary border border-primary/30 scale-105 shadow-sm'
+                : !selectedUserEmail && !currentFolderId
+                ? 'text-primary font-semibold bg-primary/5'
+                : 'text-gray-text hover:text-dark-text hover:bg-gray-50'
+            }`}
           >
             <i className={`fas ${rootViewMode === 'general' && !selectedUserEmail ? 'fa-layer-group' : 'fa-users'} text-xs`}></i>
             {rootViewMode === 'general' && !selectedUserEmail ? 'All Files' : 'All Users'}
+            {dragOverBreadcrumb === 'root' && <i className="fas fa-download text-[9px] ml-0.5 opacity-60"></i>}
           </button>
 
           {selectedUserEmail && (
@@ -1537,10 +1882,19 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
               <button
                 type="button"
                 onClick={() => setCurrentFolderId(null)}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${!currentFolderId ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setDragOverBreadcrumb('user'); }}
+                onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverBreadcrumb(null); handleDrop(e, null); }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${
+                  dragOverBreadcrumb === 'user'
+                    ? 'bg-primary/10 text-primary border border-primary/30 scale-105 shadow-sm'
+                    : !currentFolderId
+                    ? 'text-primary font-semibold bg-primary/5'
+                    : 'text-gray-text hover:text-dark-text hover:bg-gray-50'
+                }`}
               >
                 <i className="fas fa-user text-xs"></i>
                 {selectedUserEmail}
+                {dragOverBreadcrumb === 'user' && <i className="fas fa-download text-[9px] ml-1 opacity-60"></i>}
               </button>
             </>
           )}
@@ -1561,15 +1915,45 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 <button
                   type="button"
                   onClick={() => setCurrentFolderId(folder.id)}
-                  className={`px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${folder.id === currentFolderId ? 'text-primary font-semibold bg-primary/5' : 'text-gray-text hover:text-dark-text hover:bg-gray-50'}`}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setDragOverBreadcrumb(folder.id); }}
+                  onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverBreadcrumb(null); handleDrop(e, folder.id); }}
+                  className={`px-2 py-1 rounded-lg transition-all duration-150 whitespace-nowrap ${
+                    dragOverBreadcrumb === folder.id
+                      ? 'bg-primary/10 text-primary border border-primary/30 scale-105 shadow-sm'
+                      : folder.id === currentFolderId
+                      ? 'text-primary font-semibold bg-primary/5'
+                      : 'text-gray-text hover:text-dark-text hover:bg-gray-50'
+                  }`}
                 >
                   {folder.name}
+                  {dragOverBreadcrumb === folder.id && <i className="fas fa-download text-[9px] ml-1.5 opacity-60"></i>}
                 </button>
               </div>
             ));
           })()}
         </div>
       </div>
+
+      {import.meta.env.DEV && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-3 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold text-red-700 bg-red-100 border border-red-200">
+            <i className="fas fa-flask text-[10px]"></i>
+            Development Only
+          </span>
+          <p className="text-xs text-red-700">Wipes all files and folders for testing.</p>
+          <Button
+            type="button"
+            onClick={() => setDeleteAllDevConfirm(true)}
+            disabled={bulkLoading}
+            variant="destructive"
+            size="sm"
+            className="ml-auto"
+          >
+            {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-trash-alt text-[10px]"></i>}
+            Delete All Files & Folders
+          </Button>
+        </div>
+      )}
 
       {/* Bulk action bar */}
       {selectedCount > 0 && (
@@ -1583,107 +1967,44 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             </span>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <button
+            <Button
               onClick={handleBulkDownload}
               disabled={bulkLoading || selectedFileCount === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors disabled:opacity-50"
+              variant="secondary"
+              size="sm"
+              className="text-primary bg-primary/5 hover:bg-primary/10"
             >
               {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-download text-[10px]"></i>}
               Download ZIP
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setBulkMoveActive(true)}
               disabled={bulkLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+              variant="secondary"
+              size="sm"
+              className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
             >
               <i className="fas fa-folder-open text-[10px]"></i>
               Move to Folder
-            </button>
-            {selectedFileCount > 0 && bulkStatusTarget ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-500 font-medium">Set status:</span>
-                {STATUS_OPTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleBulkStatus(s)}
-                    disabled={bulkLoading}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${STATUS_CONFIG[s].bg} ${STATUS_CONFIG[s].text} border ${STATUS_CONFIG[s].border}`}
-                  >
-                    {s === 'pending' ? 'Pending' : s === 'in-progress' ? 'In Progress' : 'Transcribed'}
-                  </button>
-                ))}
-                <button onClick={() => setBulkStatusTarget(null)} className="text-gray-400 hover:text-gray-600 px-1">
-                  <i className="fas fa-times text-xs"></i>
-                </button>
-              </div>
-            ) : selectedFileCount > 0 ? (
-              <button
-                onClick={() => setBulkStatusTarget(true)}
-                disabled={bulkLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 transition-colors disabled:opacity-50"
-              >
-                <i className="fas fa-exchange-alt text-[10px]"></i>
-                Change Status
-              </button>
-            ) : null}
-            {bulkDeleteConfirm ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-red-600 font-medium">Delete {selectedCount} items?</span>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={bulkLoading}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                >
-                  {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-check text-[10px]"></i>}
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setBulkDeleteConfirm(false)}
-                  className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setBulkDeleteConfirm(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
-              >
-                <i className="fas fa-trash-alt text-[10px]"></i>
-                Delete All
-              </button>
-            )}
-            <button
+            </Button>
+            <Button
+              onClick={() => setBulkDeleteConfirm(true)}
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:bg-red-50"
+            >
+              <i className="fas fa-trash-alt text-[10px]"></i>
+              Delete Selected
+            </Button>
+            <Button
               onClick={() => setSelectedIds(new Set())}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-50 transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-dark-text hover:bg-gray-50"
             >
               <i className="fas fa-times text-[10px]"></i>
               Clear
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Delete folder confirmation */}
-      {deleteFolderConfirm && (
-        <div className="p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
-          <i className="fas fa-exclamation-triangle text-red-500"></i>
-          <span className="text-sm font-medium text-red-700">
-            Delete this folder? Contents will be moved to the parent folder.
-          </span>
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => handleDeleteFolder(deleteFolderConfirm)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
-            >
-              Delete
-            </button>
-            <button
-              onClick={() => setDeleteFolderConfirm(null)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-            >
-              Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1723,7 +2044,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
           {globalStats['in-progress'] > 0 && (
             <div className="bg-sky-50 rounded-xl border border-sky-100 px-4 py-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">
-                <i className="fas fa-spinner text-sky-600 text-sm"></i>
+                <i className="fas fa-arrows-rotate text-sky-600 text-sm"></i>
               </div>
               <p className="text-sm text-sky-700 font-medium">
                 {globalStats['in-progress']} file{globalStats['in-progress'] !== 1 ? 's' : ''} currently in progress
@@ -1972,7 +2293,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       onOpen={(id) => setCurrentFolderId(id)}
                       onContextMenu={handleFolderContextMenu}
                       isSelected={selectedIds.has(folder.id)}
-                      onSelect={toggleSelect}
+                      onSelect={handleSelectClick}
                       isDragOver={dragOverFolder === folder.id}
                       onDragOver={setDragOverFolder}
                       onDragLeave={() => setDragOverFolder(null)}
@@ -1980,6 +2301,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       onDragStart={handleDragStart}
                       itemCount={folderItemCounts[folder.id] || 0}
                       totalSize={folderSizes[folder.id] || 0}
+                      onDelete={(id) => setDeleteFolderConfirm(id)}
                     />
                   );
                 })}
@@ -1988,20 +2310,28 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 {paginatedFiles.map((file) => {
                   const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                   const isSelected = selectedIds.has(file.id);
-                  const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
+                  const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
+                  const fileIconClass = urlPlatform ? urlPlatform.icon : `fas ${getFileIcon(file.type)}`;
+                  const fileIconColor = urlPlatform ? urlPlatform.color : getFileIconColor(file.type);
                   return (
+                    <React.Fragment key={file.id}>
                     <tr
-                      key={file.id}
-                      className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
+                      className={`transition-colors cursor-pointer ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
                       draggable={renamingFileId !== file.id}
                       onDragStart={(e) => handleDragStart(e, file, 'file')}
                       onContextMenu={(e) => handleFileContextMenu(e, file)}
+                      onClick={(e) => {
+                        if ((e.ctrlKey || e.metaKey || e.shiftKey) && !['INPUT', 'BUTTON', 'A'].includes(e.target.tagName)) {
+                          e.preventDefault();
+                          handleSelectClick(file.id, e);
+                        }
+                      }}
                     >
                       <td className="text-center px-3 py-3.5">
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleSelect(file.id)}
+                          onChange={() => handleSelectClick(file.id)}
                           className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                         />
                       </td>
@@ -2010,10 +2340,10 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                           <button
                             type="button"
                             onClick={() => setPreviewFile(file)}
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} hover:scale-105 transition-transform cursor-pointer`}
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${fileIconColor} hover:scale-105 transition-transform cursor-pointer`}
                             title="Preview file"
                           >
-                            <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
+                            <i className={`${fileIconClass} text-xs`}></i>
                           </button>
                           <div className="min-w-0">
                             {renamingFileId === file.id ? (
@@ -2062,17 +2392,6 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                                 {folderMap[file.folderId] || 'folder'}
                               </button>
                             )}
-                            {file.transcriptionUrl && (
-                              <button
-                                type="button"
-                                onClick={() => setTranscriptionTarget(file)}
-                                className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors"
-                                title={`Transcription: ${file.transcriptionName}`}
-                              >
-                                <i className="fas fa-file-circle-check text-[8px]"></i>
-                                {file.transcriptionName}
-                              </button>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -2083,7 +2402,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                           </span>
                         ) : (
                           <span className="text-xs text-gray-text">
-                            {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
+                            {getFileTypeLabel(file.type) || '--'}
                           </span>
                         )}
                       </td>
@@ -2116,50 +2435,107 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button
+                          <Button
                             type="button"
                             onClick={() => setPreviewFile(file)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5"
                             title="Preview file"
                           >
                             <i className="fas fa-eye text-[10px]"></i>
                             View
-                          </button>
-                          {deleteConfirm === file.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteFile(file.id)}
-                                disabled={deleteLoading === file.id}
-                                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                              >
-                                {deleteLoading === file.id ? (
-                                  <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                                ) : (
-                                  <i className="fas fa-check text-[10px]"></i>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteConfirm(null)}
-                                className="inline-flex items-center px-2 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                              >
-                                <i className="fas fa-times text-[10px]"></i>
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirm(file.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                              title="Delete file"
-                            >
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => setDeleteConfirm(file.id)}
+                            disabled={deleteLoading === file.id}
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Delete file"
+                          >
+                            {deleteLoading === file.id ? (
+                              <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                            ) : (
                               <i className="fas fa-trash-alt text-[10px]"></i>
-                            </button>
-                          )}
+                            )}
+                          </Button>
                         </div>
                       </td>
                     </tr>
+                    {/* Transcription sub-row */}
+                    {file.transcriptionUrl && (
+                      <tr
+                        className="bg-emerald-50/30"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'transcription' });
+                        }}
+                      >
+                        <td className="px-3 py-2"></td>
+                        <td className="px-4 py-2" colSpan={4}>
+                          <div className="flex items-center gap-2.5 pl-11">
+                            <span className="text-gray-300 text-xs select-none">└─</span>
+                            <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                              <i className="fas fa-file-circle-check text-emerald-500 text-[10px]"></i>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                              className="text-[12px] font-medium text-dark-text truncate max-w-[220px] hover:text-primary transition-colors text-left"
+                              title={file.transcriptionName}
+                            >
+                              {file.transcriptionName || 'Transcription'}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className="text-[11px] text-gray-text">
+                            {file.transcriptionAttachedAt ? formatRelativeDate(typeof file.transcriptionAttachedAt === 'object' && file.transcriptionAttachedAt.toDate ? file.transcriptionAttachedAt.toDate().toISOString() : file.transcriptionAttachedAt) : '--'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className="text-[11px] text-gray-text">{file.transcriptionSize > 0 ? formatSize(file.transcriptionSize) : '--'}</span>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                              title="View transcription"
+                            >
+                              <i className="fas fa-eye text-[10px]"></i>
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => triggerDirectDownload(file.transcriptionUrl, file.transcriptionName || 'Transcription', `trans-${file.id}`)}
+                              disabled={downloadLoadingKey === `trans-${file.id}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Download transcription"
+                            >
+                              {downloadLoadingKey === `trans-${file.id}` ? (
+                                <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                              ) : (
+                                <i className="fas fa-download text-[10px]"></i>
+                              )}
+                              {downloadLoadingKey === `trans-${file.id}` ? 'Downloading...' : 'Download'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRemoveTranscriptionConfirm({ id: file.id, name: file.transcriptionName || 'Transcription' })}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Remove transcription"
+                            >
+                              <i className="fas fa-trash-alt text-[10px]"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -2176,7 +2552,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 onOpen={(id) => setCurrentFolderId(id)}
                 onContextMenu={handleFolderContextMenu}
                 isSelected={selectedIds.has(folder.id)}
-                onSelect={toggleSelect}
+                onSelect={handleSelectClick}
                 isDragOver={dragOverFolder === folder.id}
                 onDragOver={setDragOverFolder}
                 onDragLeave={() => setDragOverFolder(null)}
@@ -2185,6 +2561,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 itemCount={folderItemCounts[folder.id] || 0}
                 totalSize={folderSizes[folder.id] || 0}
                 showOwner
+                onDelete={(id) => setDeleteFolderConfirm(id)}
               />
             ))}
 
@@ -2192,7 +2569,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
             {paginatedFiles.map((file) => {
               const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
               const isSelected = selectedIds.has(file.id);
-              const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.url) : null;
+              const urlPlatform = file.sourceType === 'url' ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
+              const fileIconClass = urlPlatform ? urlPlatform.icon : `fas ${getFileIcon(file.type)}`;
+              const fileIconColor = urlPlatform ? urlPlatform.color : getFileIconColor(file.type);
               return (
                 <div
                   key={file.id}
@@ -2205,15 +2584,15 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => toggleSelect(file.id)}
+                      onChange={() => handleSelectClick(file.id)}
                       className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer mt-1"
                     />
                     <button
                       type="button"
                       onClick={() => setPreviewFile(file)}
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} cursor-pointer hover:scale-105 transition-transform`}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${fileIconColor} cursor-pointer hover:scale-105 transition-transform`}
                     >
-                      <i className={`fas ${getFileIcon(file.type)} text-sm`}></i>
+                      <i className={`${fileIconClass} text-sm`}></i>
                     </button>
                     <div className="flex-1 min-w-0">
                       {renamingFileId === file.id ? (
@@ -2275,38 +2654,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                       <i className="fas fa-eye text-[10px]"></i>
                       View
                     </button>
-                    {deleteConfirm === file.id ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteFile(file.id)}
-                          disabled={deleteLoading === file.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                        >
-                          {deleteLoading === file.id ? (
-                            <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                          ) : (
-                            <><i className="fas fa-check text-[10px]"></i>Confirm</>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirm(null)}
-                          className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirm(file.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <i className="fas fa-trash-alt text-[10px]"></i>
-                        Delete
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm(file.id)}
+                      disabled={deleteLoading === file.id}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {deleteLoading === file.id ? (
+                        <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                      ) : (
+                        <><i className="fas fa-trash-alt text-[10px]"></i>Delete</>
+                      )}
+                    </button>
                     {statusLoading === file.id ? (
                       <i className="fas fa-spinner fa-spin text-primary text-sm ml-auto"></i>
                     ) : (
@@ -2331,14 +2690,16 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 
           {/* Mobile select all bar */}
           <div className="lg:hidden px-4 pb-3">
-            <button
+            <Button
               onClick={toggleSelectAll}
-              className="w-full py-2.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-text hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              variant="outline"
+              size="sm"
+              className="w-full h-auto py-2.5 text-xs text-gray-text hover:bg-gray-50 gap-2"
             >
               <input type="checkbox" checked={allSelected} readOnly className="w-3.5 h-3.5 rounded border-gray-300 text-primary pointer-events-none" />
               {allSelected ? 'Deselect All' : 'Select All'}
               <span className="text-gray-300 font-mono text-[9px]">Ctrl+A</span>
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -2396,7 +2757,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 onOpen={(id) => setCurrentFolderId(id)}
                 onContextMenu={handleFolderContextMenu}
                 isSelected={selectedIds.has(folder.id)}
-                onSelect={toggleSelect}
+                onSelect={handleSelectClick}
                 isDragOver={dragOverFolder === folder.id}
                 onDragOver={setDragOverFolder}
                 onDragLeave={() => setDragOverFolder(null)}
@@ -2405,6 +2766,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                 itemCount={folderItemCounts[folder.id] || 0}
                 totalSize={folderSizes[folder.id] || 0}
                 showOwner
+                onDelete={(id) => setDeleteFolderConfirm(id)}
               />
             );
           })}
@@ -2425,12 +2787,9 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   onStatusChange={handleStatusChange}
                   onPreview={setPreviewFile}
                   isSelected={isSelected}
-                  onSelect={toggleSelect}
+                  onSelect={handleSelectClick}
                   onDelete={(id) => setDeleteConfirm(id)}
                   deleteLoading={deleteLoading === file.id}
-                  isDeleteConfirm={deleteConfirm === file.id}
-                  onDeleteConfirm={handleDeleteFile}
-                  onDeleteCancel={() => setDeleteConfirm(null)}
                   folderName={statusFilter && !isInsideFolder && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                   onOpenFolder={statusFilter && !isInsideFolder && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
                   onTranscription={(f) => setTranscriptionTarget(f)}
@@ -2527,6 +2886,13 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         />
       )}
 
+      {noteFile && (
+        <FileNoteModal
+          file={noteFile}
+          onClose={() => setNoteFile(null)}
+        />
+      )}
+
       {/* Document Viewer Modal (transcription view) */}
       {docViewerFile && (
         <DocumentViewerModal
@@ -2578,6 +2944,151 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
         />
       )}
 
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete File"
+        message="Delete this file permanently?"
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteLoading === deleteConfirm}
+        onConfirm={() => deleteConfirm && handleDeleteFile(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        title="Delete Selected Items"
+        message={`Delete ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''}?`}
+        confirmLabel="Delete Selected"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteFolderConfirm}
+        title="Delete Folder"
+        message="Delete this folder and all items inside it?"
+        confirmLabel="Delete Folder"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={() => deleteFolderConfirm && handleDeleteFolder(deleteFolderConfirm)}
+        onCancel={() => setDeleteFolderConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={deleteAllDevConfirm}
+        title="Delete All Files & Folders"
+        message={`DEV ONLY: Permanently delete ${allFiles.length} file(s) and ${allFolders.length} folder(s)?`}
+        confirmLabel="Delete Everything"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={handleDeleteAllDev}
+        onCancel={() => setDeleteAllDevConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!removeTranscriptionConfirm}
+        title="Remove Transcription"
+        message={`Remove transcription \"${removeTranscriptionConfirm?.name || 'Transcription'}\"?`}
+        confirmLabel="Remove"
+        tone="danger"
+        loading={transcriptionRemoving}
+        onConfirm={() => removeTranscriptionConfirm?.id && handleRemoveTranscription(removeTranscriptionConfirm.id)}
+        onCancel={() => setRemoveTranscriptionConfirm(null)}
+      />
+
+      <RenameDialog
+        open={!!renameModal}
+        title={renameModal?.type === 'file' ? 'Rename File' : 'Rename Folder'}
+        description={renameModal?.type === 'file' ? 'Enter a new file name.' : 'Enter a new folder name.'}
+        initialValue={renameModal?.value || ''}
+        suffix={renameModal?.type === 'file' ? (renameModal?.suffix || '') : ''}
+        confirmLabel="Save"
+        onConfirm={async (newName) => {
+          if (!renameModal?.id) return;
+          if (renameModal.type === 'file') {
+            await handleRenameFile(renameModal.id, newName);
+          } else {
+            await handleRenameFolder(renameModal.id, newName);
+          }
+          setRenameModal(null);
+        }}
+        onClose={() => setRenameModal(null)}
+      />
+
+      {/* Change Status Modal */}
+      {statusChangeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setStatusChangeTarget(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-dark-text">Change Status</h3>
+                <p className="text-xs text-gray-text mt-0.5 truncate max-w-[240px]">
+                  {statusChangeTarget.bulkMode
+                    ? `${statusChangeTarget.count} files selected`
+                    : statusChangeTarget.originalName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatusChangeTarget(null)}
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0 ml-3"
+              >
+                <i className="fas fa-times text-sm"></i>
+              </button>
+            </div>
+            <div className="p-5 space-y-2">
+              {STATUS_OPTIONS.map((s) => {
+                const scfg = STATUS_CONFIG[s];
+                const isActive = !statusChangeTarget.bulkMode && (statusChangeTarget.status || 'pending') === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={statusLoading === statusChangeTarget.id || bulkLoading}
+                    onClick={async () => {
+                      if (statusChangeTarget.bulkMode) {
+                        await handleBulkStatus(s);
+                      } else {
+                        await handleStatusChange(statusChangeTarget.id, s);
+                      }
+                      setStatusChangeTarget(null);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isActive
+                        ? `${scfg.bg} ${scfg.border} ${scfg.text}`
+                        : 'border-gray-100 hover:bg-gray-50 text-dark-text'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isActive ? scfg.iconBg : 'bg-gray-100'}`}>
+                      {(statusLoading === statusChangeTarget.id || bulkLoading) && isActive
+                        ? <i className="fas fa-spinner fa-spin text-xs text-gray-400"></i>
+                        : <i className={`fas ${scfg.icon} text-xs ${isActive ? scfg.text : 'text-gray-400'}`}></i>
+                      }
+                    </div>
+                    <span className="text-sm font-medium flex-1 text-left">{scfg.label}</span>
+                    {isActive && statusLoading !== statusChangeTarget.id && !bulkLoading && (
+                      <i className="fas fa-check text-xs"></i>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setStatusChangeTarget(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Attach Transcription Modal */}
       {transcriptionTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !transcriptionUploading && setTranscriptionTarget(null)}>
@@ -2626,7 +3137,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                         <i className="fas fa-eye text-xs"></i>
                       </button>
                       <button
-                        onClick={() => handleRemoveTranscription(transcriptionTarget.id)}
+                        onClick={() => setRemoveTranscriptionConfirm({ id: transcriptionTarget.id, name: transcriptionTarget.transcriptionName || 'Transcription' })}
                         className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-red-400 hover:text-red-600 transition-colors"
                         title="Remove transcription"
                       >
@@ -2683,7 +3194,7 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
                   onClick={() => { handleStatusChange(transcriptionTarget.id, 'in-progress'); setTranscriptionTarget((prev) => prev ? { ...prev, status: 'in-progress' } : null); }}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-100 transition-colors"
                 >
-                  <i className="fas fa-spinner text-xs"></i>
+                  <i className="fas fa-arrows-rotate text-xs"></i>
                   Mark as In Progress
                 </button>
               )}
@@ -2717,12 +3228,18 @@ function FilesTab({ allFiles, allFolders, filesLoading, filesError, foldersLoadi
 /* ───────────────────── Transcriptions Tab ──────────────────────── */
 
 function TranscriptionsTab() {
+  const toast = useAppToast();
   const { transcriptions, loading, error, fetchTranscriptions } = useTranscriptions();
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchTranscriptions({});
   }, [fetchTranscriptions]);
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error, 'Unable to load transcriptions');
+  }, [error, toast]);
 
   const filteredTranscriptions = useMemo(() => {
     if (!searchQuery.trim()) return transcriptions;
@@ -2747,10 +3264,7 @@ function TranscriptionsTab() {
   if (error) {
     return (
       <div className="bg-white rounded-xl border border-gray-100 p-8">
-        <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-          <i className="fas fa-exclamation-circle text-red-500"></i>
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
+        <p className="text-sm text-gray-text text-center">Couldn’t load transcriptions.</p>
         <div className="mt-4 text-center">
           <button
             onClick={() => fetchTranscriptions({})}
@@ -2903,13 +3417,15 @@ function TranscriptionsTab() {
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
+  const toast = useAppToast();
   const [activeTab, setActiveTab] = useState('files');
   const [userMessage, setUserMessage] = useState(null);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
 
   const { files: allFiles, loading: filesLoading, error: filesError } = useFirestoreFiles();
   const { folders: allFolders, loading: foldersLoading, refetch: refetchFolders } = useFolders();
   const folderActions = useFolderActions();
-  const { users, loading: usersLoading, error: usersError, createUser, deleteUser, toggleAdmin } = useAdminUsers();
+  const { users, loading: usersLoading, error: usersError, createUser, deleteUser, toggleAdmin, changePassword } = useAdminUsers();
 
   useEffect(() => {
     document.title = 'Admin Dashboard - DigiScribe';
@@ -2917,41 +3433,65 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (userMessage) {
-      const timer = setTimeout(() => setUserMessage(null), 5000);
-      return () => clearTimeout(timer);
+      if (userMessage.type === 'success') {
+        toast.success(userMessage.text);
+        return;
+      }
+      toast.error(userMessage.text);
     }
-  }, [userMessage]);
+  }, [userMessage, toast]);
+
+  useEffect(() => {
+    if (!usersError) return;
+    toast.error(usersError, 'Unable to load users');
+  }, [usersError, toast]);
 
   const handleCreateUser = async (data) => {
     setUserMessage(null);
     try {
       await createUser(data);
-      setUserMessage({ type: 'success', text: `User "${data.email}" created successfully.` });
+      setCreateUserOpen(false);
+      const roleLabel = data.admin ? 'Admin' : 'User';
+      const nameLabel = data.displayName ? ` (${data.displayName})` : '';
+      setUserMessage({ type: 'success', text: `${roleLabel} "${data.email}"${nameLabel} created successfully.` });
     } catch (err) {
       setUserMessage({ type: 'error', text: err.message });
       throw err;
     }
   };
 
-  const handleDeleteUser = async (uid) => {
+  const handleDeleteUser = async (uid, email) => {
     setUserMessage(null);
     try {
       await deleteUser(uid);
-      setUserMessage({ type: 'success', text: 'User deleted successfully.' });
+      setUserMessage({ type: 'success', text: `User "${email}" has been deleted.` });
     } catch (err) {
       setUserMessage({ type: 'error', text: err.message });
       throw err;
     }
   };
 
-  const handleToggleAdmin = async (uid, isAdmin) => {
+  const handleToggleAdmin = async (uid, isAdmin, email) => {
     setUserMessage(null);
     try {
       await toggleAdmin(uid, isAdmin);
       setUserMessage({
         type: 'success',
-        text: isAdmin ? 'Admin privileges granted.' : 'Admin privileges revoked.',
+        text: isAdmin
+          ? `Admin privileges granted to "${email}".`
+          : `Admin privileges revoked from "${email}".`,
       });
+    } catch (err) {
+      setUserMessage({ type: 'error', text: err.message });
+      throw err;
+    }
+  };
+
+  const handleChangePassword = async (uid, email, password) => {
+    setUserMessage(null);
+    try {
+      await changePassword(uid, password);
+      setUserMessage({ type: 'success', text: `Password updated for "${email}".` });
     } catch (err) {
       setUserMessage({ type: 'error', text: err.message });
       throw err;
@@ -2968,10 +3508,6 @@ export default function AdminDashboardPage() {
             </h1>
             <div className="flex items-center gap-3 mt-1">
               <p className="text-sm text-gray-text">{user?.email || 'Admin'}</p>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                <i className="fas fa-shield-alt text-[8px]"></i>
-                Admin
-              </span>
             </div>
           </div>
 
@@ -3007,7 +3543,7 @@ export default function AdminDashboardPage() {
   );
 
   return (
-    <Layout heroContent={heroContent}>
+    <Layout heroContent={heroContent} hideFooter>
       <div className="min-h-screen bg-[#f8fafc]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {activeTab === 'files' && (
@@ -3023,33 +3559,30 @@ export default function AdminDashboardPage() {
           )}
           {activeTab === 'users' && (
             <div className="space-y-6">
-              {usersError && (
-                <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm text-red-700">{usersError}</p>
-                </div>
-              )}
-              {userMessage && (
-                <div className={`p-4 rounded-xl border transition-all duration-300 ${
-                  userMessage.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <i className={`fas ${userMessage.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-                      <p className={`text-sm font-medium ${userMessage.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{userMessage.text}</p>
-                    </div>
-                    <button onClick={() => setUserMessage(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                      <i className="fas fa-times"></i>
-                    </button>
-                  </div>
-                </div>
-              )}
-              <CreateUserForm onCreateUser={handleCreateUser} loading={usersLoading} />
-              <UserTable users={users} onDeleteUser={handleDeleteUser} onToggleAdmin={handleToggleAdmin} loading={usersLoading} />
+              <UserTable
+                users={users}
+                onDeleteUser={handleDeleteUser}
+                onToggleAdmin={handleToggleAdmin}
+                onChangePassword={handleChangePassword}
+                loading={usersLoading}
+                onOpenCreate={() => setCreateUserOpen(true)}
+              />
             </div>
           )}
         </div>
       </div>
+
+      {/* Add New User Modal */}
+      <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
+        <DialogContent className="max-w-md">
+          <CreateUserForm
+            onCreateUser={handleCreateUser}
+            loading={usersLoading}
+            onClose={() => setCreateUserOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
+

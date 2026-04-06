@@ -9,20 +9,25 @@ import Breadcrumbs from '../components/dashboard/Breadcrumbs';
 import CreateFolderModal from '../components/dashboard/CreateFolderModal';
 import MoveFolderModal from '../components/dashboard/MoveFolderModal';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
+import FileNoteModal from '../components/dashboard/FileNoteModal';
 import FilePropertiesModal from '../components/dashboard/FilePropertiesModal';
 import FolderPropertiesModal from '../components/dashboard/FolderPropertiesModal';
 import ContextMenu from '../components/dashboard/ContextMenu';
 import DocumentViewerModal from '../components/dashboard/DocumentViewerModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import RenameDialog from '../components/ui/RenameDialog';
+import { Button } from '../components/ui/button';
 import { ServicePicker, SERVICE_TREE } from '../components/dashboard/FolderFilterToolbar';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
 import { useFolders } from '../hooks/useFolders';
 import { useFolderActions } from '../hooks/useFolderActions';
 import { useTranscriptions } from '../hooks/useTranscriptions';
+import { useAppToast } from '../hooks/useAppToast';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_CONFIG = {
   pending: { label: 'Pending', icon: 'fa-clock', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', ring: 'ring-amber-400', iconBg: 'bg-amber-100' },
-  'in-progress': { label: 'In Progress', icon: 'fa-spinner', bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200', ring: 'ring-sky-400', iconBg: 'bg-sky-100' },
+  'in-progress': { label: 'In Progress', icon: 'fa-arrows-rotate', bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200', ring: 'ring-sky-400', iconBg: 'bg-sky-100' },
   transcribed: { label: 'Transcribed', icon: 'fa-check-circle', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', ring: 'ring-emerald-400', iconBg: 'bg-emerald-100' },
 };
 
@@ -72,6 +77,7 @@ function getFileIcon(type) {
   if (type.includes('excel') || type.includes('spreadsheet')) return 'fa-file-excel';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'fa-file-powerpoint';
   if (type === 'text/plain' || type === 'text/csv') return 'fa-file-alt';
+  if (type === 'application/x-url') return 'fa-link';
   return 'fa-file';
 }
 
@@ -84,7 +90,40 @@ function getFileIconColor(type) {
   if (type.includes('word') || type === 'application/msword') return 'text-blue-600 bg-blue-50';
   if (type.includes('excel') || type.includes('spreadsheet')) return 'text-green-600 bg-green-50';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'text-orange-600 bg-orange-50';
+  if (type === 'application/x-url') return 'text-indigo-600 bg-indigo-50';
   return 'text-gray-400 bg-gray-50';
+}
+
+const PLATFORM_MAP = [
+  { pattern: /youtu\.?be/i, label: 'YouTube', icon: 'fa-brands fa-youtube', color: 'text-red-600 bg-red-50' },
+  { pattern: /facebook\.com|fb\.com|fb\.watch/i, label: 'Facebook', icon: 'fa-brands fa-facebook-f', color: 'text-blue-600 bg-blue-50' },
+  { pattern: /dailymotion\.com|dai\.ly/i, label: 'Dailymotion', icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /drive\.google\.com|docs\.google\.com/i, label: 'Google Drive', icon: 'fa-brands fa-google-drive', color: 'text-emerald-600 bg-emerald-50' },
+  { pattern: /instagram\.com/i, label: 'Instagram', icon: 'fa-brands fa-instagram', color: 'text-pink-600 bg-pink-50' },
+  { pattern: /tiktok\.com/i, label: 'TikTok', icon: 'fa-brands fa-tiktok', color: 'text-gray-900 bg-gray-100' },
+  { pattern: /twitter\.com|x\.com/i, label: 'Twitter/X', icon: 'fa-brands fa-x-twitter', color: 'text-gray-800 bg-gray-100' },
+  { pattern: /vimeo\.com/i, label: 'Vimeo', icon: 'fa-brands fa-vimeo-v', color: 'text-sky-600 bg-sky-50' },
+  { pattern: /soundcloud\.com/i, label: 'SoundCloud', icon: 'fa-brands fa-soundcloud', color: 'text-orange-600 bg-orange-50' },
+  { pattern: /twitch\.tv/i, label: 'Twitch', icon: 'fa-brands fa-twitch', color: 'text-violet-600 bg-violet-50' },
+];
+
+function getUrlPlatform(sourceUrl) {
+  if (!sourceUrl) return null;
+  return PLATFORM_MAP.find((p) => p.pattern.test(sourceUrl)) || null;
+}
+
+function getFileTypeDisplay(type) {
+  if (!type) return '--';
+  if (type.startsWith('image/')) return 'Image';
+  if (type.startsWith('audio/')) return 'Audio';
+  if (type.startsWith('video/')) return 'Video';
+  if (type === 'application/pdf') return 'PDF';
+  if (type === 'text/plain') return 'Text';
+  if (type === 'text/csv') return 'CSV';
+  if (type.includes('spreadsheet') || type.includes('excel')) return 'Excel';
+  if (type.includes('word') || type === 'application/msword') return 'Word';
+  if (type.includes('powerpoint') || type.includes('presentation')) return 'PowerPoint';
+  return type;
 }
 
 function getPageNumbers(current, total) {
@@ -102,6 +141,7 @@ function getPageNumbers(current, total) {
 
 export default function DashboardPage() {
   const { user, isAdmin, getIdToken } = useAuth();
+  const toast = useAppToast();
   const [activeTab, setActiveTab] = useState('files');
   const [viewMode, setViewMode] = useState(() => {
     if (typeof window === 'undefined') return 'list';
@@ -112,16 +152,18 @@ export default function DashboardPage() {
   const [serviceFilter, setServiceFilter] = useState([]);
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusError, setStatusError] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
+  const [noteFile, setNoteFile] = useState(null);
   const [docViewerFile, setDocViewerFile] = useState(null);
   const [propertiesFile, setPropertiesFile] = useState(null);
   const [propertiesFolder, setPropertiesFolder] = useState(null);
   const [message, setMessage] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(null);
+  const [downloadLoadingKey, setDownloadLoadingKey] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const dashboardStateHydratedRef = useRef(false);
+  const lastAnchorId = useRef(null);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -140,11 +182,32 @@ export default function DashboardPage() {
   const [renameValue, setRenameValue] = useState('');
   const [dragOverFolder, setDragOverFolder] = useState(null);
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState(null);
+  const [isDraggingAny, setIsDraggingAny] = useState(false);
+  const [renameFolderModal, setRenameFolderModal] = useState(null);
 
   const { files: allFiles, loading, error } = useFirestoreFiles();
   const { folders: allFolders, loading: foldersLoading, refetch: refetchFolders } = useFolders();
   const { createFolder, renameFolder, moveFolder, deleteFolder, moveFileToFolder } = useFolderActions();
   const { transcriptions, loading: transLoading, error: transError, fetchTranscriptions } = useTranscriptions();
+
+  useEffect(() => {
+    if (!message) return;
+    if (message.type === 'success') {
+      toast.success(message.text);
+      return;
+    }
+    toast.error(message.text);
+  }, [message, toast]);
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error, 'Unable to load files');
+  }, [error, toast]);
+
+  useEffect(() => {
+    if (!transError) return;
+    toast.error(transError, 'Unable to load transcriptions');
+  }, [transError, toast]);
 
   useEffect(() => {
     document.title = 'Dashboard - DigiScribe Transcription Corp.';
@@ -386,7 +449,6 @@ export default function DashboardPage() {
   }, [statusFilter, serviceFilter, searchQuery, sortBy, currentFolderId]);
 
   const handleStatusChange = useCallback(async (fileId, newStatus) => {
-    setStatusError(null);
     try {
       const token = await getIdToken();
       const res = await fetch(`/api/files/metadata/${fileId}/status`, {
@@ -397,10 +459,9 @@ export default function DashboardPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update status.');
     } catch (err) {
-      setStatusError(err.message);
-      setTimeout(() => setStatusError(null), 4000);
+      toast.error(err.message, 'Status update failed');
     }
-  }, [getIdToken]);
+  }, [getIdToken, toast]);
 
   const handleDeleteFile = useCallback(async (fileId) => {
     setDeleteLoading(fileId);
@@ -482,25 +543,101 @@ export default function DashboardPage() {
     });
   };
 
-  // Ctrl+A → select all files in current view
+  // Ordered list of visible page items for range selection (folders first, then files)
+  const orderedPageItems = useMemo(
+    () => [...paginatedFolders.map((f) => f.id), ...paginatedFiles.map((f) => f.id)],
+    [paginatedFolders, paginatedFiles],
+  );
+
+  // Smart select: handles Shift+click (range), Ctrl/Cmd+click (toggle), plain toggle
+  const handleSelectClick = useCallback(
+    (id, e) => {
+      if (e?.shiftKey && lastAnchorId.current != null) {
+        const start = orderedPageItems.indexOf(lastAnchorId.current);
+        const end = orderedPageItems.indexOf(id);
+        if (start !== -1 && end !== -1) {
+          const [from, to] = start <= end ? [start, end] : [end, start];
+          const rangeIds = orderedPageItems.slice(from, to + 1);
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const rid of rangeIds) next.add(rid);
+            return next;
+          });
+        }
+        // Shift+click does not move the anchor
+        return;
+      }
+      // Ctrl/Meta+click or plain toggle — always updates anchor
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      lastAnchorId.current = id;
+    },
+    [orderedPageItems],
+  );
+
+  // Keyboard shortcuts (Ctrl+A, Escape, Delete, Ctrl+I)
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && activeTab === 'files') {
-        // Only intercept when not typing in an input
-        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      if (activeTab !== 'files') return;
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+A — toggle select all on page
+      if (ctrl && e.key === 'a') {
+        e.preventDefault();
+        window.getSelection()?.removeAllRanges();
+        if (allPageIds.size > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            const isAllSelected = [...allPageIds].every((id) => next.has(id));
+            if (isAllSelected) {
+              for (const id of allPageIds) next.delete(id);
+            } else {
+              for (const id of allPageIds) next.add(id);
+            }
+            return next;
+          });
+        }
+        return;
+      }
+
+      // Ctrl+I — invert selection on current page
+      if (ctrl && e.key === 'i') {
         e.preventDefault();
         if (allPageIds.size > 0) {
           setSelectedIds((prev) => {
             const next = new Set(prev);
-            for (const id of allPageIds) next.add(id);
+            for (const id of allPageIds) {
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+            }
             return next;
           });
         }
+        return;
+      }
+
+      // Escape — deselect all
+      if (e.key === 'Escape') {
+        setSelectedIds(new Set());
+        lastAnchorId.current = null;
+        return;
+      }
+
+      // Delete — bulk delete if items are selected
+      if (e.key === 'Delete' && selectedCount > 0) {
+        e.preventDefault();
+        setBulkDeleteConfirm(true);
+        return;
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [activeTab, allPageIds]);
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [activeTab, allPageIds, selectedCount]);
 
   // Bulk move to folder
   const handleBulkMove = useCallback(async (targetFolderId) => {
@@ -676,6 +813,26 @@ export default function DashboardPage() {
     return resolved.includes('?') ? `${resolved}&download=1` : `${resolved}?download=1`;
   }, []);
 
+  const triggerDownload = useCallback((rawUrl, fileName, key) => {
+    const resolved = getDownloadUrl(rawUrl);
+    if (!resolved) return;
+
+    const loadingKey = key || `download-${Date.now()}`;
+    setDownloadLoadingKey(loadingKey);
+    try {
+      const a = document.createElement('a');
+      a.href = resolved;
+      if (fileName) a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      setTimeout(() => {
+        setDownloadLoadingKey((prev) => (prev === loadingKey ? '' : prev));
+      }, 1200);
+    }
+  }, [getDownloadUrl]);
+
   // Folder actions
   const handleCreateFolder = useCallback(async (name, parentId) => {
     await createFolder(name, parentId);
@@ -700,7 +857,7 @@ export default function DashboardPage() {
     try {
       await deleteFolder(folderId);
       await refetchFolders();
-      setMessage({ type: 'success', text: 'Folder deleted. Contents moved to parent.' });
+      setMessage({ type: 'success', text: 'Folder and its contents deleted.' });
       setTimeout(() => setMessage(null), 3000);
       // If we're inside the deleted folder, navigate to parent
       if (currentFolderId === folderId) {
@@ -712,6 +869,20 @@ export default function DashboardPage() {
     }
     setDeleteFolderConfirm(null);
   }, [deleteFolder, refetchFolders, currentFolderId, allFolders]);
+
+  // Track whether any drag is in progress (used to light up breadcrumb drop zone)
+  useEffect(() => {
+    const onStart = () => setIsDraggingAny(true);
+    const onEnd = () => setIsDraggingAny(false);
+    document.addEventListener('dragstart', onStart);
+    document.addEventListener('dragend', onEnd);
+    document.addEventListener('drop', onEnd);
+    return () => {
+      document.removeEventListener('dragstart', onStart);
+      document.removeEventListener('dragend', onEnd);
+      document.removeEventListener('drop', onEnd);
+    };
+  }, []);
 
   // Drag-start handler — supports multi-select dragging
   const handleDragStart = useCallback((e, item, itemType) => {
@@ -833,17 +1004,37 @@ export default function DashboardPage() {
     setContextMenu({ x: e.clientX, y: e.clientY, folder, type: 'folder' });
   }, []);
 
+  // Right-click handler for attached transcription sub-rows
+  const handleTranscriptionContextMenu = useCallback((e, file) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, file, type: 'transcription' });
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeContextMenu = () => setContextMenu(null);
+
+    window.addEventListener('scroll', closeContextMenu, true);
+    window.addEventListener('wheel', closeContextMenu, true);
+    window.addEventListener('touchmove', closeContextMenu, true);
+
+    return () => {
+      window.removeEventListener('scroll', closeContextMenu, true);
+      window.removeEventListener('wheel', closeContextMenu, true);
+      window.removeEventListener('touchmove', closeContextMenu, true);
+    };
+  }, [contextMenu]);
+
   const contextMenuItems = useMemo(() => {
     if (!contextMenu) return [];
 
     if (contextMenu.type === 'folder') {
       const folder = contextMenu.folder;
       return [
+        { icon: 'fa-check-square', label: selectedIds.has(folder.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(folder.id) },
+        { divider: true },
         { icon: 'fa-folder-open', label: 'Open', onClick: () => setCurrentFolderId(folder.id) },
-        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => {
-          setRenamingFolder(folder.id);
-          setRenameValue(folder.name);
-        }},
+        { icon: 'fa-pencil-alt', label: 'Rename', onClick: () => setRenameFolderModal({ id: folder.id, name: folder.name || '' }) },
         { icon: 'fa-arrows-alt', label: 'Move to...', onClick: () => setMoveTarget({ type: 'folder', item: folder }) },
         { icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFolder(folder) },
         { divider: true },
@@ -851,14 +1042,36 @@ export default function DashboardPage() {
       ];
     }
 
+    if (contextMenu.type === 'transcription') {
+      const file = contextMenu.file;
+      return [
+        { icon: 'fa-eye', label: 'View Transcription', onClick: () => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize }) },
+        { icon: 'fa-download', label: 'Download Transcription', onClick: () => triggerDownload(file.transcriptionUrl, file.transcriptionName || 'Transcription', `trans-${file.id}`) },
+        { divider: true },
+        { icon: 'fa-link', label: 'Copy Link', onClick: () => { navigator.clipboard.writeText(window.location.origin + file.transcriptionUrl).catch(() => {}); } },
+      ];
+    }
+
     const file = contextMenu.file;
     const isUrl = file.sourceType === 'url';
+    const sourceHref = file.sourceUrl || file.sourceReferenceUrl || (isUrl ? file.url : '');
+    const hasNote = !!(file.description && file.description.trim().length > 0);
     const items = [];
 
     const selCount = [...selectedIds].filter((id) => filteredIds.has(id)).length;
 
     if (selCount <= 1) {
+      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ divider: true });
       items.push({ icon: 'fa-eye', label: 'Preview', onClick: () => setPreviewFile(file) });
+      items.push({ icon: 'fa-sticky-note', label: 'View Note', disabled: !hasNote, onClick: () => setNoteFile(file) });
+      if (isUrl && sourceHref) {
+        items.push({
+          icon: 'fa-up-right-from-square',
+          label: 'Open Source Link',
+          onClick: () => window.open(sourceHref, '_blank', 'noopener,noreferrer'),
+        });
+      }
 
       // Users can only download when a transcription has been attached by admin
       if (file.transcriptionUrl) {
@@ -870,32 +1083,26 @@ export default function DashboardPage() {
         items.push({
           icon: 'fa-download',
           label: 'Download Transcription',
-          onClick: () => {
-            const a = document.createElement('a');
-            a.href = getDownloadUrl(file.transcriptionUrl);
-            a.download = file.transcriptionName || file.originalName;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-          },
+          onClick: () => triggerDownload(file.transcriptionUrl, file.transcriptionName || file.originalName, `trans-${file.id}`),
         });
       }
       items.push({ divider: true });
       items.push({ icon: 'fa-folder-open', label: 'Move to Folder...', onClick: () => setMoveTarget({ type: 'file', item: file }) });
-      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
       items.push({ divider: true });
       items.push({ icon: 'fa-info-circle', label: 'Properties', onClick: () => setPropertiesFile(file) });
       items.push({ icon: 'fa-trash-alt', label: 'Delete', danger: true, onClick: () => setDeleteConfirm(file.id) });
     }
 
     if (selCount > 1) {
-      items.push({ icon: 'fa-arrows-alt', label: `Move ${selCount} Selected to Folder...`, onClick: () => setBulkMoveActive(true) });
+      items.push({ icon: 'fa-check-square', label: selectedIds.has(file.id) ? 'Deselect' : 'Select', onClick: () => toggleSelect(file.id) });
+      items.push({ divider: true });
+      items.push({ icon: 'fa-arrows-alt', label: 'Move Selected', onClick: () => setBulkMoveActive(true) });
       items.push({ icon: 'fa-times-circle', label: 'Deselect All', onClick: () => setSelectedIds(new Set()) });
-      items.push({ icon: 'fa-trash-alt', label: `Delete ${selCount} Selected`, danger: true, onClick: () => setBulkDeleteConfirm(true) });
+      items.push({ icon: 'fa-trash-alt', label: 'Delete Selected', danger: true, onClick: () => setBulkDeleteConfirm(true) });
     }
 
     return items;
-  }, [contextMenu, selectedIds, filteredIds, handleBulkDownload, handleFolderDownload, getDownloadUrl]);
+  }, [contextMenu, selectedIds, filteredIds, handleBulkDownload, handleFolderDownload, triggerDownload]);
 
   const clearFilters = () => {
     setStatusFilter('');
@@ -941,7 +1148,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <Layout heroContent={heroContent}>
+    <Layout heroContent={heroContent} hideFooter>
       <div className="min-h-screen bg-[#f8fafc]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
@@ -1026,33 +1233,6 @@ export default function DashboardPage() {
                       })}
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* Messages */}
-              {message && (
-                <div
-                  className={`mb-4 p-3 rounded-xl border flex items-center gap-3 ${
-                    message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-                  }`}
-                >
-                  <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-                  <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-                    {message.text}
-                  </p>
-                </div>
-              )}
-
-              {statusError && (
-                <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm font-medium text-red-700">{statusError}</p>
-                </div>
-              )}
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-triangle text-red-500"></i>
-                  <p className="text-sm font-medium text-red-700">Error loading files: {error}</p>
                 </div>
               )}
 
@@ -1174,6 +1354,7 @@ export default function DashboardPage() {
                 currentFolderId={currentFolderId}
                 onNavigate={setCurrentFolderId}
                 onDrop={handleDrop}
+                isDraggingAny={isDraggingAny}
               />
 
               {/* Bulk action bar */}
@@ -1188,48 +1369,34 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 ml-auto">
-                    <button
+                    <Button
                       onClick={() => setBulkMoveActive(true)}
                       disabled={bulkLoading}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+                      variant="secondary"
+                      size="sm"
+                      className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
                     >
                       <i className="fas fa-folder-open text-[10px]"></i>
                       Move to Folder
-                    </button>
-                    {bulkDeleteConfirm ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-red-600 font-medium">Delete {selectedCount} items?</span>
-                        <button
-                          onClick={handleBulkDelete}
-                          disabled={bulkLoading}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                        >
-                          {bulkLoading ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : <i className="fas fa-check text-[10px]"></i>}
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => setBulkDeleteConfirm(false)}
-                          className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setBulkDeleteConfirm(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <i className="fas fa-trash-alt text-[10px]"></i>
-                        Delete All
-                      </button>
-                    )}
-                    <button
+                    </Button>
+                    <Button
+                      onClick={() => setBulkDeleteConfirm(true)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:bg-red-50"
+                    >
+                      <i className="fas fa-trash-alt text-[10px]"></i>
+                      Delete All
+                    </Button>
+                    <Button
                       onClick={() => setSelectedIds(new Set())}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-dark-text hover:bg-gray-50 transition-colors"
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400 hover:text-dark-text hover:bg-gray-50"
                     >
                       <i className="fas fa-times text-[10px]"></i>
                       Clear
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1237,9 +1404,11 @@ export default function DashboardPage() {
               {/* Select All bar */}
               {(filteredFiles.length > 0 || currentSubfolders.length > 0) && (
                 <div className="flex items-center gap-3 mb-4">
-                  <button
+                  <Button
                     onClick={toggleSelectAll}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-text hover:text-dark-text hover:bg-white border border-gray-200 transition-colors"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs text-gray-text hover:text-dark-text hover:bg-white"
                   >
                     <input
                       type="checkbox"
@@ -1250,64 +1419,11 @@ export default function DashboardPage() {
                     />
                     {allSelected ? 'Deselect All' : 'Select All'}
                     <span className="text-gray-300 font-mono text-[9px]">Ctrl+A</span>
-                  </button>
+                  </Button>
                   <span className="text-xs text-gray-400">
                     {currentSubfolders.length > 0 && `${currentSubfolders.length} folder${currentSubfolders.length !== 1 ? 's' : ''}, `}
                     {filteredFiles.length} file{filteredFiles.length !== 1 ? 's' : ''}
                   </span>
-                </div>
-              )}
-
-              {/* Delete file confirmation — only shown in list mode; grid uses inline card confirmation */}
-              {viewMode === 'list' && deleteConfirm && (
-                <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
-                  <i className="fas fa-exclamation-triangle text-red-500"></i>
-                  <span className="text-sm font-medium text-red-700">
-                    Delete this file?
-                  </span>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      onClick={() => handleDeleteFile(deleteConfirm)}
-                      disabled={deleteLoading === deleteConfirm}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-                    >
-                      {deleteLoading === deleteConfirm ? (
-                        <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                      ) : (
-                        'Delete'
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(null)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Delete folder confirmation */}
-              {deleteFolderConfirm && (
-                <div className="mb-4 p-4 bg-red-50 rounded-xl border border-red-200 flex items-center gap-3 flex-wrap">
-                  <i className="fas fa-exclamation-triangle text-red-500"></i>
-                  <span className="text-sm font-medium text-red-700">
-                    Delete this folder? Contents will be moved to the parent folder.
-                  </span>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      onClick={() => handleDeleteFolder(deleteFolderConfirm)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-500 hover:bg-red-600 transition-colors"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => setDeleteFolderConfirm(null)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-dark-text hover:bg-gray-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -1428,7 +1544,7 @@ export default function DashboardPage() {
                               onOpen={(id) => setCurrentFolderId(id)}
                               onContextMenu={handleFolderContextMenu}
                               isSelected={selectedIds.has(folder.id)}
-                              onSelect={toggleSelect}
+                              onSelect={handleSelectClick}
                               isDragOver={dragOverFolder === folder.id}
                               onDragOver={setDragOverFolder}
                               onDragLeave={() => setDragOverFolder(null)}
@@ -1437,6 +1553,7 @@ export default function DashboardPage() {
                               itemCount={folderItemCounts[folder.id] || 0}
                               totalSize={folderSizes[folder.id] || 0}
                               showUploadedBy={false}
+                              onDelete={(id) => setDeleteFolderConfirm(id)}
                             />
                           );
                         })}
@@ -1445,19 +1562,28 @@ export default function DashboardPage() {
                           const cfg = STATUS_CONFIG[file.status] || STATUS_CONFIG.pending;
                           const isSelected = selectedIds.has(file.id);
                           const isUrl = file.sourceType === 'url';
+                          const urlPlatform = isUrl ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
+                          const fileIconClass = urlPlatform ? urlPlatform.icon : `fas ${getFileIcon(file.type)}`;
+                          const fileIconColor = urlPlatform ? urlPlatform.color : getFileIconColor(file.type);
                           return (
                             <React.Fragment key={file.id}>
                             <tr
-                              className={`transition-colors ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
+                              className={`transition-colors cursor-pointer ${isSelected ? 'bg-primary/[0.03]' : 'hover:bg-gray-50/50'}`}
                               draggable
                               onDragStart={(e) => handleDragStart(e, file, 'file')}
                               onContextMenu={(e) => handleFileContextMenu(e, file)}
+                              onClick={(e) => {
+                                if ((e.ctrlKey || e.metaKey || e.shiftKey) && !['INPUT', 'BUTTON', 'A'].includes(e.target.tagName)) {
+                                  e.preventDefault();
+                                  handleSelectClick(file.id, e);
+                                }
+                              }}
                             >
                               <td className="text-center px-3 py-3.5">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={() => toggleSelect(file.id)}
+                                  onChange={() => handleSelectClick(file.id)}
                                   className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
                                 />
                               </td>
@@ -1466,10 +1592,10 @@ export default function DashboardPage() {
                                   <button
                                     type="button"
                                     onClick={() => setPreviewFile(file)}
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getFileIconColor(file.type)} hover:scale-105 transition-transform cursor-pointer`}
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${fileIconColor} hover:scale-105 transition-transform cursor-pointer`}
                                     title="Preview file"
                                   >
-                                    <i className={`fas ${getFileIcon(file.type)} text-xs`}></i>
+                                    <i className={`${fileIconClass} text-xs`}></i>
                                   </button>
                                   <div className="min-w-0">
                                     <span
@@ -1497,9 +1623,13 @@ export default function DashboardPage() {
                                 </div>
                               </td>
                               <td className="px-4 py-3.5">
-                                <span className="text-xs text-gray-text">
-                                  {file.type ? file.type.split('/')[1]?.toUpperCase() || file.type : '--'}
-                                </span>
+                                {isUrl ? (
+                                  <span className="text-xs text-gray-text">{urlPlatform?.label || 'URL'}</span>
+                                ) : (
+                                  <span className="text-xs text-gray-text">
+                                    {getFileTypeDisplay(file.type)}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-3.5">
                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
@@ -1515,20 +1645,24 @@ export default function DashboardPage() {
                               </td>
                               <td className="px-4 py-3.5 text-center">
                                 <div className="flex items-center justify-center gap-1">
-                                  <button
+                                  <Button
                                     type="button"
                                     onClick={() => setPreviewFile(file)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5"
                                     title="Preview file"
                                   >
                                     <i className="fas fa-eye text-[10px]"></i>
                                     View
-                                  </button>
-                                  <button
+                                  </Button>
+                                  <Button
                                     type="button"
                                     onClick={() => setDeleteConfirm(file.id)}
                                     disabled={deleteLoading === file.id}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-1 text-[11px] font-medium text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Delete file"
                                   >
                                     {deleteLoading === file.id ? (
@@ -1537,13 +1671,13 @@ export default function DashboardPage() {
                                       <i className="fas fa-trash-alt text-[10px]"></i>
                                     )}
                                     Delete
-                                  </button>
+                                  </Button>
                                 </div>
                               </td>
                             </tr>
                             {/* Transcription sub-row */}
                             {file.transcriptionUrl && (
-                              <tr className="bg-emerald-50/30">
+                              <tr className="bg-emerald-50/30" onContextMenu={(e) => handleTranscriptionContextMenu(e, file)}>
                                 <td className="px-3 py-2"></td>
                                 <td className="px-4 py-2" colSpan={3}>
                                   <div className="flex items-center gap-2.5 pl-11">
@@ -1551,9 +1685,14 @@ export default function DashboardPage() {
                                     <div className="w-6 h-6 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0">
                                       <i className="fas fa-file-circle-check text-emerald-500 text-[10px]"></i>
                                     </div>
-                                    <span className="text-[12px] font-medium text-dark-text truncate max-w-[220px]" title={file.transcriptionName}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDocViewerFile({ url: file.transcriptionUrl, name: file.transcriptionName || 'Transcription', type: file.transcriptionType, size: file.transcriptionSize })}
+                                      className="text-[12px] font-medium text-dark-text truncate max-w-[220px] hover:text-primary transition-colors text-left"
+                                      title={file.transcriptionName}
+                                    >
                                       {file.transcriptionName || 'Transcription'}
-                                    </span>
+                                    </button>
                                   </div>
                                 </td>
                                 <td className="px-4 py-2">
@@ -1575,19 +1714,17 @@ export default function DashboardPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        const a = document.createElement('a');
-                                        a.href = getDownloadUrl(file.transcriptionUrl);
-                                        a.download = file.transcriptionName || file.originalName;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        a.remove();
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                      onClick={() => triggerDownload(file.transcriptionUrl, file.transcriptionName || file.originalName, `trans-${file.id}`)}
+                                      disabled={downloadLoadingKey === `trans-${file.id}`}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                       title="Download transcription"
                                     >
-                                      <i className="fas fa-download text-[10px]"></i>
-                                      Download
+                                      {downloadLoadingKey === `trans-${file.id}` ? (
+                                        <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                                      ) : (
+                                        <i className="fas fa-download text-[10px]"></i>
+                                      )}
+                                      {downloadLoadingKey === `trans-${file.id}` ? 'Downloading...' : 'Download'}
                                     </button>
                                   </div>
                                 </td>
@@ -1658,7 +1795,7 @@ export default function DashboardPage() {
                         onOpen={(id) => setCurrentFolderId(id)}
                         onContextMenu={handleFolderContextMenu}
                         isSelected={selectedIds.has(folder.id)}
-                        onSelect={toggleSelect}
+                        onSelect={handleSelectClick}
                         isDragOver={dragOverFolder === folder.id}
                         onDragOver={setDragOverFolder}
                         onDragLeave={() => setDragOverFolder(null)}
@@ -1666,6 +1803,7 @@ export default function DashboardPage() {
                         onDragStart={handleDragStart}
                         itemCount={folderItemCounts[folder.id] || 0}
                         totalSize={folderSizes[folder.id] || 0}
+                        onDelete={(id) => setDeleteFolderConfirm(id)}
                       />
                     );
                   })}
@@ -1687,23 +1825,14 @@ export default function DashboardPage() {
                           onStatusChange={handleStatusChange}
                           onPreview={setPreviewFile}
                           isSelected={isSelected}
-                          onSelect={toggleSelect}
+                          onSelect={handleSelectClick}
                           onDelete={(id) => setDeleteConfirm(id)}
                           deleteLoading={deleteLoading === file.id}
-                          isDeleteConfirm={deleteConfirm === file.id}
-                          onDeleteConfirm={handleDeleteFile}
-                          onDeleteCancel={() => setDeleteConfirm(null)}
                           folderName={statusFilter && currentFolderId === null && file.folderId ? (folderMap[file.folderId] || 'folder') : ''}
                           onOpenFolder={statusFilter && currentFolderId === null && file.folderId ? () => setCurrentFolderId(file.folderId) : undefined}
                           onViewTranscription={file.transcriptionUrl ? (f) => setDocViewerFile({ url: f.transcriptionUrl, name: f.transcriptionName || 'Transcription', type: f.transcriptionType, size: f.transcriptionSize }) : undefined}
-                          onDownloadTranscription={file.transcriptionUrl ? (f) => {
-                            const a = document.createElement('a');
-                            a.href = getDownloadUrl(f.transcriptionUrl);
-                            a.download = f.transcriptionName || f.originalName;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                          } : undefined}
+                          onDownloadTranscription={file.transcriptionUrl ? (f) => triggerDownload(f.transcriptionUrl, f.transcriptionName || f.originalName, `trans-${f.id}`) : undefined}
+                          transcriptionDownloadLoading={downloadLoadingKey === `trans-${file.id}`}
                         />
                       </div>
                     );
@@ -1762,17 +1891,6 @@ export default function DashboardPage() {
           ) : (
             /* Transcriptions Tab */
             <>
-              {transError && (
-                <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">
-                  <i className="fas fa-exclamation-circle text-red-500"></i>
-                  <p className="text-sm font-medium text-red-700">{transError}</p>
-                  <button onClick={() => fetchTranscriptions()} className="ml-auto text-sm text-red-600 hover:text-red-700 font-medium flex items-center gap-1.5">
-                    <i className="fas fa-sync-alt text-xs"></i>
-                    Retry
-                  </button>
-                </div>
-              )}
-
               {transLoading ? (
                 <div className="text-center py-24">
                   <i className="fas fa-spinner fa-spin text-3xl text-primary mb-4 block"></i>
@@ -1854,6 +1972,13 @@ export default function DashboardPage() {
         />
       )}
 
+      {noteFile && (
+        <FileNoteModal
+          file={noteFile}
+          onClose={() => setNoteFile(null)}
+        />
+      )}
+
       {/* Document Viewer Modal (transcription view) */}
       {docViewerFile && (
         <DocumentViewerModal
@@ -1916,6 +2041,53 @@ export default function DashboardPage() {
           title={`Move ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''} to folder`}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete File"
+        message="Delete this file permanently?"
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteLoading === deleteConfirm}
+        onConfirm={() => deleteConfirm && handleDeleteFile(deleteConfirm)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        title="Delete Selected Items"
+        message={`Delete ${selectedCount} selected item${selectedCount !== 1 ? 's' : ''}?`}
+        confirmLabel="Delete Selected"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteFolderConfirm}
+        title="Delete Folder"
+        message="Delete this folder and all items inside it?"
+        confirmLabel="Delete Folder"
+        tone="danger"
+        loading={bulkLoading}
+        onConfirm={() => deleteFolderConfirm && handleDeleteFolder(deleteFolderConfirm)}
+        onCancel={() => setDeleteFolderConfirm(null)}
+      />
+
+      <RenameDialog
+        open={!!renameFolderModal}
+        title="Rename Folder"
+        description="Enter a new folder name."
+        initialValue={renameFolderModal?.name || ''}
+        confirmLabel="Save"
+        onConfirm={async (newName) => {
+          if (!renameFolderModal?.id || !newName.trim()) return;
+          await handleRenameFolder(renameFolderModal.id, newName.trim());
+          setRenameFolderModal(null);
+        }}
+        onClose={() => setRenameFolderModal(null)}
+      />
     </Layout>
   );
 }

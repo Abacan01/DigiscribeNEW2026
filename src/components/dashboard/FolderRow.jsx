@@ -33,6 +33,7 @@ export default function FolderRow({
   itemCount,
   totalSize,
   showUploadedBy = true,
+  onDelete,
 }) {
   return (
     <tr
@@ -64,7 +65,14 @@ export default function FolderRow({
         e.preventDefault();
         if (onDrop) onDrop(e, folder.id);
       }}
-      onClick={() => onOpen(folder.id)}
+      onClick={(e) => {
+        if ((e.ctrlKey || e.metaKey || e.shiftKey) && onSelect) {
+          e.preventDefault();
+          onSelect(folder.id, e);
+        } else {
+          onOpen(folder.id);
+        }
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         if (onContextMenu) onContextMenu(e, folder);
@@ -126,6 +134,16 @@ export default function FolderRow({
             <i className="fas fa-folder-open text-[10px]"></i>
             Open
           </button>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(folder.id); }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors"
+              title="Delete folder"
+            >
+              <i className="fas fa-trash-alt text-[10px]"></i>
+            </button>
+          )}
         </div>
       </td>
     </tr>

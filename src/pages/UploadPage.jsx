@@ -3,12 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/layout/Layout';
 import { useScrollAnimation } from '../hooks/useScrollAnimation';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppToast } from '../hooks/useAppToast';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 const ACCEPT_MEDIA = 'image/*,audio/*,video/*';
-const ACCEPT_DOCS = 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv';
+const ACCEPT_DOCS = 'application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.txt,.doc,.docx';
 const ACCEPT_STRING = ACCEPT_MEDIA; // default; admins get ACCEPT_MEDIA + ACCEPT_DOCS
 const MAX_FILES = 10;
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB per chunk
@@ -55,18 +56,25 @@ const SERVICE_CATEGORIES = [
 /* ------------------------------------------------------------------ */
 /*  Utility helpers                                                    */
 /* ------------------------------------------------------------------ */
-function isAllowedMime(mime, role) {
-  if (!mime) return false;
-  if (mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')) return true;
+const ADMIN_ALLOWED_DOC_MIME_TYPES = new Set([
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+const ADMIN_ALLOWED_DOC_EXTENSIONS = new Set(['.pdf', '.txt', '.doc', '.docx']);
+
+function isAllowedMime(mime, role, fileName = '') {
+  const normalizedMime = String(mime || '').toLowerCase();
+  const ext = fileName.includes('.') ? `.${fileName.split('.').pop().toLowerCase()}` : '';
+
+  if (!normalizedMime) {
+    return role === 'admin' && !!ext && ADMIN_ALLOWED_DOC_EXTENSIONS.has(ext);
+  }
+  if (normalizedMime.startsWith('image/') || normalizedMime.startsWith('audio/') || normalizedMime.startsWith('video/')) return true;
   if (role === 'admin') {
-    const docTypes = [
-      'application/pdf', 'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/plain', 'text/csv',
-    ];
-    return docTypes.includes(mime);
+    if (ADMIN_ALLOWED_DOC_MIME_TYPES.has(normalizedMime)) return true;
+    if (ext && ADMIN_ALLOWED_DOC_EXTENSIONS.has(ext)) return true;
   }
   return false;
 }
@@ -354,7 +362,13 @@ export default function UploadPage() {
   const [searchParams] = useSearchParams();
   const folderId = searchParams.get('folderId') || null;
   const { getIdToken, role } = useAuth();
+  const toast = useAppToast();
   const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  const handleCancelUpload = () => {
+    abortControllerRef.current?.abort();
+  };
 
   const handleBackNavigation = () => {
     if (window.history.length > 1) {
@@ -398,6 +412,15 @@ export default function UploadPage() {
     document.title = 'Upload Files - DigiScribe Transcription Corp.';
   }, []);
 
+  useEffect(() => {
+    if (!result?.message) return;
+    if (result.type === 'success') {
+      toast.success(result.message);
+      return;
+    }
+    toast.error(result.message, 'Upload Failed');
+  }, [result, toast]);
+
   // Warn users before closing tab while uploading
   useEffect(() => {
     if (!uploading) return;
@@ -435,8 +458,8 @@ export default function UploadPage() {
     }
 
     for (const file of fileList) {
-      if (!isAllowedMime(file.type, role)) {
-        const accepted = role === 'admin' ? 'images, audio, video, PDF, and documents' : 'images, audio, and video files only';
+      if (!isAllowedMime(file.type, role, file.name)) {
+        const accepted = role === 'admin' ? 'images, audio, video, plus PDF/TXT/DOC/DOCX documents only' : 'images, audio, and video files only';
         errors.push(`"${file.name}" is not a supported file type. Accepted: ${accepted}.`);
       } else {
         valid.push(file);
@@ -444,7 +467,7 @@ export default function UploadPage() {
     }
 
     return { valid, errors };
-  }, [files.length]);
+  }, [files.length, role]);
 
   const addFiles = useCallback((fileList) => {
     const { valid, errors } = validateFiles(Array.from(fileList));
@@ -538,6 +561,8 @@ export default function UploadPage() {
   /*  UPLOAD LOGIC                                                     */
   /* ================================================================ */
   const handleUpload = async () => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setUploading(true);
     setResult(null);
     setProgress(0);
@@ -550,19 +575,27 @@ export default function UploadPage() {
       const authHeaders = { Authorization: `Bearer ${token}` };
 
       if (uploadMethod === 'file') {
-        await uploadFiles(authHeaders);
+        await uploadFiles(authHeaders, controller.signal);
       } else {
-        await uploadUrls(authHeaders);
+        await uploadUrls(authHeaders, controller.signal);
       }
     } catch (err) {
-      setResult({ type: 'error', message: err.message });
-      setCurrentStep(5);
+      if (err.name === 'AbortError' || err.message === '__CANCELLED__') {
+        setProgress(0);
+        setEta('');
+        setUrlProcessingIndex(-1);
+        // Stay on step 4 so the user can re-submit or go back
+      } else {
+        setResult({ type: 'error', message: err.message });
+        setCurrentStep(5);
+      }
     } finally {
       setUploading(false);
+      abortControllerRef.current = null;
     }
   };
 
-  const uploadFiles = async (authHeaders) => {
+  const uploadFiles = async (authHeaders, signal) => {
     const filesToUpload = [...files];
     const totalSize = filesToUpload.reduce((sum, f) => sum + f.size, 0);
     let uploadedBytes = 0;
@@ -591,11 +624,13 @@ export default function UploadPage() {
         formData.append('chunk', blob);
         formData.append('uploadId', uploadId);
         formData.append('chunkIndex', String(chunkIndex));
+        formData.append('chunkStart', String(start));
 
         const chunkRes = await fetch('/api/upload/chunk', {
           method: 'POST',
           headers: authHeaders,
           body: formData,
+          signal,
         });
 
         if (chunkRes.ok) {
@@ -616,7 +651,7 @@ export default function UploadPage() {
       return 0;
     };
 
-    const completeUploadWithRetry = async ({ uploadId, file, fileName, totalChunks, mimeType }) => {
+    const completeUploadWithRetry = async ({ uploadId, fileName, totalChunks, mimeType }) => {
       for (let attempt = 0; attempt <= COMPLETE_RETRIES; attempt++) {
         const completeRes = await fetch('/api/upload/complete', {
           method: 'POST',
@@ -630,6 +665,7 @@ export default function UploadPage() {
             serviceCategory,
             folderId,
           }),
+          signal,
         });
 
         const completeData = await completeRes.json().catch(() => ({}));
@@ -637,23 +673,16 @@ export default function UploadPage() {
           return completeData;
         }
 
-        const message = completeData.error || `Assembly failed for "${fileName}".`;
-        const missingMatch = message.match(/Missing chunk\s+(\d+)/i);
-
-        if (!missingMatch || attempt === COMPLETE_RETRIES) {
+        const message = completeData.error || `Finalize failed for "${fileName}".`;
+        if (attempt === COMPLETE_RETRIES) {
           throw new Error(message);
         }
 
-        const missingChunkIndex = Number(missingMatch[1]);
-        await uploadChunkWithRetry({
-          file,
-          uploadId,
-          chunkIndex: missingChunkIndex,
-          customName: fileName,
-        });
+        const backoff = CHUNK_RETRY_BASE_DELAY_MS * (attempt + 1);
+        await wait(backoff);
       }
 
-      throw new Error(`Assembly failed for "${fileName}".`);
+      throw new Error(`Finalize failed for "${fileName}".`);
     };
 
     for (let idx = 0; idx < filesToUpload.length; idx++) {
@@ -685,7 +714,6 @@ export default function UploadPage() {
 
       const completeData = await completeUploadWithRetry({
         uploadId,
-        file,
         fileName: customName,
         totalChunks,
         mimeType: file.type,
@@ -694,14 +722,30 @@ export default function UploadPage() {
     }
 
     setEta('');
+
+    // Warn if any uploaded video is larger than 280 MB
+    const LARGE_VIDEO_THRESHOLD = 280 * 1024 * 1024;
+    const largeVideos = files.filter(
+      (f) => f.type && f.type.startsWith('video/') && f.size > LARGE_VIDEO_THRESHOLD
+    );
+    if (largeVideos.length > 0) {
+      setTimeout(() => {
+        toast.warning(
+          `${largeVideos.length > 1 ? `${largeVideos.length} videos are` : `"${fileNames[files.indexOf(largeVideos[0])] || largeVideos[0].name}" is`} over 280 MB and cannot be watched directly in the browser. Please download the file to view it.`,
+          'Large Video Notice'
+        );
+      }, 800);
+    }
+
     setResult({
       type: 'success',
       message: `${results.length} file${results.length !== 1 ? 's' : ''} uploaded successfully.`,
+      hasLargeVideo: largeVideos.length > 0,
     });
     setCurrentStep(5);
   };
 
-  const uploadUrls = async (authHeaders) => {
+  const uploadUrls = async (authHeaders, signal) => {
     const results = [];
     const errors = [];
 
@@ -714,14 +758,29 @@ export default function UploadPage() {
           method: 'POST',
           headers: { ...authHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: urls[i], customName: urlNames[i] || '', description, serviceCategory, folderId }),
+          signal,
         });
-        const data = await res.json();
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            data = { error: raw.slice(0, 180) };
+          }
+        }
+
         if (!res.ok || !data.success) {
-          errors.push(`${urls[i]}: ${data.error || 'Failed'}`);
+          const fallback = raw
+            ? `Request failed (${res.status} ${res.statusText}).`
+            : `Request failed (${res.status} ${res.statusText}) with empty response.`;
+          errors.push(`${urls[i]}: ${data.error || fallback}`);
         } else {
           results.push(data.file);
         }
       } catch (err) {
+        // Re-throw abort errors so the outer handler can clean up
+        if (err.name === 'AbortError') throw err;
         errors.push(`${urls[i]}: ${err.message}`);
       }
     }
@@ -853,7 +912,7 @@ export default function UploadPage() {
       <div className="text-center mb-6">
         <h2 className="text-lg font-semibold text-dark-text">Select Your Files</h2>
         <p className="text-sm text-gray-text mt-1">
-          Upload up to {MAX_FILES} {role === 'admin' ? 'media or document' : 'image, audio, or video'} files
+          Upload up to {MAX_FILES} {role === 'admin' ? 'media or allowed document (PDF/TXT/DOC/DOCX)' : 'image, audio, or video'} files
         </p>
       </div>
 
@@ -869,8 +928,9 @@ export default function UploadPage() {
               <li><i className="fas fa-check text-primary mr-2"></i><strong>Images:</strong> JPG, PNG, GIF, WebP, BMP, SVG, HEIC, AVIF, JFIF, etc.</li>
               <li><i className="fas fa-check text-primary mr-2"></i><strong>Audio:</strong> MP3, WAV, OGG, AAC, FLAC, M4A, OPUS, AIFF, etc.</li>
               <li><i className="fas fa-check text-primary mr-2"></i><strong>Video:</strong> MP4, WebM, MOV, AVI, MKV, WMV, FLV, etc.</li>
+              <li><i className="fas fa-triangle-exclamation text-amber-500 mr-2"></i><strong>Videos over 280 MB</strong> cannot be streamed in-browser &mdash; you&apos;ll need to download them to view.</li>
               {role === 'admin' && (
-                <li><i className="fas fa-check text-primary mr-2"></i><strong>Documents (admin):</strong> PDF, DOC/DOCX, XLS/XLSX, TXT, CSV</li>
+                <li><i className="fas fa-check text-primary mr-2"></i><strong>Documents (admin):</strong> PDF, DOC/DOCX, TXT</li>
               )}
             </ul>
           </div>
@@ -1366,6 +1426,18 @@ export default function UploadPage() {
                 </div>
               </div>
             )}
+
+            {/* Cancel button */}
+            <div className="flex justify-center mt-5">
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="flex items-center gap-2 text-sm font-medium text-red-500 hover:text-red-600 border border-red-200 hover:border-red-300 hover:bg-red-50 px-5 py-2.5 rounded-xl transition-all duration-200"
+              >
+                <i className="fas fa-times text-xs"></i>
+                Cancel Upload
+              </button>
+            </div>
           </div>
         )}
 
@@ -1406,6 +1478,14 @@ export default function UploadPage() {
           <p className="text-sm text-gray-text max-w-md mx-auto whitespace-pre-wrap">
             {result.message}
           </p>
+          {result.hasLargeVideo && (
+            <div className="mt-5 mx-auto max-w-md flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left">
+              <i className="fas fa-triangle-exclamation text-amber-500 text-sm mt-0.5 flex-shrink-0"></i>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                <strong>Large video notice:</strong> One or more of your videos is over 280 MB and cannot be streamed directly in the browser. You&apos;ll need to <strong>download the file</strong> to watch it.
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -1497,7 +1577,7 @@ export default function UploadPage() {
   );
 
   return (
-    <Layout heroContent={heroContent}>
+    <Layout heroContent={heroContent} hideFooter>
       <div ref={animationRef} />
     </Layout>
   );

@@ -1,4 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Card } from '../ui/card';
 
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return '--';
@@ -22,23 +25,25 @@ function formatDate(dateString) {
 }
 
 const PLATFORM_MAP = [
-  { domains: ['youtube.com', 'youtu.be'], label: 'YouTube', icon: 'fa-youtube', color: 'text-red-600 bg-red-50 border-red-200' },
-  { domains: ['facebook.com', 'fb.watch'], label: 'Facebook', icon: 'fa-facebook', color: 'text-blue-700 bg-blue-50 border-blue-200' },
-  { domains: ['instagram.com'], label: 'Instagram', icon: 'fa-instagram', color: 'text-pink-600 bg-pink-50 border-pink-200' },
-  { domains: ['tiktok.com', 'vm.tiktok.com'], label: 'TikTok', icon: 'fa-tiktok', color: 'text-gray-800 bg-gray-50 border-gray-200' },
-  { domains: ['twitter.com', 'x.com'], label: 'Twitter/X', icon: 'fa-twitter', color: 'text-sky-500 bg-sky-50 border-sky-200' },
-  { domains: ['vimeo.com'], label: 'Vimeo', icon: 'fa-vimeo', color: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
-  { domains: ['soundcloud.com'], label: 'SoundCloud', icon: 'fa-soundcloud', color: 'text-orange-500 bg-orange-50 border-orange-200' },
-  { domains: ['twitch.tv'], label: 'Twitch', icon: 'fa-twitch', color: 'text-purple-600 bg-purple-50 border-purple-200' },
+  { domains: ['youtube.com', 'youtu.be'], label: 'YouTube', icon: 'fa-brands fa-youtube', color: 'text-red-600 bg-red-50 border-red-200' },
+  { domains: ['facebook.com', 'fb.watch'], label: 'Facebook', icon: 'fa-brands fa-facebook-f', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { domains: ['dailymotion.com', 'dai.ly'], label: 'Dailymotion', icon: 'fas fa-play', color: 'text-sky-600 bg-sky-50 border-sky-200' },
+  { domains: ['drive.google.com', 'docs.google.com'], label: 'Google Drive', icon: 'fa-brands fa-google-drive', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+  { domains: ['instagram.com'], label: 'Instagram', icon: 'fa-brands fa-instagram', color: 'text-pink-600 bg-pink-50 border-pink-200' },
+  { domains: ['tiktok.com', 'vm.tiktok.com'], label: 'TikTok', icon: 'fa-brands fa-tiktok', color: 'text-gray-800 bg-gray-50 border-gray-200' },
+  { domains: ['twitter.com', 'x.com'], label: 'Twitter/X', icon: 'fa-brands fa-x-twitter', color: 'text-sky-500 bg-sky-50 border-sky-200' },
+  { domains: ['vimeo.com'], label: 'Vimeo', icon: 'fa-brands fa-vimeo-v', color: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
+  { domains: ['soundcloud.com'], label: 'SoundCloud', icon: 'fa-brands fa-soundcloud', color: 'text-orange-500 bg-orange-50 border-orange-200' },
+  { domains: ['twitch.tv'], label: 'Twitch', icon: 'fa-brands fa-twitch', color: 'text-purple-600 bg-purple-50 border-purple-200' },
 ];
 
 function getUrlPlatform(sourceUrl) {
-  if (!sourceUrl) return null;
+  if (!sourceUrl) return { label: 'URL', icon: 'fa-link', color: 'text-gray-500 bg-gray-50 border-gray-200' };
   try {
     const hostname = new URL(sourceUrl).hostname.replace('www.', '');
     return PLATFORM_MAP.find((p) => p.domains.some((d) => hostname.includes(d))) || { label: 'URL', icon: 'fa-link', color: 'text-gray-500 bg-gray-50 border-gray-200' };
   } catch {
-    return null;
+    return { label: 'URL', icon: 'fa-link', color: 'text-gray-500 bg-gray-50 border-gray-200' };
   }
 }
 
@@ -52,6 +57,7 @@ function getFileIcon(type) {
   if (type.includes('excel') || type.includes('spreadsheet')) return 'fa-file-excel';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'fa-file-powerpoint';
   if (type === 'text/plain' || type === 'text/csv') return 'fa-file-alt';
+  if (type === 'application/x-url') return 'fa-link';
   return 'fa-file';
 }
 
@@ -64,6 +70,7 @@ function getFileIconColor(type) {
   if (type.includes('word') || type === 'application/msword') return 'text-blue-600 bg-blue-50';
   if (type.includes('excel') || type.includes('spreadsheet')) return 'text-green-600 bg-green-50';
   if (type.includes('powerpoint') || type.includes('presentation')) return 'text-orange-600 bg-orange-50';
+  if (type === 'application/x-url') return 'text-indigo-600 bg-indigo-50';
   return 'text-gray-400 bg-gray-50';
 }
 
@@ -97,15 +104,17 @@ const statusOptions = [
   { value: 'transcribed', label: 'Transcribed' },
 ];
 
-export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, isDeleteConfirm, onDeleteConfirm, onDeleteCancel, folderName, onOpenFolder, onTranscription, onViewTranscription, onDownloadTranscription }) {
+export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isSelected, onSelect, onDelete, deleteLoading, folderName, onOpenFolder, onTranscription, onViewTranscription, onDownloadTranscription, transcriptionDownloadLoading = false }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const status = statusConfig[file.status] || statusConfig.pending;
   const isUrl = file.sourceType === 'url';
-  const urlPlatform = isUrl ? getUrlPlatform(file.sourceUrl) : null;
+  const urlPlatform = isUrl ? getUrlPlatform(file.sourceUrl || file.sourceReferenceUrl || file.url) : null;
   const icon = getFileIcon(file.type);
   const iconColor = getFileIconColor(file.type);
+  const iconClass = isUrl && urlPlatform ? urlPlatform.icon : `fas ${icon}`;
+  const iconBgClass = isUrl && urlPlatform ? urlPlatform.color : iconColor;
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -129,11 +138,18 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
   };
 
   return (
-    <div className={`bg-white rounded-xl border overflow-hidden hover:shadow-md transition-all duration-200 group ${
-      isDeleteConfirm ? 'border-red-300 shadow-sm shadow-red-100'
-      : isSelected ? 'border-primary/40'
+    <Card className={`rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 group ${
+      isSelected ? 'border-primary/40'
       : 'border-gray-100 hover:border-gray-200'
-    }`}>
+    }`}
+      onClick={(e) => {
+        if ((e.ctrlKey || e.metaKey || e.shiftKey) && onSelect) {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelect(file.id, e);
+        }
+      }}
+    >
       {/* Top accent bar */}
       <div className={`h-0.5 ${status.dot}`} />
 
@@ -160,15 +176,17 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
             </label>
           )}
 
-          <button
+          <Button
             type="button"
             onClick={handlePreview}
-            className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor} transition-all duration-200 cursor-pointer hover:scale-105`}
+            variant="ghost"
+            size="icon"
+            className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBgClass} transition-all duration-200 cursor-pointer hover:scale-105`}
             title="Preview file"
           >
-            <i className={`fas ${icon} text-sm group-hover:hidden`}></i>
+            <i className={`${iconClass} text-sm group-hover:hidden`}></i>
             <i className="fas fa-eye text-sm hidden group-hover:block"></i>
-          </button>
+          </Button>
 
           <div className="flex-1 min-w-0">
             <h3
@@ -189,23 +207,27 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
           <div className="relative flex-shrink-0" ref={dropdownRef}>
             {isAdmin ? (
               <>
-                <button
+                <Button
                   type="button"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${status.bg} ${status.text} ${status.border} cursor-pointer hover:opacity-90 transition-opacity`}
+                  variant="outline"
+                  size="sm"
+                  className={`gap-1.5 h-auto px-2.5 py-1 rounded-md text-[11px] font-semibold border ${status.bg} ${status.text} ${status.border} cursor-pointer hover:opacity-90 transition-opacity`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
                   {status.label}
                   <i className="fas fa-chevron-down text-[7px] ml-0.5 opacity-60"></i>
-                </button>
+                </Button>
                 {dropdownOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-36 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-20">
                     {statusOptions.map((opt) => (
-                      <button
+                      <Button
                         key={opt.value}
                         type="button"
                         onClick={() => handleStatusSelect(opt.value)}
-                        className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                        variant="ghost"
+                        size="sm"
+                        className={`w-full justify-start text-left px-3 py-2 text-xs font-medium transition-colors gap-2 ${
                           file.status === opt.value
                             ? 'text-primary bg-primary/5'
                             : 'text-gray-text hover:text-dark-text hover:bg-gray-50'
@@ -216,16 +238,16 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
                         {file.status === opt.value && (
                           <i className="fas fa-check text-[8px] text-primary ml-auto"></i>
                         )}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 )}
               </>
             ) : (
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${status.bg} ${status.text} ${status.border}`}>
+              <Badge variant="outline" className={`gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold ${status.bg} ${status.text} ${status.border}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
                 {status.label}
-              </span>
+              </Badge>
             )}
           </div>
         </div>
@@ -233,37 +255,41 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
         {/* Platform badge (URL uploads) + Service Category */}
         <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
           {isUrl && urlPlatform && (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border ${urlPlatform.color}`}>
+            <Badge variant="outline" className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${urlPlatform.color}`}>
               {urlPlatform.label}
-            </span>
+            </Badge>
           )}
           {file.serviceCategory && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-indigo-50 text-indigo-600 border border-indigo-100">
+            <Badge variant="outline" className="gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-indigo-50 text-indigo-600 border-indigo-100">
               <i className="fas fa-tag text-[8px] text-indigo-400"></i>
               {file.serviceCategory}
-            </span>
+            </Badge>
           )}
           {folderName && (
-            <button
+            <Button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOpenFolder && onOpenFolder(); }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600 border border-violet-100 hover:bg-violet-100 transition-colors"
+              variant="outline"
+              size="sm"
+              className="gap-1 h-auto px-2 py-0.5 rounded-md text-[10px] font-medium bg-violet-50 text-violet-600 border-violet-100 hover:bg-violet-100"
               title={`Inside folder: ${folderName}`}
             >
               <i className="fas fa-folder text-[8px] text-violet-400"></i>
               {folderName}
-            </button>
+            </Button>
           )}
           {file.transcriptionUrl && isAdmin && (
-            <button
+            <Button
               type="button"
               onClick={(e) => { e.stopPropagation(); onTranscription && onTranscription(file); }}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-colors"
+              variant="outline"
+              size="sm"
+              className="gap-1 h-auto px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100"
               title={file.transcriptionName || 'Transcription attached'}
             >
               <i className="fas fa-file-circle-check text-[8px] text-emerald-400"></i>
               Transcribed
-            </button>
+            </Button>
           )}
         </div>
 
@@ -286,53 +312,38 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
               </span>
             </div>
             <div className="flex items-center gap-1.5 pl-7">
-              <button
+              <Button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onViewTranscription && onViewTranscription(file); }}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-gray-500 hover:text-primary hover:bg-white transition-colors"
+                variant="ghost"
+                size="sm"
+                className="gap-1 h-auto px-2 py-1 rounded-md text-[10px] font-medium text-gray-500 hover:text-primary hover:bg-white"
               >
                 <i className="fas fa-eye text-[9px]"></i>
                 View
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onDownloadTranscription && onDownloadTranscription(file); }}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-white transition-colors"
+                disabled={transcriptionDownloadLoading}
+                variant="ghost"
+                size="sm"
+                className="gap-1 h-auto px-2 py-1 rounded-md text-[10px] font-medium text-emerald-500 hover:text-emerald-600 hover:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <i className="fas fa-download text-[9px]"></i>
-                Download
-              </button>
+                {transcriptionDownloadLoading ? (
+                  <i className="fas fa-spinner fa-spin text-[9px]"></i>
+                ) : (
+                  <i className="fas fa-download text-[9px]"></i>
+                )}
+                {transcriptionDownloadLoading ? 'Downloading...' : 'Download'}
+              </Button>
             </div>
           </div>
         )}
 
         {/* Footer: uploader info + action */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-50">
-          {isDeleteConfirm ? (
-            /* Inline delete confirmation */
-            <div className="flex items-center gap-2 w-full">
-              <i className="fas fa-exclamation-triangle text-red-400 text-xs flex-shrink-0"></i>
-              <span className="text-xs font-medium text-red-600 flex-1">Delete this file?</span>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onDeleteConfirm && onDeleteConfirm(file.id); }}
-                disabled={!!deleteLoading}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50"
-              >
-                {deleteLoading
-                  ? <i className="fas fa-spinner fa-spin text-[10px]"></i>
-                  : <><i className="fas fa-trash-alt text-[9px]"></i> Delete</>}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onDeleteCancel && onDeleteCancel(); }}
-                className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <>
+          <>
           <div className="flex items-center gap-2 text-[11px] text-gray-400 min-w-0">
             {isAdmin && file.uploadedByEmail ? (
               <span className="flex items-center gap-1.5 truncate" title={file.uploadedByEmail}>
@@ -349,38 +360,41 @@ export default function FileCard({ file, isAdmin, onStatusChange, onPreview, isS
 
           <div className="flex items-center gap-1">
             {isUrl && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-gray-50 text-gray-400 border border-gray-200" title="Downloaded from URL — cannot be re-downloaded">
+              <Badge variant="outline" className="gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-gray-50 text-gray-400 border-gray-200" title="Downloaded from URL — cannot be re-downloaded">
                 <i className="fas fa-ban text-[9px]"></i>
                 No download
-              </span>
+              </Badge>
             )}
             {onDelete && (
-              <button
+              <Button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onDelete(file.id); }}
                 disabled={!!deleteLoading}
-                className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-150 disabled:opacity-30"
+                variant="ghost"
+                size="sm"
+                className="opacity-0 group-hover:opacity-100 gap-1.5 text-[11px] font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-150 disabled:opacity-30"
                 title="Delete file"
               >
                 {deleteLoading
                   ? <i className="fas fa-spinner fa-spin text-[10px]"></i>
                   : <i className="fas fa-trash-alt text-[10px]"></i>
                 }
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               onClick={handlePreview}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors"
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-[11px] font-medium text-gray-400 hover:text-primary hover:bg-primary/5"
             >
               <i className="fas fa-eye text-[10px]"></i>
               Preview
-            </button>
+            </Button>
           </div>
-            </>
-          )}
+          </>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

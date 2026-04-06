@@ -1,4 +1,6 @@
 import { createPortal } from 'react-dom';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 
 function formatSize(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -38,7 +40,7 @@ export default function FolderPropertiesModal({ folder, itemCount, totalSize, on
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+      <Card className="rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
@@ -47,12 +49,14 @@ export default function FolderPropertiesModal({ folder, itemCount, totalSize, on
             </div>
             <h3 className="text-sm font-semibold text-dark-text">Folder Properties</h3>
           </div>
-          <button
+          <Button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-dark-text hover:bg-gray-100 transition-colors"
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 text-gray-400 hover:text-dark-text hover:bg-gray-100"
           >
             <i className="fas fa-times"></i>
-          </button>
+          </Button>
         </div>
 
         {/* Size summary banner */}
@@ -88,14 +92,14 @@ export default function FolderPropertiesModal({ folder, itemCount, totalSize, on
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
-          <button
+          <Button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-text hover:text-dark-text hover:bg-gray-50 rounded-lg transition-colors"
+            variant="ghost"
           >
             Close
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>,
     document.body
   );

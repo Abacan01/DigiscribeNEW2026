@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { Toaster } from 'sileo';
 import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/layout/ScrollToTop';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -23,6 +24,26 @@ import FaqFloatingButton from './components/ui/FaqFloatingButton';
 
 function GlobalUiEffects() {
   const location = useLocation();
+
+  useEffect(() => {
+    const isDashboardRoute = location.pathname === '/dashboard' || location.pathname === '/admin/dashboard';
+    if (!isDashboardRoute) return;
+
+    const onUnhandledRejection = (event) => {
+      const reason = event?.reason;
+      const message = typeof reason === 'string' ? reason : reason?.message;
+
+      if (
+        typeof message === 'string' &&
+        message.includes('A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received')
+      ) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', onUnhandledRejection);
+  }, [location.pathname]);
 
   useEffect(() => {
     const bindMedia = (node) => {
@@ -163,6 +184,16 @@ function App() {
 
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        <Toaster
+          theme="system"
+          options={{
+            position: 'top-center',
+            roundness: 14,
+            duration: 8000,
+            visibleToasts: 5,
+            expand: true,
+          }}
+        />
         <FaqFloatingButton />
       </AuthProvider>
     </BrowserRouter>

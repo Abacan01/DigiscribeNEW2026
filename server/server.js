@@ -2,19 +2,20 @@ import 'dotenv/config';
 import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'url';
-import { adminDb } from './firebaseAdmin.js';
+import { adminAuth, adminDb } from './firebaseAdmin.js';
 import { verifyAuth, verifyAdmin } from './middleware/authMiddleware.js';
 import usersRouter from './routes/users.js';
 import filesRouter from './routes/files.js';
 import pipelineRouter from './routes/pipeline.js';
 import transcriptionsRouter from './routes/transcriptions.js';
 import foldersRouter from './routes/folders.js';
-import { isVideoPlatformUrl, downloadWithYtdlp } from './services/ytdlp.js';
 import { uploadToFtp, uploadBufferToFtp, appendBufferToFtp, moveOnFtp, downloadFromFtp, streamFromFtp, ftpFileSize, deleteFromFtp } from './services/ftp.js';
 import { resolveFolderFtpPath, computeFileFtpPath, sanitizeName } from './services/ftpPathResolver.js';
 import { startFtpSync, reconcileOnce } from './services/ftpSync.js';
@@ -25,6 +26,8 @@ const __dirname = path.dirname(__filename);
 const IS_VERCEL = !!process.env.VERCEL;
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+app.set('trust proxy', 1);
 
 // Email transporter (optional — only active when SMTP_USER/PASS are configured)
 let emailTransporter = null;
@@ -82,31 +85,85 @@ if (!IS_VERCEL) {
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://devteam.digiscribeasiapacific.com',
+  'https://devteam.digiscribeasiapacific.com',
   ...(process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map((u) => u.trim())
     : []),
 ].filter(Boolean);
-app.use(cors({ origin: allowedOrigins }));
-app.use(express.json());
+
+function normalizeOrigin(input) {
+  if (!input) return '';
+  try {
+    const parsed = new URL(input);
+    return `${parsed.protocol}//${parsed.host}`.toLowerCase();
+  } catch {
+    return String(input).trim().replace(/\/+$/, '').toLowerCase();
+  }
+}
+
+const allowedOriginSet = new Set(allowedOrigins.map(normalizeOrigin));
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: false,
+}));
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    const normalized = normalizeOrigin(origin);
+    if (allowedOriginSet.has(normalized)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'x-pipeline-key'],
+}));
+app.use(express.json({ limit: '1mb' }));
+
+const quoteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many quote requests. Please try again later.' },
+});
+
+const uploadUrlLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many URL upload requests. Please try again later.' },
+});
+
+const pipelineLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many pipeline requests. Please try again later.' },
+});
 
 // Accept any image/*, audio/*, video/* MIME type.
 // Admins can also upload document types (PDF, Word, etc.)
-function isAllowedMime(mime, role) {
-  if (!mime) return false;
-  if (mime.startsWith('image/') || mime.startsWith('audio/') || mime.startsWith('video/')) return true;
+const ADMIN_ALLOWED_DOC_MIME_TYPES = new Set([
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+const ADMIN_ALLOWED_DOC_EXTENSIONS = new Set(['.pdf', '.txt', '.doc', '.docx']);
+
+function isAllowedMime(mime, role, fileName = '') {
+  const normalizedMime = String(mime || '').toLowerCase();
+  const ext = path.posix.extname(String(fileName || '')).toLowerCase();
+
+  if (!normalizedMime) {
+    return role === 'admin' && !!ext && ADMIN_ALLOWED_DOC_EXTENSIONS.has(ext);
+  }
+  if (normalizedMime.startsWith('image/') || normalizedMime.startsWith('audio/') || normalizedMime.startsWith('video/')) return true;
   if (role === 'admin') {
-    const docTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'text/plain',
-      'text/csv',
-    ];
-    return docTypes.includes(mime);
+    if (ADMIN_ALLOWED_DOC_MIME_TYPES.has(normalizedMime)) return true;
+    if (ext && ADMIN_ALLOWED_DOC_EXTENSIONS.has(ext)) return true;
   }
   return false;
 }
@@ -130,11 +187,6 @@ function buildFilePrefix(serviceCategory) {
 // Encode each path segment individually so slashes remain literal slashes in URLs.
 function encodeStorageUrl(storagePath) {
   return storagePath.split('/').map(encodeURIComponent).join('/');
-}
-
-function getTempChunkRemotePath(uploadId, chunkIndex) {
-  const safeUploadId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, '_');
-  return `_chunks/${safeUploadId}/chunk-${chunkIndex}`;
 }
 
 function getAssemblingRemotePath(uploadId) {
@@ -167,6 +219,9 @@ const EXT_TO_MIME = {
 const chunkUpload = multer({ storage: multer.memoryStorage() });
 
 // Mount API routes
+app.use('/api/quote', quoteLimiter);
+app.use('/api/upload/url', uploadUrlLimiter);
+app.use('/api/pipeline', pipelineLimiter);
 app.use('/api/admin', usersRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/pipeline', pipelineRouter);
@@ -177,30 +232,42 @@ app.use('/api/folders', foldersRouter);
 app.post('/api/upload/chunk', verifyAuth, chunkUpload.single('chunk'), async (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, error: 'No chunk received.' });
 
-  const { uploadId, chunkIndex } = req.body || {};
-  if (!uploadId || chunkIndex === undefined) {
-    return res.status(400).json({ success: false, error: 'Missing uploadId or chunkIndex.' });
+  const { uploadId, chunkIndex, chunkStart } = req.body || {};
+  if (!uploadId || chunkIndex === undefined || chunkStart === undefined) {
+    return res.status(400).json({ success: false, error: 'Missing uploadId, chunkIndex, or chunkStart.' });
   }
 
   try {
     if (IS_VERCEL) {
-      const remoteChunkPath = getTempChunkRemotePath(uploadId, chunkIndex);
-
-      // Idempotency guard: if this chunk already exists remotely, treat as success.
-      try {
-        await ftpFileSize(remoteChunkPath);
-        return res.json({ success: true, dedup: true });
-      } catch {
-        // chunk not found remotely; continue
+      const startOffset = Number.parseInt(String(chunkStart), 10);
+      if (!Number.isFinite(startOffset) || startOffset < 0) {
+        return res.status(400).json({ success: false, error: 'Invalid chunkStart.' });
       }
 
       const assemblingPath = getAssemblingRemotePath(uploadId);
+      let assembledSize = 0;
+      try {
+        assembledSize = await ftpFileSize(assemblingPath);
+      } catch {
+        assembledSize = 0;
+      }
 
-      // Store chunk artifact for validation/retry
-      await uploadBufferToFtp(req.file.buffer, remoteChunkPath);
+      // If current assembled size is already past this chunk start, this is a retry and
+      // we can acknowledge success without appending duplicate bytes.
+      if (assembledSize > startOffset) {
+        return res.json({ success: true, dedup: true });
+      }
 
-      // Build remote assembled file incrementally to make /complete fast.
-      if (Number(chunkIndex) === 0) {
+      // Reject out-of-order chunks in production so byte order remains correct.
+      if (assembledSize < startOffset) {
+        return res.status(409).json({
+          success: false,
+          error: `Chunk out of order. Expected offset ${assembledSize}, received ${startOffset}.`,
+        });
+      }
+
+      // Build remote assembled file incrementally to make /complete constant-time.
+      if (Number(chunkIndex) === 0 && assembledSize === 0) {
         await uploadBufferToFtp(req.file.buffer, assemblingPath);
       } else {
         await appendBufferToFtp(req.file.buffer, assemblingPath);
@@ -229,8 +296,8 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields.' });
     }
 
-    if (!isAllowedMime(mimeType, req.user.role)) {
-      return res.status(400).json({ success: false, error: `File type "${mimeType}" is not allowed.` });
+    if (!isAllowedMime(mimeType, req.user.role, fileName)) {
+      return res.status(400).json({ success: false, error: 'File type not allowed. Admin uploads support media plus PDF/TXT/DOC/DOCX documents only.' });
     }
 
     // Build filename: {Service}_{timestamp}-{filename}
@@ -256,27 +323,11 @@ app.post('/api/upload/complete', verifyAuth, async (req, res) => {
     let finalSize = 0;
 
     if (IS_VERCEL) {
-      // Ensure all chunks were received remotely before finalizing.
-      for (let i = 0; i < totalChunks; i++) {
-        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-        try {
-          await ftpFileSize(remoteChunkPath);
-        } catch {
-          return res.status(400).json({ success: false, error: `Missing chunk ${i}.` });
-        }
-      }
-
       const assemblingPath = getAssemblingRemotePath(uploadId);
       finalSize = await ftpFileSize(assemblingPath);
 
       // Move assembled temp file into final structured storage path (no re-upload copy).
       await moveOnFtp(assemblingPath, storagePath);
-
-      // Clean up remote chunk artifacts
-      for (let i = 0; i < totalChunks; i++) {
-        const remoteChunkPath = getTempChunkRemotePath(uploadId, i);
-        await deleteFromFtp(remoteChunkPath);
-      }
     } else {
       const storageDir = path.join(chunksDir, 'assemble-tmp');
       if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
@@ -395,118 +446,73 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
     return res.status(400).json({ success: false, error: 'URL is required.' });
   }
 
+  let normalizedInputUrl = '';
   try {
-    let finalName, finalPath, contentType, originalName;
-
-    // For video platforms, use yt-dlp to extract the actual media
-    if (isVideoPlatformUrl(url)) {
-      try {
-        const result = await downloadWithYtdlp(url, chunksDir);
-        finalPath = result.filePath;
-        finalName = result.fileName;
-        contentType = result.mimeType;
-        originalName = result.originalName;
-      } catch (ytErr) {
-        // yt-dlp unavailable or download failed — save as embed-only entry so the
-        // frontend can display an inline player instead of a downloadable file.
-        console.warn('[upload/url] yt-dlp failed, falling back to embed:', ytErr.message);
-        const displayName = customName?.trim() || url;
-        let fileId = null;
-        if (adminDb) {
-          const docRef = await adminDb.collection('files').add({
-            originalName: displayName,
-            savedAs: null,
-            storagePath: null,
-            size: 0,
-            type: null,
-            fileCategory: 'Video',
-            uploadedBy: req.user.uid,
-            uploadedByEmail: req.user.email || '',
-            uploadedAt: new Date(),
-            status: 'pending',
-            description: description || '',
-            serviceCategory: serviceCategory || '',
-            sourceType: 'url',
-            sourceUrl: url,
-            folderId: folderId || null,
-            url: null,
-          });
-          fileId = docRef.id;
-        }
-        return res.json({
-          success: true,
-          embedded: true,
-          message: `Saved as embedded link — direct download unavailable.`,
-          file: { originalName: displayName, savedAs: null, size: 0, type: null },
-          fileId,
-        });
-      }
-    } else {
-      // Direct URL — just fetch normally
-      const fetched = await fetchUrlDirect(url, chunksDir);
-      finalPath = fetched.finalPath;
-      finalName = fetched.finalName;
-      contentType = fetched.contentType;
-      originalName = fetched.originalName;
+    const parsed = new URL(String(url).trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ success: false, error: 'Only HTTP(S) URLs are allowed.' });
     }
+    normalizedInputUrl = parsed.toString();
+  } catch {
+    return res.status(400).json({ success: false, error: 'Invalid URL format.' });
+  }
 
-    const prefix = buildFilePrefix(serviceCategory);
-    // Prepend service prefix to the finalName
-    finalName = `${prefix}_${finalName}`;
-    // Per-user directory: {email}/{filename}
-    const emailDir = (req.user.email || 'unknown').split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '_') || 'unknown';
-    const defaultStoragePath = `${emailDir}/${finalName}`;
-    const stats = fs.statSync(finalPath);
-    const displayName = customName?.trim() || originalName;
+  if (normalizedInputUrl.length > 2048) {
+    return res.status(400).json({ success: false, error: 'URL is too long.' });
+  }
 
-    // If uploading into a folder, place the file inside the folder FTP path (already includes email dir)
-    let storagePath = defaultStoragePath;
-    if (folderId) {
+  const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+  if (normalizedDescription.length > 2000) {
+    return res.status(400).json({ success: false, error: 'Description must be 2000 characters or less.' });
+  }
+
+  try {
+    const effectiveUrl = await normalizeUrlUploadTarget(normalizedInputUrl);
+    const sourceUrlForMetadata = getSourceUrlForMetadata(normalizedInputUrl, effectiveUrl);
+
+    let displayName = customName?.trim();
+    if (!displayName) {
       try {
-        const folderFtpPath = await resolveFolderFtpPath(folderId, adminDb);
-        if (folderFtpPath) {
-          storagePath = `${folderFtpPath}/${finalName}`;
+        const parsed = new URL(sourceUrlForMetadata || url);
+        const baseName = path.basename(parsed.pathname || '').trim();
+        if (baseName && baseName.toLowerCase() !== 'uc') {
+          displayName = baseName;
+        } else {
+          displayName = parsed.hostname.replace(/^www\./i, '') || url;
         }
-      } catch (e) {
-        console.warn('[upload/url] folder path resolution failed, using default path:', e.message);
+      } catch {
+        displayName = url;
       }
     }
 
-    // Upload to FTP, then remove local temp
-    await uploadToFtp(finalPath, storagePath);
-    fs.unlinkSync(finalPath);
-
-    // Save metadata to Firestore
     let fileId = null;
     if (adminDb) {
-      console.log('[upload/url] Writing metadata to Firestore for:', finalName);
       const docRef = await adminDb.collection('files').add({
         originalName: displayName,
-        savedAs: finalName,
-        storagePath,
-        size: stats.size,
-        type: contentType,
-        fileCategory: getFileCategory(contentType),
+        savedAs: null,
+        storagePath: null,
+        size: 0,
+        type: 'application/x-url',
+        fileCategory: 'URL',
         uploadedBy: req.user.uid,
         uploadedByEmail: req.user.email || '',
         uploadedAt: new Date(),
         status: 'pending',
-        description: description || '',
+        description: normalizedDescription,
         serviceCategory: serviceCategory || '',
         sourceType: 'url',
-        sourceUrl: url,
+        sourceUrl: sourceUrlForMetadata,
         folderId: folderId || null,
-        url: `/api/files/${encodeStorageUrl(storagePath)}`,
+        url: sourceUrlForMetadata,
       });
       fileId = docRef.id;
-      console.log('[upload/url] Firestore doc created:', fileId);
-    } else {
-      console.error('[upload/url] adminDb is null — metadata not saved for:', finalName);
     }
 
     res.json({
       success: true,
-      file: { originalName, savedAs: finalName, size: stats.size, type: contentType },
+      embedded: true,
+      message: 'Saved as URL entry (metadata only).',
+      file: { originalName: displayName, savedAs: null, size: 0, type: 'application/x-url' },
       fileId,
     });
   } catch (err) {
@@ -515,29 +521,159 @@ app.post('/api/upload/url', verifyAuth, async (req, res) => {
   }
 });
 
-// Helper: direct HTTP fetch for non-platform URLs
-async function fetchUrlDirect(url, destDir) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download: ${response.statusText}`);
+async function normalizeUrlUploadTarget(inputUrl) {
+  try {
+    const parsed = new URL(inputUrl);
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname || '';
+
+    if (hostname === 'drive.google.com') {
+      const pathMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
+      const idFromPath = pathMatch?.[1] || null;
+      const idFromQuery = parsed.searchParams.get('id');
+      const fileId = idFromPath || idFromQuery;
+
+      if (fileId) {
+        return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+      }
+    }
+
+    if ((hostname === 'facebook.com' && pathname.startsWith('/share/')) || hostname === 'fb.watch') {
+      const resolved = await resolveRedirectUrl(inputUrl);
+      return resolved || inputUrl;
+    }
+
+    return inputUrl;
+  } catch {
+    return inputUrl;
+  }
+}
+
+async function resolveRedirectUrl(inputUrl) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(inputUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; DigiScribeURLResolver/1.0)',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+    clearTimeout(timeout);
+
+    const finalUrl = res?.url || inputUrl;
+
+    try {
+      const finalParsed = new URL(finalUrl);
+      const next = finalParsed.searchParams.get('next');
+      if (next && finalParsed.hostname.includes('facebook.com')) {
+        return decodeURIComponent(next);
+      }
+    } catch {
+      // ignore
+    }
+
+    return finalUrl;
+  } catch {
+    return inputUrl;
+  }
+}
+
+function getSourceUrlForMetadata(originalUrl, effectiveUrl) {
+  try {
+    const parsed = new URL(originalUrl);
+    const hostname = parsed.hostname.replace('www.', '').toLowerCase();
+    const pathname = parsed.pathname || '';
+
+    // Preserve original URL for most providers, but store resolved URL for
+    // Facebook share wrappers so frontend embeds receive canonical targets.
+    if ((hostname === 'facebook.com' && pathname.startsWith('/share/')) || hostname === 'fb.watch') {
+      return effectiveUrl || originalUrl;
+    }
+
+    return originalUrl;
+  } catch {
+    return originalUrl;
+  }
+}
+
+function normalizeRole(decodedToken = {}) {
+  if (!decodedToken.role) {
+    return decodedToken.admin ? 'admin' : 'user';
+  }
+  if (decodedToken.role === 'superAdmin' || decodedToken.role === 'lguAdmin') {
+    return 'admin';
+  }
+  return decodedToken.role;
+}
+
+function encodeStoragePath(storagePath) {
+  return String(storagePath || '').split('/').map(encodeURIComponent).join('/');
+}
+
+async function getAuthenticatedFileUser(req) {
+  if (!adminAuth) return null;
+
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const queryToken = typeof req.query?.access_token === 'string' ? req.query.access_token.trim() : '';
+  const token = bearerToken || queryToken;
+  if (!token) return null;
+
+  try {
+    const decoded = await adminAuth.verifyIdToken(token);
+    return {
+      ...decoded,
+      role: normalizeRole(decoded),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function canAccessStoragePath(user, normalizedPath) {
+  if (!user || !normalizedPath || !adminDb) return false;
+  if (user.role === 'admin') return true;
+
+  const filePathFields = ['storagePath', 'savedAs', 'sourceReferenceStoragePath', 'transcriptionStoragePath'];
+  for (const field of filePathFields) {
+    try {
+      const snap = await adminDb.collection('files').where(field, '==', normalizedPath).limit(5).get();
+      if (!snap.empty) {
+        const ownsAny = snap.docs.some((doc) => doc.data()?.uploadedBy === user.uid);
+        if (ownsAny) return true;
+      }
+    } catch {
+      // ignore and continue with fallback checks
+    }
   }
 
-  const contentType = response.headers.get('content-type') || 'application/octet-stream';
+  const deliveryPathVariants = [
+    `/api/files/${normalizedPath}`,
+    `/api/files/${encodeURIComponent(normalizedPath)}`,
+    `/api/files/${encodeStoragePath(normalizedPath)}`,
+  ];
 
-  // Reject HTML responses — the URL returned a web page, not a media file
-  if (contentType.includes('text/html')) {
-    throw new Error('The URL returned an HTML page instead of a media file. Use a direct link to the file, or try a supported video platform URL.');
+  try {
+    const uniqueVariants = [...new Set(deliveryPathVariants)].slice(0, 10);
+    const transcriptionsSnap = await adminDb
+      .collection('transcriptions')
+      .where('deliveryFileUrl', 'in', uniqueVariants)
+      .limit(10)
+      .get();
+    if (!transcriptionsSnap.empty) {
+      const ownsDelivery = transcriptionsSnap.docs.some((doc) => doc.data()?.uploadedBy === user.uid);
+      if (ownsDelivery) return true;
+    }
+  } catch {
+    // ignore and deny by default
   }
-  const urlPath = new URL(url).pathname;
-  const originalName = path.basename(urlPath) || 'downloaded-file';
-  const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const finalName = `${Date.now()}-${safeName}`;
-  const finalPath = path.join(destDir, finalName);
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(finalPath, buffer);
-
-  return { finalPath, finalName, contentType, originalName };
+  return false;
 }
 
 // POST /api/files/bulk-download - Download multiple files as a zip (auth required)
@@ -778,14 +914,28 @@ app.post('/api/quote', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and message are required.' });
     }
 
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedMessage = String(message).trim();
+    const normalizedFirstName = String(firstName || '').trim();
+    const normalizedLastName = String(lastName || '').trim();
+    const normalizedPhone = String(phone || '').trim();
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    if (!emailOk) {
+      return res.status(400).json({ success: false, error: 'A valid email address is required.' });
+    }
+    if (normalizedMessage.length === 0 || normalizedMessage.length > 5000) {
+      return res.status(400).json({ success: false, error: 'Message must be between 1 and 5000 characters.' });
+    }
+
     // Store in Firestore
     await adminDb.collection('quotes').add({
-      firstName: firstName || '',
-      lastName: lastName || '',
-      email,
-      phone: phone || '',
+      firstName: normalizedFirstName.slice(0, 120),
+      lastName: normalizedLastName.slice(0, 120),
+      email: normalizedEmail,
+      phone: normalizedPhone.slice(0, 40),
       subject: subject || 'service-details',
-      message,
+      message: normalizedMessage,
       submittedAt: new Date().toISOString(),
     });
 
@@ -808,24 +958,24 @@ app.post('/api/quote', async (req, res) => {
       'transcription': 'Transcription',
     };
     const subjectLabel = subjectLabels[subject] || subject || 'General';
-    const fullName = `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown';
+    const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim() || 'Unknown';
 
     try {
       await emailTransporter.sendMail({
         from: `"DigiScribe Website" <${process.env.SMTP_USER}>`,
         to: notificationEmail,
-        replyTo: email,
+        replyTo: normalizedEmail,
         subject: `New Quote Request: ${subjectLabel} — ${fullName}`,
-        text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${message}`,
+        text: `New quote/contact form submission:\n\nName: ${fullName}\nEmail: ${normalizedEmail}\nPhone: ${normalizedPhone || 'N/A'}\nSubject: ${subjectLabel}\n\nMessage:\n${normalizedMessage}`,
         html: `<h2 style="color:#0284c7">New Quote Request</h2>
 <table style="border-collapse:collapse;width:100%;max-width:600px;font-family:sans-serif;font-size:14px">
 <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151;width:120px">Name</td><td style="padding:10px 14px;color:#111">${fullName}</td></tr>
-<tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${email}" style="color:#0284c7">${email}</a></td></tr>
-<tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${phone || 'N/A'}</td></tr>
+      <tr><td style="padding:10px 14px;font-weight:600;color:#374151">Email</td><td style="padding:10px 14px"><a href="mailto:${normalizedEmail}" style="color:#0284c7">${normalizedEmail}</a></td></tr>
+      <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:600;color:#374151">Phone</td><td style="padding:10px 14px;color:#111">${normalizedPhone || 'N/A'}</td></tr>
 <tr><td style="padding:10px 14px;font-weight:600;color:#374151">Subject</td><td style="padding:10px 14px;color:#111">${subjectLabel}</td></tr>
 </table>
 <h3 style="color:#374151;font-family:sans-serif;margin-top:20px">Message</h3>
-<p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
+      <p style="font-family:sans-serif;font-size:14px;color:#374151;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:8px;border:1px solid #e5e7eb">${normalizedMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`,
       });
       console.log('[quote] Email sent to', notificationEmail);
     } catch (emailErr) {
@@ -874,6 +1024,16 @@ app.get('/api/files/*path', async (req, res) => {
 
   // Prevent path traversal
   const normalized = path.posix.normalize(requestPath).replace(/^(\.\.(\/|$))+/, '');
+
+  const authenticatedUser = await getAuthenticatedFileUser(req);
+  if (!authenticatedUser) {
+    return res.status(401).json({ success: false, error: 'Authentication required.' });
+  }
+
+  const canAccess = await canAccessStoragePath(authenticatedUser, normalized);
+  if (!canAccess) {
+    return res.status(403).json({ success: false, error: 'Access denied.' });
+  }
 
   const safeName = path.basename(normalized);
   const ext = path.extname(safeName).toLowerCase();

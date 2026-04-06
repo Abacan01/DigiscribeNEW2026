@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
 
 function buildTree(folders, excludeIds = new Set()) {
   const children = {};
@@ -37,16 +39,18 @@ function FolderTreeNode({ folder, children: childMap, selectedId, onSelect, dept
         onClick={() => onSelect(folder.id)}
       >
         {kids.length > 0 ? (
-          <button
+          <Button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               setExpanded(!expanded);
             }}
-            className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600"
+            variant="ghost"
+            size="icon"
+            className="w-4 h-4 text-gray-400 hover:text-gray-600"
           >
             <i className={`fas fa-chevron-${expanded ? 'down' : 'right'} text-[9px]`}></i>
-          </button>
+          </Button>
         ) : (
           <span className="w-4" />
         )}
@@ -75,6 +79,17 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
   const excludeSet = useMemo(() => new Set(excludeIds), [excludeIds]);
   const tree = useMemo(() => buildTree(folders, excludeSet), [folders, excludeSet]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      if (loading) return;
+      onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, loading, onClose]);
+
   if (!isOpen) return null;
 
   const handleConfirm = async () => {
@@ -95,7 +110,7 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col" style={{ maxHeight: '80vh' }}>
+      <Card className="relative rounded-2xl shadow-2xl w-full max-w-md flex flex-col" style={{ maxHeight: '80vh' }}>
         {/* Header */}
         <div className="p-6 pb-4 flex items-center gap-3 border-b border-gray-100">
           <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
@@ -105,13 +120,15 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
             <h2 className="text-lg font-semibold text-dark-text">{title}</h2>
             <p className="text-xs text-gray-text">Select a destination folder</p>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onClose}
-            className="ml-auto text-gray-400 hover:text-gray-600 transition-colors"
+            variant="ghost"
+            size="icon"
+            className="ml-auto text-gray-400 hover:text-gray-600"
           >
             <i className="fas fa-times"></i>
-          </button>
+          </Button>
         </div>
 
         {/* Folder tree */}
@@ -152,19 +169,20 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
 
         {/* Footer */}
         <div className="p-4 pt-3 border-t border-gray-100 flex items-center gap-3 justify-end">
-          <button
+          <Button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-gray-text hover:text-dark-text transition-colors rounded-lg"
+            variant="ghost"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={handleConfirm}
             disabled={loading}
-            className="btn-gradient text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all disabled:opacity-50 inline-flex items-center gap-2"
+            variant="default"
+            className="inline-flex items-center gap-2"
           >
             {loading ? (
               <i className="fas fa-spinner fa-spin text-xs"></i>
@@ -172,9 +190,9 @@ export default function MoveFolderModal({ isOpen, onClose, onSelect, folders, ex
               <i className="fas fa-check text-xs"></i>
             )}
             Move Here
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>,
     document.body
   );

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -158,7 +158,7 @@ export default function DateRangePicker({ from, to, onChange }) {
   const [pickFrom, setPickFrom] = useState(from || null);
   const [pickTo, setPickTo] = useState(to || null);
   const [hoverDate, setHoverDate] = useState(null);
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [dropdownPos, setDropdownPos] = useState(null);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [customError, setCustomError] = useState('');
@@ -166,15 +166,23 @@ export default function DateRangePicker({ from, to, onChange }) {
   const triggerRef = useRef(null);
   const presets = useMemo(() => getPresets(), []);
 
-  // Position the dropdown relative to the trigger button
-  useEffect(() => {
-    if (!open || !triggerRef.current) return;
+  const updateDropdownPosition = useCallback(() => {
+    if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setDropdownPos({
       top: rect.bottom + 8,
       left: rect.left,
     });
-  }, [open]);
+  }, []);
+
+  // Position before first paint when opened to avoid top-left flash.
+  useLayoutEffect(() => {
+    if (!open) {
+      setDropdownPos(null);
+      return;
+    }
+    updateDropdownPosition();
+  }, [open, updateDropdownPosition]);
 
   // Close on outside click
   useEffect(() => {
@@ -294,7 +302,7 @@ export default function DateRangePicker({ from, to, onChange }) {
     ? `${fmtShort(from)} – ${fmtShort(to)}`
     : 'Select date range';
 
-  const dropdown = open ? createPortal(
+  const dropdown = open && dropdownPos ? createPortal(
     <div
       ref={ref}
       style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
@@ -403,7 +411,10 @@ export default function DateRangePicker({ from, to, onChange }) {
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) updateDropdownPosition();
+          setOpen((o) => !o);
+        }}
         className={`
           inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all
           ${from && to

@@ -8,6 +8,32 @@ import path from 'path';
 
 const router = Router();
 const transcriptionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const MAX_TRANSCRIPTION_SIZE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_TRANSCRIPTION_MIME_TYPES = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/rtf',
+  'application/vnd.oasis.opendocument.text',
+]);
+const ALLOWED_TRANSCRIPTION_EXTENSIONS = new Set([
+  '.pdf', '.txt', '.csv', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.rtf', '.odt',
+]);
+const TRANSCRIPTION_FORMAT_ERROR = 'Unsupported transcription format. Only PDF, TXT/CSV, DOC/DOCX, XLS/XLSX, PPT/PPTX, RTF, and ODT are allowed.';
+
+function isAllowedTranscriptionFormat(mimeType, fileName) {
+  const normalizedMime = typeof mimeType === 'string' ? mimeType.toLowerCase().trim() : '';
+  if (normalizedMime && ALLOWED_TRANSCRIPTION_MIME_TYPES.has(normalizedMime)) return true;
+  const ext = path.posix.extname(String(fileName || '')).toLowerCase();
+  if (ext && ALLOWED_TRANSCRIPTION_EXTENSIONS.has(ext)) return true;
+  return false;
+}
 
 // POST /api/files/metadata - Save file metadata
 router.post('/metadata', verifyAuth, async (req, res) => {
@@ -312,6 +338,9 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
   if (!req.file) {
     return res.status(400).json({ success: false, error: 'No transcription file provided.' });
   }
+  if (!isAllowedTranscriptionFormat(req.file.mimetype, req.file.originalname)) {
+    return res.status(400).json({ success: false, error: TRANSCRIPTION_FORMAT_ERROR });
+  }
 
   try {
     const docRef = adminDb.collection('files').doc(req.params.fileId);
@@ -323,9 +352,16 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
     const fileData = doc.data();
     const ownerEmail = fileData.uploadedByEmail || 'unknown';
 
-    // Build a unique name: Transcribed_{timestamp}_{originalName}
-    const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const transcriptionFileName = `Transcribed_${Date.now()}_${safeName}`;
+    // Auto-name: Transcribed_{parentFileNameWithoutExt}.{transcriptionExt}
+    const parentName = fileData.originalName || req.file.originalname;
+    const parentExt = parentName.includes('.') ? parentName.slice(parentName.lastIndexOf('.')) : '';
+    const parentNameWithoutExt = parentExt ? parentName.slice(0, -parentExt.length) : parentName;
+    const transcriptionExt = req.file.originalname.includes('.')
+      ? req.file.originalname.slice(req.file.originalname.lastIndexOf('.'))
+      : '';
+    const safeParentBase = parentNameWithoutExt.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const displayName = `Transcribed_${parentNameWithoutExt}${transcriptionExt}`;
+    const transcriptionFileName = `Transcribed_${safeParentBase}${transcriptionExt}`;
     const ftpPath = buildTranscriptionFtpPath(ownerEmail, transcriptionFileName);
 
     // If a previous transcription exists, delete it from FTP
@@ -347,7 +383,7 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
     // Update Firestore
     await docRef.update({
       transcriptionUrl,
-      transcriptionName: req.file.originalname,
+      transcriptionName: displayName,
       transcriptionStoragePath: ftpPath,
       transcriptionSize: req.file.size,
       transcriptionType: req.file.mimetype || 'application/octet-stream',
@@ -359,7 +395,7 @@ router.post('/metadata/:fileId/transcription', verifyAuth, transcriptionUpload.s
     res.json({
       success: true,
       transcriptionUrl,
-      transcriptionName: req.file.originalname,
+      transcriptionName: displayName,
       transcriptionSize: req.file.size,
     });
   } catch (err) {

@@ -5,6 +5,7 @@ import Layout from '../components/layout/Layout';
 import FilePreviewModal from '../components/dashboard/FilePreviewModal';
 import { useFirestoreFiles } from '../hooks/useFirestoreFiles';
 import { useTranscriptions } from '../hooks/useTranscriptions';
+import { useAppToast } from '../hooks/useAppToast';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_CONFIG = {
@@ -47,6 +48,7 @@ function getFileIcon(type) {
 export default function TranscriptionDetailPage() {
   const { fileId } = useParams();
   const { user } = useAuth();
+  const toast = useAppToast();
   const { files, loading: filesLoading, error: filesError } = useFirestoreFiles();
   const {
     transcriptions,
@@ -67,6 +69,15 @@ export default function TranscriptionDetailPage() {
   const [deliveryMode, setDeliveryMode] = useState('text'); // 'text' | 'file'
   const [deliveryFile, setDeliveryFile] = useState(null);
 
+  useEffect(() => {
+    if (!message) return;
+    if (message.type === 'success') {
+      toast.success(message.text);
+      return;
+    }
+    toast.error(message.text);
+  }, [message, toast]);
+
   // Find the file matching the route param
   const file = useMemo(() => {
     return files.find((f) => f.id === fileId) || null;
@@ -86,9 +97,10 @@ export default function TranscriptionDetailPage() {
   // Fetch transcriptions for this file when fileId is available
   useEffect(() => {
     if (fileId) {
-      fetchTranscriptions({ fileId }).then(() => {
+      (async () => {
+        await fetchTranscriptions({ fileId });
         setHasFetchedTranscriptions(true);
-      });
+      })();
     }
   }, [fileId, fetchTranscriptions]);
 
@@ -99,14 +111,6 @@ export default function TranscriptionDetailPage() {
       setContent(existingTranscription.content || '');
     }
   }, [existingTranscription]);
-
-  // Auto-dismiss messages
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => setMessage(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
 
   const handleSave = async () => {
     if (deliveryMode === 'file') {
@@ -264,23 +268,6 @@ export default function TranscriptionDetailPage() {
     <Layout heroContent={heroContent}>
       <div className="min-h-screen bg-[#f8fafc]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {/* Message */}
-          {message && (
-            <div className={`mb-6 p-4 rounded-xl border transition-all duration-300 ${
-              message.type === 'success' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <i className={`fas ${message.type === 'success' ? 'fa-check-circle text-green-500' : 'fa-exclamation-circle text-red-500'}`}></i>
-                  <p className={`text-sm font-medium ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>{message.text}</p>
-                </div>
-                <button onClick={() => setMessage(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                  <i className="fas fa-times"></i>
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Transcription error banner */}
           {transcriptionsError && (
             <div className="mb-6 p-3 bg-red-50 rounded-xl border border-red-100 flex items-center gap-3">

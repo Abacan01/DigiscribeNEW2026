@@ -7,7 +7,7 @@ import App from './App.jsx'
 // When deployed to static hosting (e.g. Supreme Center), redirect all /api/
 // calls to the Render backend instead of the same origin.
 const API_BASE = import.meta.env.VITE_API_BASE || '';
-if (API_BASE) {
+if (API_BASE && !import.meta.env.DEV) {
   const _fetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import {
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   signOut,
   setPersistence,
@@ -8,6 +8,8 @@ import {
   browserSessionPersistence,
 } from 'firebase/auth';
 import { auth } from '../firebase';
+
+const ACCESS_TOKEN_KEY = 'digiscribe_access_token';
 
 const AuthContext = createContext(null);
 
@@ -23,11 +25,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         try {
           const tokenResult = await firebaseUser.getIdTokenResult();
+          const token = await firebaseUser.getIdToken();
+          try {
+            sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
+          } catch {
+            // ignore storage failures
+          }
           const claims = tokenResult.claims;
           // Support legacy admin boolean and old role names
           let userRole = claims.role || (claims.admin ? 'admin' : 'user');
@@ -41,6 +49,11 @@ export function AuthProvider({ children }) {
       } else {
         setUser(null);
         setRole('user');
+        try {
+          sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        } catch {
+          // ignore storage failures
+        }
       }
       setLoading(false);
     });
@@ -55,12 +68,23 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    try {
+      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    } catch {
+      // ignore storage failures
+    }
     return signOut(auth);
   };
 
   const getIdToken = async () => {
     if (!auth.currentUser) return null;
-    return auth.currentUser.getIdToken();
+    const token = await auth.currentUser.getIdToken();
+    try {
+      sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
+    } catch {
+      // ignore storage failures
+    }
+    return token;
   };
 
   const isAdmin = role === 'admin';
